@@ -12,8 +12,8 @@ grep -F 'PROPERTY_SPECIAL_USE_FGS_SUBTYPE' "$ANDROID_MANIFEST" >/dev/null
 grep -F 'android.permission.ACCESS_NETWORK_STATE' "$ANDROID_MANIFEST" >/dev/null
 ! grep -F 'android.permission.WAKE_LOCK' "$ANDROID_MANIFEST" >/dev/null
 
-grep -F 'const val DEBIAN_VERSION = "bookworm-arm64-default-20250618_05:24"' "$MANIFEST" >/dev/null
-grep -F 'const val DEBIAN_URL = "https://images.linuxcontainers.org/images/debian/bookworm/arm64/default/20250618_05:24/rootfs.tar.xz"' "$MANIFEST" >/dev/null
+grep -F 'const val DEBIAN_VERSION = "bookworm-arm64-default-20260910_05:24"' "$MANIFEST" >/dev/null
+grep -F 'const val DEBIAN_URL = "https://images.linuxcontainers.org/images/debian/bookworm/arm64/default/20260910_05:24/rootfs.tar.xz"' "$MANIFEST" >/dev/null
 for key in DEBIAN_SHA256 PROOT_SHA256 PROOT_LOADER_SHA256 LIBTALLOC_SHA256 LIBANDROID_SHMEM_SHA256; do
   value="$(sed -n "s/.*const val $key = \"\([0-9a-f]*\)\".*/\1/p" "$MANIFEST")"
   [[ "$value" =~ ^[0-9a-f]{64}$ ]] || { echo "FAIL: $key is not pinned" >&2; exit 1; }
