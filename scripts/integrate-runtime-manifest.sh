@@ -13,7 +13,7 @@ PIN="$(sed -n 's/.*const val DEBIAN_SHA256 = "\([0-9a-f]*\)".*/\1/p' "$MANIFEST"
 if [[ ! "$PIN" =~ ^[0-9a-f]{64}$ ]]; then
   SUMS_URL="${URL%/*}/SHA256SUMS"
   SUMS="$(mktemp)"
-  trap 'rm -f "$SUMS" "$TMP"' EXIT
+  trap 'rm -f "${SUMS:-}" "${TMP:-}"' EXIT
   curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-delay 2 --retry-all-errors -o "$SUMS" "$SUMS_URL"
   PIN="$(awk '$2 == "rootfs.tar.xz" {print $1; exit}' "$SUMS")"
   [[ "$PIN" =~ ^[0-9a-fA-F]{64}$ ]] || { echo 'FAIL: published SHA256SUMS does not contain a valid rootfs.tar.xz digest' >&2; exit 1; }
