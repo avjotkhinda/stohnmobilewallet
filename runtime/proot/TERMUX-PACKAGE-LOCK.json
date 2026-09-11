@@ -1,0 +1,24 @@
+{
+  "architecture": "aarch64",
+  "repository": "https://packages.termux.dev/apt/termux-main",
+  "packages": [
+    {
+      "name": "proot",
+      "version": "5.1.107.92",
+      "path": "pool/main/p/proot/proot_5.1.107.92_aarch64.deb",
+      "sha256": "1f1c983509701f6826f568482c70673ee453a9ba38c9f5fa445a472d6b7524e9"
+    },
+    {
+      "name": "libandroid-shmem",
+      "version": "0.7",
+      "path": "pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_aarch64.deb",
+      "sha256": "0da3a24d558b93c92bcf8d611e0826a99ff96e396b148e6cdf33b47c47c57ff6"
+    },
+    {
+      "name": "libtalloc",
+      "version": "2.4.3",
+      "path": "pool/main/libt/libtalloc/libtalloc_2.4.3_aarch64.deb",
+      "sha256": "ac81ad623d74c209718b9f3acb2dd702cc8a88c431e820d212229910b4db29da"
+    }
+  ]
+}

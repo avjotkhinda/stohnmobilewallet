@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+fail(){ echo "SECURITY AUDIT: FAIL: $*" >&2; exit 1; }
+pass(){ echo "SECURITY AUDIT: PASS: $*"; }
+MANIFEST="$ROOT/app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt"
+EMBED="$ROOT/app/src/main/java/org/stohncoin/wallet/runtime/EmbeddedLinuxRuntime.kt"
+INSTALL="$ROOT/app/src/main/java/org/stohncoin/wallet/runtime/RuntimeInstaller.kt"
+RPC="$ROOT/app/src/main/java/org/stohncoin/wallet/wallet/WalletRpc.kt"
+NODE="$ROOT/app/src/main/java/org/stohncoin/wallet/core/NodeController.kt"
+UI="$ROOT/app/src/main/java/org/stohncoin/wallet/ui/StohnWalletScreen.kt"
+AM="$ROOT/app/src/main/AndroidManifest.xml"
+BUILD="$ROOT/app/build.gradle.kts"
+[[ -f "$MANIFEST" && -f "$EMBED" && -f "$INSTALL" && -f "$RPC" && -f "$NODE" && -f "$UI" ]] || fail "required source file missing"
+! grep -R "v1.10.1\|termux/proot-distro/releases/download/v1.10.1" "$ROOT/app" "$ROOT/scripts" "$ROOT/.github" >/dev/null 2>&1 || fail "obsolete Debian source remains"
+! grep -F 'android:usesCleartextTraffic="true"' "$AM" >/dev/null || fail "global cleartext traffic enabled"
+grep -F 'android.permission.ACCESS_NETWORK_STATE' "$AM" >/dev/null || fail "network-state permission missing"
+grep -F 'android:allowBackup="false"' "$AM" >/dev/null || fail "Android backup is enabled"
+grep -F 'android:exported="false"' "$AM" >/dev/null || fail "foreground service exported"
+! grep -E 'LD_LIBRARY_PATH.*nativeDir|nativeDir.*LD_LIBRARY_PATH' "$EMBED" >/dev/null || fail "Android native library directory leaked into glibc runtime"
+grep -F 'PROOT_LOADER' "$EMBED" >/dev/null || fail "PRoot loader not configured"
+grep -F 'rpcallowip=127.0.0.1' "$EMBED" >/dev/null || fail "RPC allowlist is not loopback-only"
+grep -F 'rpcbind=127.0.0.1' "$EMBED" >/dev/null || fail "RPC bind is not loopback-only"
+grep -F 'https://' "$INSTALL" >/dev/null || fail "runtime installer lacks HTTPS enforcement"
+grep -F 'Integrity check failed' "$INSTALL" >/dev/null || fail "runtime integrity verification missing"
+grep -F 'safeArchivePath' "$INSTALL" >/dev/null || fail "archive path validation missing"
+grep -F 'safeLinkTarget' "$INSTALL" >/dev/null || fail "symlink containment validation missing"
+grep -F 'MAX_EXTRACTED_BYTES' "$INSTALL" >/dev/null || fail "extraction size limit missing"
+grep -F 'MAX_ARCHIVE_ENTRIES' "$INSTALL" >/dev/null || fail "archive entry limit missing"
+grep -F 'walletpassphrasechange' "$RPC" >/dev/null || fail "wallet passphrase change RPC missing"
+grep -F 'encryptwallet' "$RPC" >/dev/null || fail "wallet encryption RPC missing"
+grep -F 'passphrase.fill' "$RPC" >/dev/null || fail "RPC passphrase wipe missing"
+grep -F 'passphrase = ""' "$UI" >/dev/null || fail "UI passphrase clearing missing"
+grep -F 'walletMutex' "$NODE" >/dev/null || fail "wallet operation serialization missing"
+grep -F 'keepDebugSymbols += "**/*.so"' "$BUILD" >/dev/null || fail "native packaging hardening missing"
+if grep -R -nE 'TODO|FIXME|XXX' "$ROOT/app/src/main/java" >/tmp/stohn_todos.txt 2>/dev/null; then
+  echo "SECURITY AUDIT: NOTICE: TODO/FIXME markers remain:"
+  head -20 /tmp/stohn_todos.txt
+fi
+pass "security and containment checks"
