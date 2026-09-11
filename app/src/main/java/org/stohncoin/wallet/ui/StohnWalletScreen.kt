@@ -20,7 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -157,7 +157,8 @@ fun StohnWalletScreen(node: NodeController) {
                     NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, icon = { Icon(Icons.Default.Settings, null) }, label = { Text("Settings") })
                 } }
             ) { padding ->
-                Crossfade(tab, Modifier.padding(padding), label = "page") { page ->
+               Box(Modifier.padding(padding)) {
+                  val page = tab
                     when (page) {
                         0 -> WalletHome(
                             state = state,
