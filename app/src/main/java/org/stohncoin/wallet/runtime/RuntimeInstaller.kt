@@ -260,7 +260,7 @@ object RuntimeInstaller {
     }
 
     private fun safeLinkTarget(root: File, linkParent: File, target: String): File {
-       require(target.isNotBlank() && !target.contains("\\")) { "Unsafe link target" }
+       require(target.isNotBlank() && target.indexOf('\\') < 0) { "Unsafe link target" }
         val base = root.canonicalFile
         val candidate = if (target.startsWith('/')) File(base, target.removePrefix('/')) else File(linkParent, target)
         val resolved = candidate.canonicalFile
