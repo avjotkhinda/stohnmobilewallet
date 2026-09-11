@@ -632,35 +632,42 @@ object RuntimeInstaller {
     }
 
     private fun safeArchivePath(
-        name: String
-    ): String {
-        require(
-            name.isNotBlank() &&
-                !name.startsWith('/') &&
-                !name.startsWith('\\')
-        ) {
-            "Unsafe archive path"
-        }
-
-        val normalized =
-            name
-                .replace('\\', '/')
-                .trimEnd('/')
-
-        val parts = normalized.split('/')
-
-        require(
-            parts.none {
-                it.isEmpty() ||
-                    it == "." ||
-                    it == ".."
-            }
-        ) {
-            "Unsafe archive path"
-        }
-
-        return parts.joinToString("/")
+    name: String
+): String {
+    require(
+        name.isNotBlank() &&
+            !name.startsWith('/') &&
+            !name.startsWith('\\')
+    ) {
+        "Unsafe archive path"
     }
+
+    val normalized =
+        name
+            .replace('\\', '/')
+            .trimEnd('/')
+
+    val parts = normalized.split('/')
+
+    // "." is a harmless current-directory component and is common
+    // in tar archives. ".." and empty components are rejected.
+    require(
+        parts.none {
+            it.isEmpty() ||
+                it == ".."
+        }
+    ) {
+        "Unsafe archive path"
+    }
+
+    val cleaned = parts.filter { it != "." }
+
+    require(cleaned.isNotEmpty()) {
+        "Unsafe archive path"
+    }
+
+    return cleaned.joinToString("/")
+}
 
     private fun safeDestination(
         root: File,
