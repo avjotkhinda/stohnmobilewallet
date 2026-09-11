@@ -19,7 +19,7 @@ import java.nio.file.Paths
 import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 
-/** Installs the verified ARM64 Debian + Stohn Core runtime into app-private storage. */
+/** Installs the verified ARM64 Debian and Stohn Core runtime into app-private storage. */
 object RuntimeInstaller {
     private val mutex = Mutex()
 
