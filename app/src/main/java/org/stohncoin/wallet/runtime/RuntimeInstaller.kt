@@ -648,15 +648,16 @@ object RuntimeInstaller {
         .split('/')
         .filter { it.isNotEmpty() && it != "." }
 
-    require(cleaned.isNotEmpty()) {
-        "Unsafe archive path"
-    }
-
     require(cleaned.none { it == ".." }) {
         "Unsafe archive path"
     }
 
-    return cleaned.joinToString("/")
+    // "." or "./" represents the archive root and is safe.
+    return if (cleaned.isEmpty()) {
+        "."
+    } else {
+        cleaned.joinToString("/")
+    }
 }
 
     private fun safeDestination(
