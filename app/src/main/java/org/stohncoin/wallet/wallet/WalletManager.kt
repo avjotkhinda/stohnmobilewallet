@@ -34,16 +34,25 @@ class WalletManager(context: Context) {
         val staged = File(importCache, "import-${System.currentTimeMillis()}-${java.util.UUID.randomUUID()}.wallet.dat")
         return runCatching {
             source.inputStream().use { input ->
-                staged.outputStream().use { output ->
-                    input.copyTo(output, 64 * 1024)
-                    output.fd.sync()
-                }
+    staged.outputStream().use { output ->
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+
+        while (true) {
+            val n = input.read(buffer)
+            if (n < 0) break
+
+            total += n
+            require(total <= MAX_IMPORT_BYTES) {
+                "wallet.dat exceeds safety limit"
             }
-            StagedWallet(staged, sha256(staged))
-        }.onFailure {
-            staged.delete()
+
+            output.write(buffer, 0, n)
         }
+
+        output.fd.sync()
     }
+}
 
     fun deleteStagedWallet(staged: StagedWallet) {
         require(staged.file.parentFile?.canonicalFile == importCache.canonicalFile) {
