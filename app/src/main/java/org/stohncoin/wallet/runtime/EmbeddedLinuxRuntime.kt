@@ -181,7 +181,11 @@ class EmbeddedLinuxRuntime(private val context: Context) : RuntimeBackend {
             ?.map { it.hostAddress }
             ?.filter { !it.isNullOrBlank() }
             .orEmpty()
-        val servers = if (dnsServers.isEmpty()) listOf("1.1.1.1", "8.8.8.8") else dnsServers
+        require(dnsServers.isNotEmpty()) {
+    "No system DNS servers are available"
+}
+
+val servers = dnsServers
         dnsConfig.parentFile?.mkdirs()
         dnsConfig.writeText(servers.joinToString("\n") { "nameserver $it" } + "\n")
     }
