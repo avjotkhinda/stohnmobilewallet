@@ -181,13 +181,14 @@ class NodeController private constructor(context: Context) {
 
     suspend fun inspectWalletDat(source: File): WalletInfo = CoreWalletMigration(embedded()).inspect(source)
 
-    suspend fun importWalletDat(source: File, destination: File): ImportResult {
+    suspend fun importWalletDat(source: File, destination: File): ImportResult =
+    walletMutex.withLock {
         val result = CoreWalletMigration(embedded()).import(source, null, destination)
         val walletName = destination.name
         embedded().rpcCall("loadwallet", org.json.JSONArray().put(walletName))
         activeWalletName = walletName
         prefs.edit().putString(KEY_WALLET_NAME, walletName).apply()
-        return result
+        result
     }
 
     fun stop() = appContext.stopService(Intent(appContext, NodeService::class.java))
