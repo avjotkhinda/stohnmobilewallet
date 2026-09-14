@@ -80,14 +80,31 @@ jobs:
         run: |
           bash scripts/release-preflight.sh
 
-     - name: Prepare release signing keystore
-  env:
-    STOHN_RELEASE_KEYSTORE_BASE64: ${{ secrets.STOHN_RELEASE_KEYSTORE_BASE64 }}
-  run: |
-    echo "$STOHN_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/stohn-release.jks"
-    chmod 600 "$RUNNER_TEMP/stohn-release.jks"
+          - name: Prepare release signing keystore
+        env:
+          STOHN_RELEASE_KEYSTORE_BASE64: ${{ secrets.STOHN_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          echo "$STOHN_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/stohn-release.jks"
+          chmod 600 "$RUNNER_TEMP/stohn-release.jks"
 
-- name: Assemble debug and signed release APKs
+      - name: Assemble debug and signed release APKs
+        env:
+          STOHN_RELEASE_STORE_FILE: ${{ runner.temp }}/stohn-release.jks
+          STOHN_RELEASE_STORE_PASSWORD: ${{ secrets.STOHN_RELEASE_STORE_PASSWORD }}
+          STOHN_RELEASE_KEY_ALIAS: ${{ secrets.STOHN_RELEASE_KEY_ALIAS }}
+          STOHN_RELEASE_KEY_PASSWORD: ${{ secrets.STOHN_RELEASE_KEY_PASSWORD }}
+        run: |
+          gradle --no-daemon clean assembleDebug assembleRelease
+
+      - name: Verify release APK signature
+        run: |
+          apksigner verify --verbose app/build/outputs/apk/release/*.apk
+
+      - name: Remove release signing keystore
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/stohn-release.jks"
+      - name: Verify APK native payload
   env:
     STOHN_RELEASE_STORE_FILE: ${{ runner.temp }}/stohn-release.jks
     STOHN_RELEASE_STORE_PASSWORD: ${{ secrets.STOHN_RELEASE_STORE_PASSWORD }}
