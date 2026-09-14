@@ -6,8 +6,8 @@ object RuntimeManifest {
     const val CORE_VERSION = "3.2"
     const val CORE_URL = "https://github.com/StohnCoin-Projects/StohnCoin/releases/download/v3.2/stohn-3.2-aarch64-linux-gnu.tar.gz"
     const val CORE_SHA256 = "1c7fed5e4e5ef9e753146f9ada932abb20994134caaec33d1933d7f5c65531bf"
-    const val DEBIAN_VERSION = "bookworm-arm64-default-20260911_05:24"
-const val DEBIAN_URL = "https://images.linuxcontainers.org/images/debian/bookworm/arm64/default/20260911_05:24/rootfs.tar.xz"
+        const val DEBIAN_VERSION = "bookworm-arm64-default-20260911_05:24"
+    const val DEBIAN_URL = "https://images.linuxcontainers.org/images/debian/bookworm/arm64/default/20260911_05:24/rootfs.tar.xz"
     // Deliberately empty until the exact archive bytes are fetched and reviewed on a trusted host.
     const val DEBIAN_SHA256 = ""
     const val PROOT_SHA256 = "66900497f1dd3c8e051f83aea534279c70785829bad50628c0501c3862c2cfea"
