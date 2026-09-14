@@ -6,6 +6,25 @@ plugins {
 android {
     namespace = "org.stohncoin.wallet"
     compileSdk = 36
+signingConfigs {
+    create("release") {
+        val storeFilePath = System.getenv("STOHN_RELEASE_STORE_FILE")
+        val storePasswordValue = System.getenv("STOHN_RELEASE_STORE_PASSWORD")
+        val keyAliasValue = System.getenv("STOHN_RELEASE_KEY_ALIAS")
+        val keyPasswordValue = System.getenv("STOHN_RELEASE_KEY_PASSWORD")
+
+        if (
+            !storeFilePath.isNullOrBlank() &&
+            !storePasswordValue.isNullOrBlank() &&
+            !keyAliasValue.isNullOrBlank() &&
+            !keyPasswordValue.isNullOrBlank()
+        ) {
+            storeFile = file(storeFilePath)
+            storePassword = storePasswordValue
+            keyAlias = keyAliasValue
+            keyPassword = keyPasswordValue
+        }
+    }
 
     defaultConfig {
         applicationId = "org.stohncoin.wallet"
@@ -16,6 +35,11 @@ android {
 
         ndk {
             abiFilters += listOf("arm64-v8a")
+buildTypes {
+    release {
+        signingConfig = signingConfigs.getByName("release")
+    }
+}
         }
     }
 
