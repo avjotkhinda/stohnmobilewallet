@@ -34,7 +34,10 @@ signingConfigs {
         versionName = "0.28.2-fullmode"
 
         ndk {
-            abiFilters += listOf("arm64-v8a")
+        abiFilters += listOf("arm64-v8a")
+    }
+}
+
 buildTypes {
     release {
         signingConfig = signingConfigs.getByName("release")
