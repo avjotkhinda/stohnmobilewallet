@@ -3,6 +3,7 @@ package org.stohncoin.wallet.wallet
 import android.content.Context
 import java.io.File
 import java.security.MessageDigest
+import java.util.UUID
 
 /** Wallet storage boundary. Private keys never pass through the UI layer. */
 class WalletManager(context: Context) {
@@ -25,60 +26,99 @@ class WalletManager(context: Context) {
      * finishes. It is never treated as an installed wallet and never retained as a backup.
      */
     fun stageWalletDat(source: File): Result<StagedWallet> {
-        if (!source.isFile) return Result.failure(IllegalArgumentException("wallet.dat not found"))
-        if (source.length() <= 0L) return Result.failure(IllegalArgumentException("wallet.dat is empty"))
-        if (source.length() > MAX_IMPORT_BYTES) {
-            return Result.failure(IllegalArgumentException("wallet.dat exceeds safety limit"))
+        if (!source.isFile) {
+            return Result.failure(
+                IllegalArgumentException("wallet.dat not found")
+            )
         }
 
-        val staged = File(importCache, "import-${System.currentTimeMillis()}-${java.util.UUID.randomUUID()}.wallet.dat")
+        if (source.length() <= 0L) {
+            return Result.failure(
+                IllegalArgumentException("wallet.dat is empty")
+            )
+        }
+
+        if (source.length() > MAX_IMPORT_BYTES) {
+            return Result.failure(
+                IllegalArgumentException("wallet.dat exceeds safety limit")
+            )
+        }
+
+        val staged = File(
+            importCache,
+            "import-${System.currentTimeMillis()}-${UUID.randomUUID()}.wallet.dat"
+        )
+
         return runCatching {
             source.inputStream().use { input ->
-    staged.outputStream().use { output ->
-        val buffer = ByteArray(64 * 1024)
-        var total = 0L
+                staged.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0L
 
-        while (true) {
-            val n = input.read(buffer)
-            if (n < 0) break
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n < 0) break
 
-            total += n
-            require(total <= MAX_IMPORT_BYTES) {
-                "wallet.dat exceeds safety limit"
+                        total += n
+
+                        require(total <= MAX_IMPORT_BYTES) {
+                            "wallet.dat exceeds safety limit"
+                        }
+
+                        output.write(buffer, 0, n)
+                    }
+
+                    output.fd.sync()
+                }
             }
 
-            output.write(buffer, 0, n)
+            StagedWallet(
+                file = staged,
+                sha256 = sha256(staged)
+            )
+        }.onFailure {
+            staged.delete()
         }
-
-        output.fd.sync()
     }
-}
 
     fun deleteStagedWallet(staged: StagedWallet) {
-        require(staged.file.parentFile?.canonicalFile == importCache.canonicalFile) {
+        require(
+            staged.file.parentFile?.canonicalFile == importCache.canonicalFile
+        ) {
             "Staged wallet is outside import cache"
         }
+
         staged.file.delete()
     }
 
-    data class StagedWallet(val file: File, val sha256: String)
+    data class StagedWallet(
+        val file: File,
+        val sha256: String
+    )
 
     private fun sha256(file: File): String {
         val md = MessageDigest.getInstance("SHA-256")
+
         file.inputStream().use { input ->
             val buffer = ByteArray(64 * 1024)
+
             while (true) {
                 val n = input.read(buffer)
                 if (n < 0) break
+
                 md.update(buffer, 0, n)
             }
         }
-        return md.digest().joinToString("") { "%02x".format(it) }
+
+        return md.digest().joinToString("") {
+            "%02x".format(it)
+        }
     }
 
     companion object {
-        // Defensive upper bound for an imported wallet database. Actual Core wallets are normally
-        // much smaller; oversized input should not be allowed to consume unbounded app storage.
+        // Defensive upper bound for an imported wallet database.
+        // Actual Core wallets are normally much smaller; oversized input
+        // should not be allowed to consume unbounded app storage.
         private const val MAX_IMPORT_BYTES = 512L * 1024L * 1024L
     }
 }
