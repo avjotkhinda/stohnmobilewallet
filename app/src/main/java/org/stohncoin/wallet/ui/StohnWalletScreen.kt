@@ -120,7 +120,9 @@ fun StohnWalletScreen(node: NodeController) {
                 Toast.makeText(context, "Imported ${info.format} wallet.dat", Toast.LENGTH_LONG).show()
                 staged.delete()
                 refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi }
-            }.onFailure { Toast.makeText(context, "Import failed: ${it.message}", Toast.LENGTH_LONG).show() }
+            }.onFailure {
+    Toast.makeText(context, "Import failed. Check the wallet file and try again.", Toast.LENGTH_LONG).show()
+}
             busy = false
         }
     }
@@ -167,11 +169,15 @@ fun StohnWalletScreen(node: NodeController) {
                             onReceive = {
                                 scope.launch {
                                     runCatching { receiveAddress = node.newAddress(); dialog = DialogKind.Receive }
-                                        .onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
+                                        .onFailure {
+    Toast.makeText(context, "Unable to create a receiving address.", Toast.LENGTH_LONG).show()
+}
                                 }
                             },
                             onRefresh = {
-                                scope.launch { busy = true; runCatching { refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi } }.onFailure { Toast.makeText(context, "Refresh failed: ${it.message}", Toast.LENGTH_LONG).show() }; busy = false }
+                                scope.launch { busy = true; runCatching { refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi } }.onFailure {
+    Toast.makeText(context, "Refresh failed. Please try again.", Toast.LENGTH_LONG).show()
+}; busy = false }
                             }
                         )
                         1 -> ActivityPage(state, transactions)
