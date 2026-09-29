@@ -24,9 +24,17 @@ class CoreWalletMigration(private val runtime: EmbeddedLinuxRuntime) : WalletMig
         }
     }
 
-    override suspend fun import(source: File, passphrase: CharArray?, destination: File): ImportResult =
+    override suspend fun import(source: File, destination: File): ImportResult =
         withContext(Dispatchers.IO) {
             val staged = requireReadable(source)
+            val sourceInfo = inspect(staged)
+            require(sourceInfo.format == "sqlite") {
+                if (sourceInfo.format == "bdb") {
+                    "This Core 3.2 wallet tool cannot migrate Berkeley DB wallets. Keep the original wallet.dat unchanged and use a compatible legacy Core release to recover or export it before importing."
+                } else {
+                    "Unrecognized wallet database format; import was stopped without changing the source."
+                }
+            }
             require(!destination.exists()) {
                 "Migration destination already exists"
             }
@@ -56,7 +64,6 @@ class CoreWalletMigration(private val runtime: EmbeddedLinuxRuntime) : WalletMig
                 check(newWallet.renameTo(destination)) { "Unable to move migrated wallet into destination" }
                 ImportResult(destination, addressesImported = -1)
             } finally {
-                passphrase?.fill('\u0000')
                 workspace.deleteRecursively()
             }
         }

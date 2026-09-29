@@ -183,7 +183,7 @@ class NodeController private constructor(context: Context) {
 
     suspend fun importWalletDat(source: File, destination: File): ImportResult =
     walletMutex.withLock {
-        val result = CoreWalletMigration(embedded()).import(source, null, destination)
+        val result = CoreWalletMigration(embedded()).import(source, destination)
         val walletName = destination.name
         embedded().rpcCall("loadwallet", org.json.JSONArray().put(walletName))
         activeWalletName = walletName

@@ -97,33 +97,36 @@ fun StohnWalletScreen(node: NodeController) {
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             busy = true
-            runCatching {
-                val staged = File(context.cacheDir, "wallet-import-${System.currentTimeMillis()}.dat")
-                context.contentResolver.openInputStream(uri)?.use { input ->
-                    staged.outputStream().use { output ->
-                        val buffer = ByteArray(128 * 1024)
-                        var total = 0L
-                        while (true) {
-                            val n = input.read(buffer)
-                            if (n < 0) break
-                            total += n
-                            require(total <= MAX_IMPORT_BYTES) { "wallet.dat is too large" }
-                            output.write(buffer, 0, n)
+            val staged = File(context.cacheDir, "wallet-import-${System.currentTimeMillis()}.dat")
+            try {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        staged.outputStream().use { output ->
+                            val buffer = ByteArray(128 * 1024)
+                            var total = 0L
+                            while (true) {
+                                val n = input.read(buffer)
+                                if (n < 0) break
+                                total += n
+                                require(total <= MAX_IMPORT_BYTES) { "wallet.dat is too large" }
+                                output.write(buffer, 0, n)
+                            }
+                            output.fd.sync()
                         }
-                        output.fd.sync()
-                    }
-                } ?: error("Unable to read wallet.dat")
-                val info = node.inspectWalletDat(staged)
-                val destination = File(context.filesDir, "fullmode/stohn-data/migrated-wallet")
-                require(!destination.exists()) { "A migrated wallet already exists" }
-                node.importWalletDat(staged, destination)
-                Toast.makeText(context, "Imported ${info.format} wallet.dat", Toast.LENGTH_LONG).show()
+                    } ?: error("Unable to read wallet.dat")
+                    val info = node.inspectWalletDat(staged)
+                    val destination = File(context.filesDir, "fullmode/stohn-data/migrated-wallet")
+                    require(!destination.exists()) { "A migrated wallet already exists" }
+                    node.importWalletDat(staged, destination)
+                    Toast.makeText(context, "Imported ${info.format} wallet.dat", Toast.LENGTH_LONG).show()
+                    refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi }
+                }.onFailure {
+                    Toast.makeText(context, "Import failed: ${it.message ?: "wallet could not be migrated"}", Toast.LENGTH_LONG).show()
+                }
+            } finally {
                 staged.delete()
-                refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi }
-            }.onFailure {
-    Toast.makeText(context, "Import failed. Check the wallet file and try again.", Toast.LENGTH_LONG).show()
-}
-            busy = false
+                busy = false
+            }
         }
     }
 
@@ -278,6 +281,9 @@ private fun WalletHome(state: NodeController.State, balance: Double, onSend: () 
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row { Text("Full Node", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text(state.status.name, color = Electric, fontSize = 12.sp) }
                     Text(state.message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (state.status == NodeController.Status.ERROR) {
+                        OutlinedButton(onClick = { node.start() }, enabled = !busy) { Text("Retry node startup") }
+                    }
                     LinearProgressIndicator(Modifier.fillMaxWidth(), color = Electric)
                     Text("Headers ${state.headers} • Blocks ${state.blocks}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                 }

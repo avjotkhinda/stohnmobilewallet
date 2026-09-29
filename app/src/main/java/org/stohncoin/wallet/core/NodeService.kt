@@ -10,10 +10,17 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
 /** Owns the single user-requested Full Mode Core as a visible foreground service. */
 class NodeService : Service() {
     private lateinit var controller: NodeController
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     override fun onCreate() {
         super.onCreate()
@@ -21,6 +28,11 @@ class NodeService : Service() {
         createChannel()
         val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
         ServiceCompat.startForeground(this, 42, notification("Starting Stohn Core…"), type)
+        serviceScope.launch {
+            controller.state.collect { state ->
+                getSystemService(NotificationManager::class.java).notify(42, notification(state.message))
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -29,6 +41,7 @@ class NodeService : Service() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         controller.stopCoreFromService()
         super.onDestroy()
     }
