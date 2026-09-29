@@ -94,7 +94,13 @@ class EmbeddedLinuxRuntime(private val context: Context) : RuntimeBackend {
 
     data class ToolResult(val exitCode: Int, val stdout: String, val stderr: String)
 
-    fun runWalletTool(workspace: File, walletName: String, command: String, dumpFile: File? = null): ToolResult {
+    fun runWalletTool(
+        workspace: File,
+        walletName: String,
+        command: String,
+        dumpFile: File? = null,
+        walletFormat: String? = null
+    ): ToolResult {
         check(walletTool.isFile) { "Official stohncoin-wallet tool is not installed in the runtime" }
         check(workspace.isDirectory) { "Wallet migration workspace is missing" }
         val linuxWorkspace = "/workspace"
@@ -111,6 +117,12 @@ class EmbeddedLinuxRuntime(private val context: Context) : RuntimeBackend {
         if (dumpFile != null) {
             val name = dumpFile.name
             args += "-dumpfile=$linuxWorkspace/$name"
+        }
+        if (walletFormat != null) {
+            require(command == "createfromdump" && walletFormat in setOf("sqlite", "bdb")) {
+                "Wallet format is only supported for createfromdump"
+            }
+            args += "-format=$walletFormat"
         }
         args += command
         val process = ProcessBuilder(args)
@@ -151,11 +163,11 @@ class EmbeddedLinuxRuntime(private val context: Context) : RuntimeBackend {
     suspend fun rpcVoid(method: String, params: org.json.JSONArray = org.json.JSONArray(), walletName: String? = null) =
         withContext(Dispatchers.IO) { LocalRpc(dataDir, walletName).voidResult(method, params) }
 
-    suspend fun backupWalletSnapshot(snapshotName: String): File = withContext(Dispatchers.IO) {
+    suspend fun backupWalletSnapshot(snapshotName: String, walletName: String? = null): File = withContext(Dispatchers.IO) {
         require(snapshotName.matches(Regex("[A-Za-z0-9._-]{1,80}"))) { "Invalid backup snapshot name" }
         val snapshot = File(dataDir, "backup-$snapshotName.dat")
         if (snapshot.exists()) snapshot.delete()
-        val rpc = LocalRpc(dataDir)
+        val rpc = LocalRpc(dataDir, walletName)
         val linuxPath = "/home/stohn/.stohn/${snapshot.name}"
         rpc.objectResult("backupwallet", org.json.JSONArray().put(linuxPath))
         check(snapshot.isFile && snapshot.length() > 0L) { "Core did not create a backup snapshot" }

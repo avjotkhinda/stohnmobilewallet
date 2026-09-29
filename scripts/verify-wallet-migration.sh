@@ -12,7 +12,7 @@ mkdir "$TMP/out"
 cp --reflink=auto -- "$WALLET_DAT" "$TMP/out/wallet.dat"
 "$WALLET_TOOL" -datadir="$TMP/out" -wallet=wallet.dat info
 "$WALLET_TOOL" -datadir="$TMP/out" -wallet=wallet.dat -dumpfile="$TMP/wallet.dump" dump
-"$WALLET_TOOL" -datadir="$TMP/out" -wallet=migrated -dumpfile="$TMP/wallet.dump" createfromdump
+"$WALLET_TOOL" -datadir="$TMP/out" -wallet=migrated -dumpfile="$TMP/wallet.dump" -format=sqlite createfromdump
 [[ -f "$TMP/out/migrated/wallet.dat" || -f "$TMP/out/migrated" ]] || { echo "createfromdump did not produce a migrated wallet" >&2; exit 1; }
 "$WALLET_TOOL" -datadir="$TMP/out" -wallet=migrated info
 printf '%s\n' 'REAL WALLET.DAT MIGRATION TEST PASSED'

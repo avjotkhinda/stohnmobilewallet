@@ -28,12 +28,8 @@ class CoreWalletMigration(private val runtime: EmbeddedLinuxRuntime) : WalletMig
         withContext(Dispatchers.IO) {
             val staged = requireReadable(source)
             val sourceInfo = inspect(staged)
-            require(sourceInfo.format == "sqlite") {
-                if (sourceInfo.format == "bdb") {
-                    "This Core 3.2 wallet tool cannot migrate Berkeley DB wallets. Keep the original wallet.dat unchanged and use a compatible legacy Core release to recover or export it before importing."
-                } else {
-                    "Unrecognized wallet database format; import was stopped without changing the source."
-                }
+            require(sourceInfo.format == "sqlite" || sourceInfo.format == "bdb") {
+                "Unrecognized wallet database format; import was stopped without changing the source."
             }
             require(!destination.exists()) {
                 "Migration destination already exists"
@@ -44,8 +40,8 @@ class CoreWalletMigration(private val runtime: EmbeddedLinuxRuntime) : WalletMig
             }
             val workspace = runtime.createWalletToolWorkspace("import")
             try {
-                // The dump format is produced by Core itself, so encrypted ckey/mkey records remain
-                // encrypted. Android never decrypts private-key material during this conversion.
+                // Core's record dump preserves encrypted key records. Ask Core to create a modern
+                // SQLite wallet even when the source was Berkeley DB; Android never decrypts keys.
                 val dump = File(workspace, "wallet.dump")
                 val sourceCopy = File(workspace, "wallet.dat")
                 staged.copyTo(sourceCopy)
@@ -54,7 +50,13 @@ class CoreWalletMigration(private val runtime: EmbeddedLinuxRuntime) : WalletMig
                 check(dump.isFile && dump.length() > 0) { "Core produced no wallet dump" }
 
                 val migratedName = "migrated-wallet"
-                val createResult = runtime.runWalletTool(workspace, migratedName, "createfromdump", dump)
+                val createResult = runtime.runWalletTool(
+                    workspace,
+                    migratedName,
+                    "createfromdump",
+                    dump,
+                    walletFormat = "sqlite"
+                )
                 val newWallet = File(workspace, migratedName)
                 check(createResult.exitCode == 0) {
                     "wallet createfromdump failed: ${createResult.stderr.ifBlank { createResult.stdout }}"

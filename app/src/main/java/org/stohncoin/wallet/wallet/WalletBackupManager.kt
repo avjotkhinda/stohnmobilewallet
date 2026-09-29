@@ -17,10 +17,10 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
     private val root = File(context.filesDir, "fullmode")
     private val walletDir = File(root, "stohn-data")
 
-    suspend fun createCoreBackup(destination: File, password: CharArray): BackupResult = withContext(Dispatchers.IO) {
+    suspend fun createCoreBackup(destination: File, password: CharArray, walletName: String?): BackupResult = withContext(Dispatchers.IO) {
         require(password.isNotEmpty()) { "Backup password is required" }
         val core = runtime
-        val snapshot = core.backupWalletSnapshot(java.util.UUID.randomUUID().toString().replace("-", ""))
+        val snapshot = core.backupWalletSnapshot(java.util.UUID.randomUUID().toString().replace("-", ""), walletName)
         try {
             packageMigrationSnapshot(snapshot, destination, password)
         } finally {
@@ -29,7 +29,7 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
     }
 
 
-    suspend fun restoreCoreBackup(input: File, password: CharArray, destination: File) = withContext(Dispatchers.IO) {
+    suspend fun restoreCoreBackup(input: File, password: CharArray, destination: File): ImportResult = withContext(Dispatchers.IO) {
         require(input.isFile) { "Backup file does not exist" }
         require(password.isNotEmpty()) { "Backup password is required" }
         require(!destination.exists()) { "Restore destination must not already exist" }
@@ -74,7 +74,7 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
             require(expectedHash?.matches(Regex("[0-9a-f]{64}")) == true) { "Backup manifest is invalid" }
             require(sha256(stagedWallet) == expectedHash) { "Backup wallet checksum mismatch" }
             destination.parentFile?.mkdirs()
-            require(stagedWallet.renameTo(destination)) { "Unable to install restored wallet" }
+            CoreWalletMigration(runtime).import(stagedWallet, destination)
         } finally {
             decrypted.delete()
             if (stagedWallet.exists()) stagedWallet.delete()

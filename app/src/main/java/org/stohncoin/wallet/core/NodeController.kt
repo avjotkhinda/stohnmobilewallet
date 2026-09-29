@@ -19,6 +19,7 @@ import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.runtime.RuntimeBackendFactory
 import org.stohncoin.wallet.runtime.RuntimeInstaller
 import org.stohncoin.wallet.wallet.CoreWalletMigration
+import org.stohncoin.wallet.wallet.WalletBackupManager
 import org.stohncoin.wallet.wallet.ImportResult
 import org.stohncoin.wallet.wallet.WalletInfo
 import org.stohncoin.wallet.wallet.WalletRpc
@@ -93,13 +94,37 @@ class NodeController private constructor(context: Context) {
     }
 
     private suspend fun restoreWallet(b: RuntimeBackend) {
-        val name = activeWalletName ?: return
         val embedded = b as? EmbeddedLinuxRuntime ?: return
-        val loaded = runCatching { embedded.rpcArray("listwallets") }.getOrNull()
-            ?.let { array -> (0 until array.length()).any { array.optString(it) == name } } == true
-        if (!loaded) {
-            embedded.rpcCall("loadwallet", org.json.JSONArray().put(name))
+        val loadedWallets = embedded.rpcArray("listwallets")
+        val savedName = activeWalletName
+        if (savedName != null) {
+            val alreadyLoaded = (0 until loadedWallets.length()).any { loadedWallets.optString(it) == savedName }
+            if (!alreadyLoaded) embedded.rpcCall("loadwallet", org.json.JSONArray().put(savedName))
+            return
         }
+
+        if (loadedWallets.length() > 0) {
+            setActiveWalletName(loadedWallets.optString(0))
+            return
+        }
+
+        // Reuse a wallet left on disk before creating a new one; never silently replace it.
+        val walletDirectory = embedded.rpcCall("listwalletdir").optJSONArray("wallets")
+        if (walletDirectory != null && walletDirectory.length() > 0) {
+            val name = walletDirectory.optJSONObject(0)?.optString("name").orEmpty()
+            require(name.isNotBlank()) { "Core returned an invalid wallet directory entry" }
+            embedded.rpcCall("loadwallet", org.json.JSONArray().put(name))
+            setActiveWalletName(name)
+            return
+        }
+
+        embedded.rpcCall("createwallet", org.json.JSONArray().put(DEFAULT_WALLET_NAME))
+        setActiveWalletName(DEFAULT_WALLET_NAME)
+    }
+
+    private fun setActiveWalletName(name: String) {
+        activeWalletName = name
+        prefs.edit().putString(KEY_WALLET_NAME, name).apply()
     }
 
     private suspend fun poll(b: RuntimeBackend) {
@@ -186,10 +211,23 @@ class NodeController private constructor(context: Context) {
         val result = CoreWalletMigration(embedded()).import(source, destination)
         val walletName = destination.name
         embedded().rpcCall("loadwallet", org.json.JSONArray().put(walletName))
-        activeWalletName = walletName
-        prefs.edit().putString(KEY_WALLET_NAME, walletName).apply()
+        setActiveWalletName(walletName)
         result
     }
+
+    suspend fun createWalletBackup(destination: File, password: CharArray): WalletBackupManager.BackupResult =
+        walletMutex.withLock {
+            WalletBackupManager(appContext, embedded()).createCoreBackup(destination, password, activeWalletName)
+        }
+
+    suspend fun restoreWalletBackup(input: File, password: CharArray, destination: File): ImportResult =
+        walletMutex.withLock {
+            val result = WalletBackupManager(appContext, embedded()).restoreCoreBackup(input, password, destination)
+            val walletName = destination.name
+            embedded().rpcCall("loadwallet", org.json.JSONArray().put(walletName))
+            setActiveWalletName(walletName)
+            result
+        }
 
     fun stop() = appContext.stopService(Intent(appContext, NodeService::class.java))
 
@@ -204,6 +242,7 @@ class NodeController private constructor(context: Context) {
 
     companion object {
         private const val KEY_WALLET_NAME = "active_wallet_name"
+        private const val DEFAULT_WALLET_NAME = "stohn-wallet"
         @Volatile private var instance: NodeController? = null
         fun get(context: Context): NodeController = instance ?: synchronized(this) {
             instance ?: NodeController(context).also { instance = it }
