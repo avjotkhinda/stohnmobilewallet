@@ -1,0 +1,28 @@
+name: Android PRoot bundle
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/build-proot-android-bundle.sh'
+      - 'scripts/verify-proot-bundle.sh'
+      - 'docs/PROOT_ANDROID.md'
+      - '.github/workflows/proot-android-bundle.yml'
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build official Termux PRoot bundle
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev file patchelf
+          bash scripts/build-proot-android-bundle.sh "$RUNNER_TEMP/proot-build" "$RUNNER_TEMP/proot-bundle"
+      - name: Verify bundle
+        run: |
+          bash scripts/verify-proot-bundle.sh "$RUNNER_TEMP/proot-bundle"
+          test -s "$RUNNER_TEMP/proot-bundle/SHA256SUMS"
+          test -s "$RUNNER_TEMP/proot-bundle/PROVENANCE.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stohn-proot-android-bundle
+          path: ${{ runner.temp }}/proot-bundle

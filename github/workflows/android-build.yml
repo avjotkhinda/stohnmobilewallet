@@ -1,0 +1,164 @@
+name: Android Full Mode build
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    paths:
+      - 'app/**'
+      - 'runtime/**'
+      - 'scripts/**'
+      - 'tools/**'
+      - 'docs/**'
+      - '.github/workflows/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
+      - 'settings.gradle.kts'
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  audit-and-build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set executable permissions
+        run: |
+          chmod +x scripts/integrate-runtime-manifest.sh
+          chmod +x scripts/pin-debian-rootfs.sh
+          chmod +x scripts/release-preflight.sh
+          chmod +x tools/verify-fullmode-repair.sh
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK/NDK
+        run: |
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          yes | sdkmanager --licenses >/dev/null || true
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+
+      - name: Install native/runtime tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev file patchelf xz-utils curl
+
+      - name: Build and integrate verified PRoot
+        run: |
+          bash scripts/build-proot-android-bundle.sh "$RUNNER_TEMP/proot-build" "$RUNNER_TEMP/proot-bundle"
+          bash scripts/integrate-proot-bundle.sh "$RUNNER_TEMP/proot-bundle"
+
+      - name: Resolve and verify Debian ARM64 rootfs
+        run: |
+          bash scripts/integrate-runtime-manifest.sh
+
+      - name: Verify source release version
+        run: |
+          grep -F '"0.28.2-fullmode"' app/build.gradle.kts
+          grep -F '"0.28.2-fullmode"' app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt
+
+      - name: Security audit
+        run: |
+          bash tools/security-audit.sh
+
+      - name: Release preflight
+        run: |
+          bash scripts/release-preflight.sh
+
+      - name: Prepare release signing keystore when credentials are configured
+        id: signing
+        if: github.event_name != 'pull_request'
+        env:
+          STOHN_RELEASE_KEYSTORE_BASE64: ${{ secrets.STOHN_RELEASE_KEYSTORE_BASE64 }}
+          STOHN_RELEASE_STORE_PASSWORD: ${{ secrets.STOHN_RELEASE_STORE_PASSWORD }}
+          STOHN_RELEASE_KEY_ALIAS: ${{ secrets.STOHN_RELEASE_KEY_ALIAS }}
+          STOHN_RELEASE_KEY_PASSWORD: ${{ secrets.STOHN_RELEASE_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$STOHN_RELEASE_KEYSTORE_BASE64" || -z "$STOHN_RELEASE_STORE_PASSWORD" || -z "$STOHN_RELEASE_KEY_ALIAS" || -z "$STOHN_RELEASE_KEY_PASSWORD" ]]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo 'Release signing secrets are not configured; debug validation will still run.'
+            exit 0
+          fi
+          echo "$STOHN_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/stohn-release.jks"
+          chmod 600 "$RUNNER_TEMP/stohn-release.jks"
+          echo 'configured=true' >> "$GITHUB_OUTPUT"
+
+      - name: Run unit tests and assemble debug APK
+        run: gradle --no-daemon clean testDebugUnitTest assembleDebug
+
+      - name: Assemble signed release APK
+        if: steps.signing.outputs.configured == 'true'
+        env:
+          STOHN_RELEASE_STORE_FILE: ${{ runner.temp }}/stohn-release.jks
+          STOHN_RELEASE_STORE_PASSWORD: ${{ secrets.STOHN_RELEASE_STORE_PASSWORD }}
+          STOHN_RELEASE_KEY_ALIAS: ${{ secrets.STOHN_RELEASE_KEY_ALIAS }}
+          STOHN_RELEASE_KEY_PASSWORD: ${{ secrets.STOHN_RELEASE_KEY_PASSWORD }}
+        run: |
+          gradle --no-daemon assembleRelease
+
+      - name: Verify release APK signature
+        if: steps.signing.outputs.configured == 'true'
+        run: |
+          apksigner verify --verbose app/build/outputs/apk/release/*.apk
+
+      - name: Remove release signing keystore
+        if: always() && steps.signing.outputs.configured == 'true'
+        run: |
+          rm -f "$RUNNER_TEMP/stohn-release.jks"
+
+      - name: Verify APK native payload
+        run: |
+          bash scripts/verify-apk-artifact.sh app/build/outputs/apk/debug/*.apk
+
+      - name: Verify release APK native payload
+        if: steps.signing.outputs.configured == 'true'
+        run: |
+          bash scripts/verify-apk-artifact.sh app/build/outputs/apk/release/*.apk
+
+      - name: Generate release checksums and provenance
+        run: |
+          mkdir -p release-manifest
+          find app/build/outputs/apk -type f -name '*.apk' -print0 | xargs -0 sha256sum | tee release-manifest/APK-SHA256SUMS.txt
+          cp "$RUNNER_TEMP/proot-bundle/SHA256SUMS" release-manifest/PROOT-SHA256SUMS.txt
+          cp "$RUNNER_TEMP/proot-bundle/PROVENANCE.txt" release-manifest/PROOT-PROVENANCE.txt
+          cp "$RUNNER_TEMP/proot-bundle/PACKAGE-SHA256SUMS" release-manifest/PROOT-PACKAGE-SHA256SUMS.txt
+          grep -E 'DEBIAN_(VERSION|URL|SHA256)' app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt > release-manifest/DEBIAN-PROVENANCE.txt
+          git rev-parse HEAD > release-manifest/SOURCE-COMMIT.txt
+
+      - name: Upload APK and release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: stohn-wallet-v0.28-build
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+            release-manifest/*
+          if-no-files-found: error
+
+      - name: Attest debug APK
+        if: github.event_name != 'pull_request'
+        uses: actions/attest@v4
+        with:
+          subject-path: 'app/build/outputs/apk/debug/*.apk'
+
+      - name: Attest release APK
+        if: steps.signing.outputs.configured == 'true'
+        uses: actions/attest@v4
+        with:
+          subject-path: 'app/build/outputs/apk/release/*.apk'
