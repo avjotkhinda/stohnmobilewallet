@@ -1,0 +1,11 @@
+StohnWallet
+Copyright (c) 2026 Avjot Singh.
+ALL RIGHTS RESERVED.
+
+The original StohnWallet source, UI design, artwork, branding, and other
+original creative material are proprietary to Avjot Singh. No permission is
+granted to reproduce, modify, distribute, sublicense, publish, sell, or create
+derivative works from original StohnWallet material without prior written
+permission from Avjot Singh.
+
+Third-party components remain under their own applicable licenses.
