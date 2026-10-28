@@ -5,7 +5,7 @@ Stohn Wallet Full Mode packages third-party runtime components. These components
 ## PRoot
 
 - Component: PRoot
-- Version target: 5.1.107.92
+- Version target: 5.1.107.101
 - License: GNU General Public License v2.0
 - Upstream: https://github.com/termux/proot
 - Source archive SHA-256: `29385d1ddb619a9c4449ab512bfd55032034b22f724ddf98fc95ff300ea32135`

@@ -21,7 +21,7 @@ done
 
 LOCK="$ROOT/runtime/proot/TERMUX-PACKAGE-LOCK.json"
 [[ -s "$LOCK" ]] || { echo 'FAIL: native runtime package lock missing' >&2; exit 1; }
-for sha in 1f1c983509701f6826f568482c70673ee453a9ba38c9f5fa445a472d6b7524e9 0da3a24d558b93c92bcf8d611e0826a99ff96e396b148e6cdf33b47c47c57ff6 ac81ad623d74c209718b9f3acb2dd702cc8a88c431e820d212229910b4db29da; do
+for sha in a28355e9be257e1f87f4e9294b3118470d4fd7a5442fed8b278f4443c83407d7 0da3a24d558b93c92bcf8d611e0826a99ff96e396b148e6cdf33b47c47c57ff6 556591f43bb773ad8777e1a29522640866a55f95dab71914418b94a8c58ad5a7; do
   grep -F "$sha" "$LOCK" >/dev/null || { echo "FAIL: expected native package hash missing: $sha" >&2; exit 1; }
 done
 

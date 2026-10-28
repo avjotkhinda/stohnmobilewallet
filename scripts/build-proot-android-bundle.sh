@@ -54,7 +54,7 @@ with (out/'PACKAGE-SHA256SUMS').open('w') as f:
     'Source: official Termux package repository\n'
     'Architecture: aarch64\n'
     'Packages are verified by SHA-256 before extraction.\n'
-    'PRoot upstream source: v5.1.107.92\n'
+    'PRoot upstream source: v5.1.107.101\n'
     'PRoot source SHA-256: 29385d1ddb619a9c4449ab512bfd55032034b22f724ddf98fc95ff300ea32135\n'
     'Final APK payload hashes are generated from the exact post-patchelf binaries in SHA256SUMS.\n'
 )
