@@ -14,17 +14,17 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # Gradle version comes from the committed wrapper (gradle/wrapper/gradle-wrapper.properties),
+      # pinned to 9.6.0 - the minimum AGP 9.4.0 accepts.
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
       - name: Verify full-mode runtime manifest
         run: bash tools/verify-fullmode-repair.sh
       - name: Run source security audit
         run: bash tools/security-audit.sh
       - name: Unit tests
-        run: gradle test
+        run: ./gradlew test
       - name: Build debug APK (release builds need signing secrets; see release job)
-        run: gradle assembleDebug
+        run: ./gradlew assembleDebug
 
   # Release packaging only runs when the four STOHN_RELEASE_* variables are configured
   # as action secrets; gradle fails fast otherwise (app/build.gradle.kts taskGraph check).
@@ -39,8 +39,6 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.13'
       - name: Decode release keystore (if configured)
         env:
           STORE_FILE_B64: ${{ secrets.STOHN_RELEASE_STORE_FILE_B64 }}
@@ -54,7 +52,7 @@ jobs:
           STOHN_RELEASE_STORE_PASSWORD: ${{ secrets.STOHN_RELEASE_STORE_PASSWORD }}
           STOHN_RELEASE_KEY_ALIAS: ${{ secrets.STOHN_RELEASE_KEY_ALIAS }}
           STOHN_RELEASE_KEY_PASSWORD: ${{ secrets.STOHN_RELEASE_KEY_PASSWORD }}
-        run: gradle assembleRelease
+        run: ./gradlew assembleRelease
       - name: Verify APK runtime payload against RuntimeManifest
         run: bash scripts/verify-apk-artifact.sh app/build/outputs/apk/release/app-release.apk
       - uses: actions/upload-artifact@v4

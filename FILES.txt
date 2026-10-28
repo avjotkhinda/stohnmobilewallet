@@ -51,6 +51,10 @@
 ./docs/THREAT_MODEL.md
 ./docs/WALLET_RECOVERY.md
 ./gradle.properties
+./gradle/wrapper/gradle-wrapper.jar
+./gradle/wrapper/gradle-wrapper.properties
+./gradlew
+./gradlew.bat
 ./runtime/proot/README.md
 ./runtime/proot/TERMUX-PACKAGE-LOCK.json
 ./scripts/build-android-core.sh
