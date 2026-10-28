@@ -1,0 +1,63 @@
+name: android-build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Verify full-mode runtime manifest
+        run: bash tools/verify-fullmode-repair.sh
+      - name: Run source security audit
+        run: bash tools/security-audit.sh
+      - name: Unit tests
+        run: gradle test
+      - name: Build debug APK (release builds need signing secrets; see release job)
+        run: gradle assembleDebug
+
+  # Release packaging only runs when the four STOHN_RELEASE_* variables are configured
+  # as action secrets; gradle fails fast otherwise (app/build.gradle.kts taskGraph check).
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Decode release keystore (if configured)
+        env:
+          STORE_FILE_B64: ${{ secrets.STOHN_RELEASE_STORE_FILE_B64 }}
+        run: |
+          if [ -n "$STORE_FILE_B64" ]; then
+            printf '%s' "$STORE_FILE_B64" | base64 -d > /tmp/release.keystore
+            echo "STOHN_RELEASE_STORE_FILE=/tmp/release.keystore" >> "$GITHUB_ENV"
+          fi
+      - name: Build signed release APK
+        env:
+          STOHN_RELEASE_STORE_PASSWORD: ${{ secrets.STOHN_RELEASE_STORE_PASSWORD }}
+          STOHN_RELEASE_KEY_ALIAS: ${{ secrets.STOHN_RELEASE_KEY_ALIAS }}
+          STOHN_RELEASE_KEY_PASSWORD: ${{ secrets.STOHN_RELEASE_KEY_PASSWORD }}
+        run: gradle assembleRelease
+      - name: Verify APK runtime payload against RuntimeManifest
+        run: bash scripts/verify-apk-artifact.sh app/build/outputs/apk/release/app-release.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stohn-wallet-release-apk
+          path: app/build/outputs/apk/release/app-release.apk

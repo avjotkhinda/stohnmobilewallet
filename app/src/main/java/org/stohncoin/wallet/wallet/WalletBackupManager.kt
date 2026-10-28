@@ -5,6 +5,8 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.security.MessageDigest
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
@@ -39,42 +41,9 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
         try {
             require(input.length() <= MAX_BACKUP_CONTAINER_BYTES) { "Backup file exceeds safety limit" }
             BackupCrypto.decrypt(input, decrypted, password, MAX_BACKUP_PLAINTEXT_BYTES)
-            var expectedHash: String? = null
-            var foundWallet = false
-            var entries = 0
-            var total = 0L
-            java.util.zip.ZipInputStream(FileInputStream(decrypted)).use { zip ->
-                while (true) {
-                    val entry = zip.nextEntry ?: break
-                    require(++entries <= 8) { "Backup contains too many entries" }
-                    val name = entry.name.replace('\\', '/')
-                    require(name == "wallet.dat" || name == "MANIFEST.sha256") { "Unexpected backup entry" }
-                    require(!entry.isDirectory && !name.contains("..") && !name.startsWith('/')) { "Unsafe backup entry" }
-                    if (name == "wallet.dat") {
-                        require(!foundWallet) { "Backup contains duplicate wallet.dat entries" }
-                        FileOutputStream(stagedWallet).use { out ->
-                            val remaining = MAX_WALLET_BYTES - total
-                            require(remaining > 0L) { "Restored wallet exceeds safety limit" }
-                            total += copyLimited(zip, out, remaining)
-                        }
-                        foundWallet = true
-                    } else {
-                        require(expectedHash == null) { "Backup contains duplicate manifest entries" }
-                        val manifest = ByteArray(1024)
-                        val count = zip.read(manifest)
-                        require(count >= 0) { "Unable to read backup manifest" }
-                        require(zip.read() < 0) { "Backup manifest is too large" }
-                        expectedHash = String(manifest, 0, count, Charsets.US_ASCII).trim()
-                    }
-                    require(total <= MAX_WALLET_BYTES) { "Restored wallet exceeds safety limit" }
-                    zip.closeEntry()
-                }
-            }
-            require(foundWallet && stagedWallet.length() > 0L) { "Backup contains no wallet.dat" }
-            require(expectedHash?.matches(Regex("[0-9a-f]{64}")) == true) { "Backup manifest is invalid" }
-            require(sha256(stagedWallet) == expectedHash) { "Backup wallet checksum mismatch" }
+            val contents = BackupContainer.restore(decrypted, stagedWallet, MAX_WALLET_BYTES)
             destination.parentFile?.mkdirs()
-            CoreWalletMigration(runtime).import(stagedWallet, destination)
+            CoreWalletMigration(runtime).import(contents.wallet, destination)
         } finally {
             decrypted.delete()
             if (stagedWallet.exists()) stagedWallet.delete()
@@ -95,10 +64,10 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
         try {
             // Keep the temporary plaintext inside app-private cache and delete it immediately.
             java.util.zip.ZipOutputStream(FileOutputStream(plaintext)).use { zip ->
-                zip.putNextEntry(java.util.zip.ZipEntry("wallet.dat"))
+                zip.putNextEntry(ZipEntry("wallet.dat"))
                 FileInputStream(snapshot).use { copyLimited(it, zip, MAX_WALLET_BYTES) }
                 zip.closeEntry()
-                zip.putNextEntry(java.util.zip.ZipEntry("MANIFEST.sha256"))
+                zip.putNextEntry(ZipEntry("MANIFEST.sha256"))
                 zip.write(sha256(snapshot).toByteArray(Charsets.US_ASCII))
                 zip.closeEntry()
             }
@@ -148,5 +117,96 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
         private const val MAX_WALLET_BYTES = 512L * 1024 * 1024
         private const val MAX_BACKUP_PLAINTEXT_BYTES = 520L * 1024 * 1024
         private const val MAX_BACKUP_CONTAINER_BYTES = 600L * 1024 * 1024
+    }
+}
+
+/**
+ * Zip-safety boundary for restored backup archives: strict entry whitelist, path-traversal and
+ * duplicate-entry rejection, plus per-entry and overall size limits. Kept free of Android
+ * dependencies so the restore rules stay unit-testable on the JVM.
+ */
+object BackupContainer {
+    const val ENTRY_WALLET = "wallet.dat"
+    const val ENTRY_MANIFEST = "MANIFEST.sha256"
+
+    data class Contents(
+        val wallet: File,
+        val walletSha256: String
+    )
+
+    fun restore(archive: File, stagedWallet: File, maxWalletBytes: Long): Contents {
+        require(archive.isFile) { "Backup archive does not exist" }
+        require(maxWalletBytes > 0L) { "Restore wallet size limit must be positive" }
+        var expectedHash: String? = null
+        var foundWallet = false
+        var entries = 0
+        var total = 0L
+        ZipInputStream(FileInputStream(archive)).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                require(++entries <= 8) { "Backup contains too many entries" }
+                val name = entry.name.replace('\\', '/')
+                require(name == ENTRY_WALLET || name == ENTRY_MANIFEST) { "Unexpected backup entry" }
+                require(!entry.isDirectory && !name.contains("..") && !name.startsWith('/')) { "Unsafe backup entry" }
+                when (name) {
+                    ENTRY_WALLET -> {
+                        require(!foundWallet) { "Backup contains duplicate wallet.dat entries" }
+                        FileOutputStream(stagedWallet).use { out ->
+                            val remaining = maxWalletBytes - total
+                            require(remaining > 0L) { "Restored wallet exceeds safety limit" }
+                            total += copyLimited(zip, out, remaining)
+                        }
+                        foundWallet = true
+                    }
+                    else -> {
+                        require(expectedHash == null) { "Backup contains duplicate manifest entries" }
+                        val manifest = ByteArray(1024)
+                        val count = zip.read(manifest)
+                        require(count >= 0) { "Unable to read backup manifest" }
+                        require(zip.read() < 0) { "Backup manifest is too large" }
+                        expectedHash = String(manifest, 0, count, Charsets.US_ASCII).trim()
+                    }
+                }
+                require(total <= maxWalletBytes) { "Restored wallet exceeds safety limit" }
+                zip.closeEntry()
+            }
+        }
+        require(foundWallet && stagedWallet.length() > 0L) { "Backup contains no wallet.dat" }
+        require(expectedHash?.matches(Regex("[0-9a-f]{64}")) == true) { "Backup manifest is invalid" }
+        val walletSha256 = sha256(stagedWallet)
+        require(walletSha256 == expectedHash) { "Backup wallet checksum mismatch" }
+        return Contents(stagedWallet, walletSha256)
+    }
+
+    private fun copyLimited(input: java.io.InputStream, output: java.io.OutputStream, limit: Long): Long {
+        require(limit >= 0L) { "Invalid copy limit" }
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val maxRead = minOf(buffer.size.toLong(), limit - total).toInt()
+            if (maxRead == 0) {
+                // A further byte means the entry exceeds the limit.
+                require(input.read() < 0) { "Restored wallet exceeds safety limit" }
+                break
+            }
+            val n = input.read(buffer, 0, maxRead)
+            if (n < 0) break
+            total += n
+            output.write(buffer, 0, n)
+        }
+        return total
+    }
+
+    private fun sha256(file: File): String {
+        val md = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                md.update(buffer, 0, n)
+            }
+        }
+        return md.digest().joinToString("") { "%02x".format(it) }
     }
 }

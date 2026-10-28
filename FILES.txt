@@ -5,6 +5,7 @@
 ./README.md
 ./THIRD_PARTY_NOTICES/README.md
 ./app/build.gradle.kts
+./app/proguard-rules.pro
 ./app/src/main/AndroidManifest.xml
 ./app/src/main/assets/LICENSE.txt
 ./app/src/main/assets/README.txt
@@ -24,6 +25,8 @@
 ./app/src/main/java/org/stohncoin/wallet/wallet/WalletManager.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/WalletMigration.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/WalletRpc.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/BackupContainerTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/BackupCryptoTest.kt
 ./app/src/main/res/values/styles.xml
 ./app/src/main/res/xml/data_extraction_rules.xml
 ./app/src/main/res/xml/network_security_config.xml
