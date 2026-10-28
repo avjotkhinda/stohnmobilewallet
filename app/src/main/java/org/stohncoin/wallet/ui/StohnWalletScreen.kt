@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
 import org.stohncoin.wallet.wallet.WalletRpc
+import org.stohncoin.wallet.security.AppAuthManager
 import java.io.File
 
 private val DarkBg = Color(0xFF030A18)
@@ -575,12 +576,97 @@ private fun SettingsPage(
 
 @Composable
 private fun SecurityPage(info: WalletRpc.WalletInfoSnapshot?, onBackup: () -> Unit, onChangePasskey: () -> Unit, onLock: () -> Unit) {
+    val context = LocalContext.current
+    var showPinDialog by remember { mutableStateOf(false) }
+    var appLockEnabled by remember { mutableStateOf(AppAuthManager.isAppLockEnabled(context)) }
+    var biometricEnabled by remember { mutableStateOf(AppAuthManager.isBiometricEnabled(context)) }
+    var hasPin by remember { mutableStateOf(AppAuthManager.hasPin(context)) }
+
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("Security", fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Protect access to your wallet", color = DarkMuted, fontSize = 12.sp) }
+        item { Text("APP SECURITY", color = Electric, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp, modifier = Modifier.padding(top = 8.dp)) }
+        item {
+            SettingCard(
+                "App Lock (PIN)",
+                if (hasPin && appLockEnabled) "Enabled" else "Disabled",
+                Icons.Default.Lock,
+                onClick = { showPinDialog = true }
+            )
+        }
+        item {
+            SettingCard(
+                "Biometric Unlock",
+                if (biometricEnabled) "Enabled" else "Disabled",
+                Icons.Default.Fingerprint,
+                onClick = {
+                    val enabled = !biometricEnabled
+                    AppAuthManager.setBiometricEnabled(context, enabled)
+                    biometricEnabled = enabled
+                    Toast.makeText(context, if (enabled) "Biometric unlock enabled" else "Biometric unlock disabled", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
+        item { Text("WALLET SECURITY", color = Electric, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp, modifier = Modifier.padding(top = 8.dp)) }
         item { SettingCard("Wallet passkey", if (info?.encrypted == true) "Encrypted · Change passkey" else "Not encrypted · Add passkey", Icons.Default.Lock, onChangePasskey) }
         item { SettingCard("Backup Wallet", "Create or restore an encrypted backup", Icons.Default.Backup, onBackup) }
         item { SettingCard("Lock wallet", "Lock spending keys now", Icons.Default.Lock, onLock) }
         item { Text("Your wallet passkey is handled by Stohn Core on this device. Keep a separate, tested backup of your wallet file.", color = DarkMuted, fontSize = 11.sp, modifier = Modifier.padding(4.dp)) }
+    }
+
+    if (showPinDialog) {
+        var pin by remember { mutableStateOf("") }
+        var confirmPin by remember { mutableStateOf("") }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showPinDialog = false },
+            confirmButton = {
+                Button(onClick = {
+                    if (pin.length >= 4 && pin == confirmPin) {
+                        AppAuthManager.setPin(context, pin)
+                        hasPin = true
+                        appLockEnabled = true
+                        Toast.makeText(context, "PIN set successfully", Toast.LENGTH_SHORT).show()
+                        showPinDialog = false
+                        pin = ""
+                        confirmPin = ""
+                    } else {
+                        Toast.makeText(context, "PINs must match and be at least 4 digits", Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("Set PIN") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    if (hasPin) {
+                        AppAuthManager.clearPin(context)
+                        hasPin = false
+                        appLockEnabled = false
+                        biometricEnabled = false
+                        Toast.makeText(context, "App lock disabled", Toast.LENGTH_SHORT).show()
+                    }
+                    showPinDialog = false
+                    pin = ""
+                    confirmPin = ""
+                }) { Text(if (hasPin) "Disable" else "Cancel") }
+            },
+            title = { Text("App Lock PIN") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = pin,
+                        onValueChange = { if (it.length <= 6) pin = it },
+                        label = { Text("Enter PIN (4-6 digits)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword)
+                    )
+                    OutlinedTextField(
+                        value = confirmPin,
+                        onValueChange = { if (it.length <= 6) confirmPin = it },
+                        label = { Text("Confirm PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword)
+                    )
+                }
+            }
+        )
     }
 }
 
