@@ -7,7 +7,9 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Pinned: the runtime hash pins depend on the patchelf version shipped with this
+    # release, so a runner-image bump must be a deliberate change.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -26,12 +28,14 @@ jobs:
       - name: Build debug APK (release builds need signing secrets; see release job)
         run: ./gradlew assembleDebug
 
-  # Release packaging only runs when the four STOHN_RELEASE_* variables are configured
-  # as action secrets; gradle fails fast otherwise (app/build.gradle.kts taskGraph check).
+  # Release packaging: builds the pinned PRoot bundle, verifies it against RuntimeManifest,
+  # then assembles a signed APK. Gradle itself refuses to emit an unsigned release
+  # (app/build.gradle.kts taskGraph check), so the build steps only run when a keystore
+  # secret is present; otherwise the job reports that the release was skipped.
   release:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -39,23 +43,57 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Decode release keystore (if configured)
+
+      # The APK is only valid with the runtime payload: assembleRelease fails the
+      # verify step below unless these four libraries are packaged into lib/arm64-v8a.
+      - name: Install PRoot bundle tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq patchelf binutils dpkg-dev
+          patchelf --version
+      - name: Build pinned PRoot Android bundle
+        run: bash scripts/build-proot-android-bundle.sh "$RUNNER_TEMP/proot-build" "$RUNNER_TEMP/proot-bundle"
+      - name: Integrate bundle and verify hashes against RuntimeManifest
+        run: bash scripts/integrate-proot-bundle.sh "$RUNNER_TEMP/proot-bundle"
+      - name: Release preflight (versions, pins, native artifacts)
+        run: bash scripts/release-preflight.sh
+
+      - name: Decode release keystore
+        id: signing
         env:
           STORE_FILE_B64: ${{ secrets.STOHN_RELEASE_STORE_FILE_B64 }}
+          # Legacy name used by the earlier workflow draft; accepted as a fallback.
+          LEGACY_KEYSTORE_B64: ${{ secrets.STOHN_RELEASE_KEYSTORE_BASE64 }}
         run: |
-          if [ -n "$STORE_FILE_B64" ]; then
-            printf '%s' "$STORE_FILE_B64" | base64 -d > /tmp/release.keystore
-            echo "STOHN_RELEASE_STORE_FILE=/tmp/release.keystore" >> "$GITHUB_ENV"
+          keystore_b64="${STORE_FILE_B64:-$LEGACY_KEYSTORE_B64}"
+          if [ -z "$keystore_b64" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "No release keystore secret configured; skipping the signed release build."
+            exit 0
           fi
+          printf '%s' "$keystore_b64" | base64 -d > "$RUNNER_TEMP/stohn-release.jks"
+          chmod 600 "$RUNNER_TEMP/stohn-release.jks"
+          echo "STOHN_RELEASE_STORE_FILE=$RUNNER_TEMP/stohn-release.jks" >> "$GITHUB_ENV"
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
       - name: Build signed release APK
+        if: steps.signing.outputs.configured == 'true'
         env:
           STOHN_RELEASE_STORE_PASSWORD: ${{ secrets.STOHN_RELEASE_STORE_PASSWORD }}
           STOHN_RELEASE_KEY_ALIAS: ${{ secrets.STOHN_RELEASE_KEY_ALIAS }}
           STOHN_RELEASE_KEY_PASSWORD: ${{ secrets.STOHN_RELEASE_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
       - name: Verify APK runtime payload against RuntimeManifest
+        if: steps.signing.outputs.configured == 'true'
         run: bash scripts/verify-apk-artifact.sh app/build/outputs/apk/release/app-release.apk
       - uses: actions/upload-artifact@v4
+        if: steps.signing.outputs.configured == 'true'
         with:
           name: stohn-wallet-release-apk
           path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+
+      - name: Report skipped release
+        if: steps.signing.outputs.configured != 'true'
+        run: |
+          echo "::notice title=Release APK skipped::No keystore secret found. Set STOHN_RELEASE_STORE_FILE_B64 (base64-encoded keystore) together with STOHN_RELEASE_STORE_PASSWORD, STOHN_RELEASE_KEY_ALIAS and STOHN_RELEASE_KEY_PASSWORD to publish a signed APK."
