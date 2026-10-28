@@ -3,6 +3,7 @@ package org.stohncoin.wallet.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
@@ -623,6 +626,26 @@ private fun SendPage(
     var passphrase by rememberSaveable { mutableStateOf("") }
     var subtractFee by rememberSaveable { mutableStateOf(false) }
     var estimate by remember { mutableStateOf<WalletRpc.FeeEstimate?>(null) }
+    val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val contents = result.contents ?: return@rememberLauncherForActivityResult
+        val raw = contents.trim()
+        if (raw.isEmpty()) return@rememberLauncherForActivityResult
+        val parsed = if (raw.contains(":")) {
+            val withoutScheme = raw.substringAfterLast(":")
+            withoutScheme.substringBefore("?").substringBefore("&")
+        } else {
+            raw
+        }
+        if (parsed.isNotBlank()) {
+            address = parsed
+            estimate = null
+        }
+        val amountMatch = Regex("amount=([0-9]*\.?[0-9]+)").find(raw)
+        amountMatch?.groupValues?.getOrNull(1)?.let {
+            amountText = it
+            estimate = null
+        }
+    }
 
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(15.dp), contentPadding = PaddingValues(bottom = 22.dp)) {
         item { Text("Send STOHN", fontSize = 24.sp, fontWeight = FontWeight.Bold); Text("Send from your local Stohn wallet", color = DarkMuted, fontSize = 12.sp) }
@@ -635,7 +658,17 @@ private fun SendPage(
                 placeholder = { Text("Enter address or scan QR") },
                 singleLine = true,
                 shape = RoundedCornerShape(15.dp),
-                trailingIcon = { Icon(Icons.Default.QrCodeScanner, "Scan QR", tint = Electric) }
+                trailingIcon = {
+                    IconButton(onClick = {
+                        val options = ScanOptions()
+                        options.setPrompt("Scan a Stohn address")
+                        options.setBeepEnabled(true)
+                        options.setOrientationLocked(false)
+                        scanLauncher.launch(options)
+                    }) {
+                        Icon(Icons.Default.QrCodeScanner, "Scan QR", tint = Electric)
+                    }
+                }
             )
         }
         item {
@@ -717,6 +750,7 @@ private fun SendPage(
 
 @Composable
 private fun ReceivePage(address: String, onCopy: () -> Unit) {
+    val context = LocalContext.current
     val bitmap = remember(address) { qr(address, 720) }
     Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Receive STOHN", fontSize = 24.sp, fontWeight = FontWeight.Bold)
@@ -725,8 +759,23 @@ private fun ReceivePage(address: String, onCopy: () -> Unit) {
             Column(Modifier.padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 bitmap?.let { Image(it.asImageBitmap(), "Stohn receive QR code", Modifier.size(238.dp)) }
                 Text(address, fontSize = 12.sp, color = DarkText, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                OutlinedButton(onClick = onCopy, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp)) {
-                    Icon(Icons.Default.ContentCopy, null, Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("Copy Address")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = onCopy, modifier = Modifier.weight(1f), shape = RoundedCornerShape(13.dp)) {
+                        Icon(Icons.Default.ContentCopy, null, Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("Copy")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, address)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Share Stohn address"))
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(13.dp)
+                    ) {
+                        Icon(Icons.Default.Share, null, Modifier.size(16.dp)); Spacer(Modifier.width(8.dp)); Text("Share")
+                    }
                 }
             }
         }
