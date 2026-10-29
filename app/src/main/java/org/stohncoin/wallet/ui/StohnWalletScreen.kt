@@ -45,6 +45,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
+import org.stohncoin.wallet.wallet.Amounts
 import org.stohncoin.wallet.wallet.WalletRpc
 import org.stohncoin.wallet.security.AppAuthManager
 import java.io.File
@@ -73,7 +74,7 @@ fun StohnWalletScreen(node: NodeController) {
     val context = LocalContext.current
     val state by node.state.collectAsState()
     var route by rememberSaveable { mutableStateOf("home") }
-    var balance by remember { mutableDoubleStateOf(0.0) }
+    var balance by remember { mutableStateOf(0L) }
     var transactions by remember { mutableStateOf(emptyList<WalletRpc.WalletTransaction>()) }
     var walletInfo by remember { mutableStateOf<WalletRpc.WalletInfoSnapshot?>(null) }
     var receiveAddress by remember { mutableStateOf("") }
@@ -358,7 +359,7 @@ private fun AppHeader(route: String, onBack: () -> Unit, onActivity: () -> Unit)
 private fun WalletHome(
     node: NodeController,
     state: NodeController.State,
-    balance: Double,
+    balance: Long,
     transactions: List<WalletRpc.WalletTransaction>,
     busy: Boolean,
     onSend: () -> Unit,
@@ -384,7 +385,7 @@ private fun WalletHome(
                         Icon(Icons.Default.Visibility, null, tint = DarkMuted, modifier = Modifier.size(17.dp))
                     }
                     Spacer(Modifier.height(7.dp))
-                    Text("%.3f".format(balance), fontSize = 32.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                    Text(Amounts.format(balance), fontSize = 32.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     Text("STOHN", color = Electric, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Text("Available in your Stohn wallet", color = DarkMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                     Spacer(Modifier.height(18.dp))
@@ -459,7 +460,7 @@ private fun StatusCard(title: String, value: String, modifier: Modifier) {
 
 @Composable
 private fun TransactionRow(tx: WalletRpc.WalletTransaction) {
-    val received = tx.amount >= 0
+    val received = tx.amountSatoshis >= 0
     val timestamp = remember(tx.time) {
         runCatching { java.text.SimpleDateFormat("dd MMM, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(tx.time * 1000)) }.getOrDefault("")
     }
@@ -479,7 +480,7 @@ private fun TransactionRow(tx: WalletRpc.WalletTransaction) {
                 Text(timestamp.ifBlank { tx.txid.take(12) + "…" }, color = DarkMuted, fontSize = 10.sp)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("%+.3f STOHN".format(tx.amount), color = if (received) Success else Danger, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                Text((if (received) "+" else "") + Amounts.format(tx.amountSatoshis) + " STOHN", color = if (received) Success else Danger, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                 Text("${tx.confirmations} confirmations", color = DarkMuted, fontSize = 9.sp)
             }
         }
@@ -487,7 +488,7 @@ private fun TransactionRow(tx: WalletRpc.WalletTransaction) {
 }
 
 @Composable
-private fun WalletManagerPage(balance: Double, info: WalletRpc.WalletInfoSnapshot?, onImport: () -> Unit, onSecurity: () -> Unit) {
+private fun WalletManagerPage(balance: Long, info: WalletRpc.WalletInfoSnapshot?, onImport: () -> Unit, onSecurity: () -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
         item { Text("Your wallet", fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Manage this device’s Stohn wallet", color = DarkMuted, fontSize = 12.sp) }
         item {
@@ -495,7 +496,7 @@ private fun WalletManagerPage(balance: Double, info: WalletRpc.WalletInfoSnapsho
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Surface(shape = RoundedCornerShape(15.dp), color = Color(0xFF0B3154)) { Icon(Icons.Default.AccountBalanceWallet, null, Modifier.padding(13.dp), tint = Electric) }
                     Spacer(Modifier.width(13.dp))
-                    Column(Modifier.weight(1f)) { Text("Main Wallet", fontWeight = FontWeight.Bold); Text("%.3f STOHN".format(balance), color = DarkMuted, fontSize = 12.sp) }
+                    Column(Modifier.weight(1f)) { Text("Main Wallet", fontWeight = FontWeight.Bold); Text("${Amounts.format(balance)} STOHN", color = DarkMuted, fontSize = 12.sp) }
                     Surface(shape = RoundedCornerShape(20.dp), color = Color(0xFF0D3833)) { Text("ACTIVE", Modifier.padding(horizontal = 10.dp, vertical = 5.dp), color = Success, fontSize = 9.sp, fontWeight = FontWeight.Bold) }
                 }
             }
@@ -509,7 +510,7 @@ private fun WalletManagerPage(balance: Double, info: WalletRpc.WalletInfoSnapsho
 @Composable
 private fun ActivityPage(state: NodeController.State, txs: List<WalletRpc.WalletTransaction>) {
     var filter by rememberSaveable { mutableStateOf("All") }
-    val visible = txs.filter { filter == "All" || (filter == "Received" && it.amount >= 0) || (filter == "Sent" && it.amount < 0) }
+    val visible = txs.filter { filter == "All" || (filter == "Received" && it.amountSatoshis >= 0) || (filter == "Sent" && it.amountSatoshis < 0) }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 18.dp)) {
         item { Text("Transactions", fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("${state.peers} peers connected to your node", color = DarkMuted, fontSize = 12.sp) }
         item {
@@ -703,7 +704,7 @@ private fun BackupPage(password: String, onPasswordChange: (String) -> Unit, onE
 private fun SendPage(
     node: NodeController,
     info: WalletRpc.WalletInfoSnapshot?,
-    balance: Double,
+    balance: Long,
     busy: Boolean,
     onBusy: (Boolean) -> Unit,
     onComplete: () -> Unit
@@ -729,7 +730,7 @@ private fun SendPage(
             address = parsed
             estimate = null
         }
-        val amountMatch = Regex("amount=([0-9]*\.?[0-9]+)").find(raw)
+        val amountMatch = Regex("""amount=([0-9]*\.?[0-9]+)""").find(raw)
         amountMatch?.groupValues?.getOrNull(1)?.let {
             amountText = it
             estimate = null
@@ -769,10 +770,10 @@ private fun SendPage(
                 placeholder = { Text("STOHN") },
                 singleLine = true,
                 shape = RoundedCornerShape(15.dp),
-                trailingIcon = { TextButton(onClick = { amountText = "%.8f".format(balance).trimEnd('0').trimEnd('.') }) { Text("Max", color = Electric) } }
+                trailingIcon = { TextButton(onClick = { if (balance > 0L) amountText = Amounts.format(balance); estimate = null }) { Text("Max", color = Electric) } }
             )
         }
-        item { Text("Available: %.8f STOHN".format(balance), color = DarkMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp)) }
+        item { Text("Available: ${Amounts.formatFixed(balance)} STOHN", color = DarkMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp)) }
         item {
             Card(shape = RoundedCornerShape(15.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0A1722)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1D2F3E))) {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -794,8 +795,8 @@ private fun SendPage(
         item {
             OutlinedButton(
                 onClick = {
-                    val amount = amountText.toDoubleOrNull()
-                    if (amount == null || amount <= 0.0 || address.isBlank()) return@OutlinedButton
+                    val amount = Amounts.parse(amountText)
+                    if (amount == null || amount <= 0L || address.isBlank()) return@OutlinedButton
                     scope.launch {
                         onBusy(true)
                         runCatching { estimate = node.estimateFee(address, amount, subtractFee) }
@@ -803,7 +804,7 @@ private fun SendPage(
                         onBusy(false)
                     }
                 },
-                enabled = !busy && address.isNotBlank() && (amountText.toDoubleOrNull() ?: 0.0) > 0,
+                enabled = !busy && address.isNotBlank() && (Amounts.parse(amountText) ?: 0L) > 0L,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(14.dp)
             ) { Text(if (estimate == null) "Estimate Fee" else "Update Fee Estimate") }
@@ -812,7 +813,7 @@ private fun SendPage(
         item {
             Button(
                 onClick = {
-                    val amount = amountText.toDoubleOrNull() ?: return@Button
+                    val amount = Amounts.parse(amountText) ?: return@Button
                     scope.launch {
                         onBusy(true)
                         try {
@@ -828,7 +829,7 @@ private fun SendPage(
                         }
                     }
                 },
-                enabled = !busy && estimate != null && address.isNotBlank() && (amountText.toDoubleOrNull() ?: 0.0) > 0 && (info?.encrypted != true || passphrase.isNotEmpty()),
+                enabled = !busy && estimate != null && address.isNotBlank() && (Amounts.parse(amountText) ?: 0L) > 0L && (info?.encrypted != true || passphrase.isNotEmpty()),
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(16.dp)
             ) { Text("Review & Send", fontWeight = FontWeight.Bold) }
@@ -888,76 +889,16 @@ private fun SettingCard(title: String, subtitle: String, icon: androidx.compose.
 private fun EmptyCard(text: String) { Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) { Text(text, Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) } }
 
 @Composable
-private fun SendDialog(node: NodeController, info: WalletRpc.WalletInfoSnapshot?, onDismiss: () -> Unit, onSent: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var address by remember { mutableStateOf("") }
-    var amountText by remember { mutableStateOf("") }
-    var subtract by remember { mutableStateOf(false) }
-    var passphrase by remember { mutableStateOf("") }
-    var fee by remember { mutableStateOf<WalletRpc.FeeEstimate?>(null) }
-    var working by remember { mutableStateOf(false) }
-    AlertDialog(onDismissRequest = onDismiss, confirmButton = {}, title = { Text("Send SOH", fontWeight = FontWeight.Black) }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedTextField(address, { address = it; fee = null }, Modifier.fillMaxWidth(), label = { Text("Recipient address") }, singleLine = true)
-            OutlinedTextField(amountText, { amountText = it; fee = null }, Modifier.fillMaxWidth(), label = { Text("Amount (SOH)") }, singleLine = true)
-            Text("Fee payment", fontWeight = FontWeight.Bold)
-            Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(subtract, { subtract = true; fee = null }); Text("Subtract fee from amount") }
-            Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(!subtract, { subtract = false; fee = null }); Text("Pay fee separately from wallet") }
-            OutlinedButton(onClick = {
-                val amount = amountText.toDoubleOrNull()
-                if (amount == null || amount <= 0.0) Toast.makeText(context, "Enter a valid amount", Toast.LENGTH_SHORT).show()
-                else scope.launch { working = true; runCatching { fee = node.estimateFee(address, amount, subtract) }.onFailure { Toast.makeText(context, "Fee estimate failed: ${it.message}", Toast.LENGTH_LONG).show() }; working = false }
-            }, enabled = !working && address.isNotBlank() && amountText.toDoubleOrNull()?.let { it > 0 } == true, modifier = Modifier.fillMaxWidth()) { Text(if (working) "Estimating…" else "Estimate transaction fee") }
-            fee?.let { f ->
-                FeeSummary(f, subtract)
-                if (info?.encrypted == true) OutlinedTextField(passphrase, { passphrase = it }, Modifier.fillMaxWidth(), label = { Text("Wallet passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onDismiss, Modifier.weight(1f)) { Text("Cancel") }
-                Button(onClick = {
-                    val amount = amountText.toDoubleOrNull() ?: return@Button
-                    scope.launch {
-                        working = true
-                        try {
-                            node.send(address, amount, if (info?.encrypted == true) passphrase.toCharArray() else null, subtract)
-                            Toast.makeText(context, "Transaction sent", Toast.LENGTH_LONG).show()
-                            onSent()
-                        } catch (t: Throwable) {
-                            Toast.makeText(context, "Send failed: ${t.message}", Toast.LENGTH_LONG).show()
-                        } finally {
-                            passphrase = ""
-                            working = false
-                        }
-                    }
-                }, enabled = !working && address.isNotBlank() && amountText.toDoubleOrNull()?.let { it > 0 } == true && (info?.encrypted != true || passphrase.isNotEmpty()), modifier = Modifier.weight(1f)) { Text(if (working) "Sending…" else "Send") }
-            }
-        }
-    })
-}
-
-@Composable
 private fun FeeSummary(fee: WalletRpc.FeeEstimate, subtract: Boolean) {
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), shape = RoundedCornerShape(14.dp)) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Estimated transaction fee", fontWeight = FontWeight.Bold)
-            Text("Fee: %.8f SOH".format(fee.fee))
-            Text("Recipient receives: %.8f SOH".format(fee.recipientAmount))
-            Text("Wallet deducted: %.8f SOH".format(fee.total))
+            Text("Fee: ${Amounts.formatFixed(fee.feeSatoshis)} STOHN")
+            Text("Recipient receives: ${Amounts.formatFixed(fee.recipientSatoshis)} STOHN")
+            Text("Wallet deducted: ${Amounts.formatFixed(fee.totalSatoshis)} STOHN")
             Text(if (subtract) "Fee is taken from the entered amount." else "Fee is added to the wallet deduction.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         }
     }
-}
-
-@Composable
-private fun ReceiveDialog(address: String, onDismiss: () -> Unit, onCopy: () -> Unit) {
-    val bitmap = remember(address) { qr(address, 720) }
-    AlertDialog(onDismissRequest = onDismiss, confirmButton = { Button(onClick = onCopy) { Text("Copy address") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }, title = { Text("Receive SOH", fontWeight = FontWeight.Black) }, text = {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            bitmap?.let { Image(it.asImageBitmap(), "QR address", Modifier.size(230.dp)) }
-            Text(address, textAlign = TextAlign.Center, fontSize = 12.sp)
-        }
-    })
 }
 
 @Composable
@@ -1000,9 +941,9 @@ private fun SecurityDialog(node: NodeController, info: WalletRpc.WalletInfoSnaps
     })
 }
 
-private suspend fun refresh(node: NodeController, apply: (Double, List<WalletRpc.WalletTransaction>, WalletRpc.WalletInfoSnapshot) -> Unit) {
+private suspend fun refresh(node: NodeController, apply: (Long, List<WalletRpc.WalletTransaction>, WalletRpc.WalletInfoSnapshot) -> Unit) {
     val info = node.walletInfo()
-    apply(info.balance, node.transactions(), info)
+    apply(info.balanceSatoshis, node.transactions(), info)
 }
 
 private fun copy(context: Context, text: String) {

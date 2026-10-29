@@ -4,13 +4,18 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
 
-/** High-level wallet operations delegated to Stohn Core JSON-RPC. */
+/**
+ * High-level wallet operations delegated to Stohn Core JSON-RPC.
+ *
+ * Every amount crossing this boundary is a `Long` of satoshis; Core's decimal coin values are
+ * converted once on the way in and once on the way out, never through `Double` arithmetic.
+ */
 class WalletRpc(private val runtime: EmbeddedLinuxRuntime, private val walletName: String? = null) {
     suspend fun walletInfo(): WalletInfoSnapshot = runtime.rpcCall("getwalletinfo", walletName = walletName).let { r ->
         WalletInfoSnapshot(
-            balance = r.optDouble("balance", 0.0),
-            unconfirmed = r.optDouble("unconfirmed_balance", 0.0),
-            immature = r.optDouble("immature_balance", 0.0),
+            balanceSatoshis = Amounts.fromJsonCoin(r.optDouble("balance", 0.0)),
+            unconfirmedSatoshis = Amounts.fromJsonCoin(r.optDouble("unconfirmed_balance", 0.0)),
+            immatureSatoshis = Amounts.fromJsonCoin(r.optDouble("immature_balance", 0.0)),
             txCount = r.optInt("txcount", 0),
             encrypted = r.has("unlocked_until")
         )
@@ -19,33 +24,42 @@ class WalletRpc(private val runtime: EmbeddedLinuxRuntime, private val walletNam
     suspend fun newAddress(label: String = "Stohn Wallet"): String =
         runtime.rpcString("getnewaddress", JSONArray().put(label), walletName)
 
-    data class FeeEstimate(val fee: Double, val total: Double, val recipientAmount: Double)
+    data class FeeEstimate(
+        val feeSatoshis: Long,
+        val totalSatoshis: Long,
+        val recipientSatoshis: Long
+    )
 
     /** Uses Core's wallet coin-selection/funding path; never treats a fee-rate as a fee. */
-    suspend fun estimateFee(address: String, amount: Double, subtractFeeFromAmount: Boolean): FeeEstimate {
+    suspend fun estimateFee(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean): FeeEstimate {
         require(address.isNotBlank()) { "Recipient address is required" }
-        require(amount.isFinite() && amount > 0.0) { "Amount must be a finite positive number" }
+        require(amountSatoshis in 1..Amounts.MAX_SATOSHIS) { "Amount must be a positive number of satoshis" }
         val options = JSONObject().put("replaceable", true).put("lockUnspents", false)
         if (subtractFeeFromAmount) options.put("subtractFeeFromOutputs", JSONArray().put(0))
-        val outputs = JSONObject().put(address, amount)
+        val outputs = JSONObject().put(address, Amounts.toJsonCoin(amountSatoshis))
         val result = runtime.rpcCall(
             "walletcreatefundedpsbt",
             JSONArray().put(JSONArray()).put(outputs).put(0).put(options).put(true),
             walletName
         )
-        val fee = result.optDouble("fee", Double.NaN)
-        require(fee.isFinite() && fee >= 0.0) { "Core did not return a valid transaction fee" }
-        val recipient = if (subtractFeeFromAmount) amount - fee else amount
-        require(recipient >= 0.0) { "Amount is too small to cover the transaction fee" }
-        return FeeEstimate(fee = fee, total = if (subtractFeeFromAmount) amount else amount + fee, recipientAmount = recipient)
+        val rawFee = result.optDouble("fee", Double.NaN)
+        require(rawFee.isFinite() && rawFee >= 0.0) { "Core did not return a valid transaction fee" }
+        val fee = Amounts.fromJsonCoin(rawFee)
+        val recipient = if (subtractFeeFromAmount) amountSatoshis - fee else amountSatoshis
+        require(recipient > 0L) { "Amount is too small to cover the transaction fee" }
+        return FeeEstimate(
+            feeSatoshis = fee,
+            totalSatoshis = if (subtractFeeFromAmount) amountSatoshis else amountSatoshis + fee,
+            recipientSatoshis = recipient
+        )
     }
 
-    suspend fun send(address: String, amount: Double, subtractFeeFromAmount: Boolean, comment: String = ""): String {
+    suspend fun send(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean, comment: String = ""): String {
         require(address.isNotBlank()) { "Recipient address is required" }
-        require(amount.isFinite() && amount > 0.0) { "Amount must be a finite positive number" }
+        require(amountSatoshis in 1..Amounts.MAX_SATOSHIS) { "Amount must be a positive number of satoshis" }
         val params = JSONArray()
             .put(address)
-            .put(amount)
+            .put(Amounts.toJsonCoin(amountSatoshis))
             .put(comment)
             .put("")
             .put(subtractFeeFromAmount)
@@ -59,8 +73,8 @@ class WalletRpc(private val runtime: EmbeddedLinuxRuntime, private val walletNam
                 WalletTransaction(
                     txid = item.optString("txid"),
                     category = item.optString("category"),
-                    amount = item.optDouble("amount", 0.0),
-                    fee = item.optDouble("fee", 0.0),
+                    amountSatoshis = Amounts.fromJsonCoin(item.optDouble("amount", 0.0)),
+                    feeSatoshis = Amounts.fromJsonCoin(item.optDouble("fee", 0.0)),
                     confirmations = item.optInt("confirmations", 0),
                     address = item.optString("address", ""),
                     time = item.optLong("timereceived", item.optLong("time", 0L))
@@ -100,9 +114,9 @@ class WalletRpc(private val runtime: EmbeddedLinuxRuntime, private val walletNam
     suspend fun lock() = runtime.rpcVoid("walletlock", walletName = walletName)
 
     data class WalletInfoSnapshot(
-        val balance: Double,
-        val unconfirmed: Double,
-        val immature: Double,
+        val balanceSatoshis: Long,
+        val unconfirmedSatoshis: Long,
+        val immatureSatoshis: Long,
         val txCount: Int,
         val encrypted: Boolean
     )
@@ -110,8 +124,8 @@ class WalletRpc(private val runtime: EmbeddedLinuxRuntime, private val walletNam
     data class WalletTransaction(
         val txid: String,
         val category: String,
-        val amount: Double,
-        val fee: Double,
+        val amountSatoshis: Long,
+        val feeSatoshis: Long,
         val confirmations: Int,
         val address: String,
         val time: Long
