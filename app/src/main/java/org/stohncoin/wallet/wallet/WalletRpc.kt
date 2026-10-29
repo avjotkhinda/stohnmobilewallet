@@ -31,11 +31,17 @@ class WalletRpc(private val runtime: EmbeddedLinuxRuntime, private val walletNam
     )
 
     /** Uses Core's wallet coin-selection/funding path; never treats a fee-rate as a fee. */
-    suspend fun estimateFee(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean): FeeEstimate {
+    suspend fun estimateFee(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean, confTarget: Int? = null): FeeEstimate {
         require(address.isNotBlank()) { "Recipient address is required" }
         require(amountSatoshis in 1..Amounts.MAX_SATOSHIS) { "Amount must be a positive number of satoshis" }
         val options = JSONObject().put("replaceable", true).put("lockUnspents", false)
         if (subtractFeeFromAmount) options.put("subtractFeeFromOutputs", JSONArray().put(0))
+        // conf_target asks Core to fund against its own feerate estimate for a confirmation target;
+        // it is the documented way to express "economy" vs "priority" without inventing a rate.
+        if (confTarget != null && confTarget > 0) {
+            options.put("conf_target", confTarget)
+            options.put("estimate_mode", "conservative")
+        }
         val outputs = JSONObject().put(address, Amounts.toJsonCoin(amountSatoshis))
         val result = runtime.rpcCall(
             "walletcreatefundedpsbt",
@@ -54,7 +60,13 @@ class WalletRpc(private val runtime: EmbeddedLinuxRuntime, private val walletNam
         )
     }
 
-    suspend fun send(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean, comment: String = ""): String {
+    suspend fun send(
+        address: String,
+        amountSatoshis: Long,
+        subtractFeeFromAmount: Boolean,
+        comment: String = "",
+        confTarget: Int? = null
+    ): String {
         require(address.isNotBlank()) { "Recipient address is required" }
         require(amountSatoshis in 1..Amounts.MAX_SATOSHIS) { "Amount must be a positive number of satoshis" }
         val params = JSONArray()
@@ -63,6 +75,10 @@ class WalletRpc(private val runtime: EmbeddedLinuxRuntime, private val walletNam
             .put(comment)
             .put("")
             .put(subtractFeeFromAmount)
+        if (confTarget != null && confTarget > 0) {
+            // sendtoaddress: replaceable, conf_target, estimate_mode
+            params.put(true).put(confTarget).put("conservative")
+        }
         return runtime.rpcString("sendtoaddress", params, walletName)
     }
 

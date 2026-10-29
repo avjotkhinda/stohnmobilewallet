@@ -19,6 +19,7 @@
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/StohnWalletScreen.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/BackupCrypto.kt
+./app/src/main/java/org/stohncoin/wallet/wallet/Amounts.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/CoreWalletMigration.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/WalletBackupManager.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/WalletMigration.kt
@@ -27,6 +28,10 @@
 ./app/src/main/java/org/stohncoin/wallet/security/PinHasher.kt
 ./app/src/main/java/org/stohncoin/wallet/security/PinThrottle.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/LockScreen.kt
+./app/src/main/java/org/stohncoin/wallet/ui/UiCommon.kt
+./app/src/main/java/org/stohncoin/wallet/ui/TransactionScreens.kt
+./app/src/main/java/org/stohncoin/wallet/ui/SendReceiveScreens.kt
+./app/src/main/java/org/stohncoin/wallet/ui/SettingsScreens.kt
 ./app/src/test/java/org/stohncoin/wallet/security/PinHasherTest.kt
 ./app/src/test/java/org/stohncoin/wallet/security/PinThrottleTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupContainerTest.kt
@@ -34,6 +39,7 @@
 ./app/src/main/res/values/styles.xml
 ./app/src/main/res/xml/data_extraction_rules.xml
 ./app/src/main/res/xml/network_security_config.xml
+./app/src/main/res/xml/file_paths.xml
 ./build.gradle.kts
 ./docs/ANDROID_RUNTIME_EXECUTION.md
 ./docs/ARCHITECTURE.md

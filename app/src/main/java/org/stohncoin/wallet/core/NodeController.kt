@@ -157,15 +157,15 @@ class NodeController private constructor(context: Context) {
 
     suspend fun walletInfo(): WalletRpc.WalletInfoSnapshot = walletMutex.withLock { walletRpc().walletInfo() }
     suspend fun newAddress(): String = walletMutex.withLock { walletRpc().newAddress() }
-    suspend fun estimateFee(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean): WalletRpc.FeeEstimate =
-        walletMutex.withLock { walletRpc().estimateFee(address, amountSatoshis, subtractFeeFromAmount) }
+    suspend fun estimateFee(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean, confTarget: Int? = null): WalletRpc.FeeEstimate =
+        walletMutex.withLock { walletRpc().estimateFee(address, amountSatoshis, subtractFeeFromAmount, confTarget) }
 
-    suspend fun send(address: String, amountSatoshis: Long, passphrase: CharArray?, subtractFeeFromAmount: Boolean): String =
+    suspend fun send(address: String, amountSatoshis: Long, passphrase: CharArray?, subtractFeeFromAmount: Boolean, confTarget: Int? = null): String =
         walletMutex.withLock {
             val rpc = walletRpc()
             try {
                 if (passphrase != null && passphrase.isNotEmpty()) rpc.unlock(passphrase)
-                rpc.send(address, amountSatoshis, subtractFeeFromAmount)
+                rpc.send(address, amountSatoshis, subtractFeeFromAmount, confTarget = confTarget)
             } finally {
                 if (passphrase != null && passphrase.isNotEmpty()) runCatching { rpc.lock() }
                 passphrase?.fill('\u0000')
