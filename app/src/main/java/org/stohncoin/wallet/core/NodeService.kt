@@ -27,10 +27,11 @@ class NodeService : Service() {
         controller = NodeController.get(applicationContext)
         createChannel()
         val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
-        ServiceCompat.startForeground(this, 42, notification("Starting Stohn Core…"), type)
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(NodeController.Status.STARTING), type)
         serviceScope.launch {
             controller.state.collect { state ->
-                getSystemService(NotificationManager::class.java).notify(42, notification(state.message))
+                getSystemService(NotificationManager::class.java)
+                    .notify(NOTIFICATION_ID, notification(state.status))
             }
         }
     }
@@ -48,18 +49,48 @@ class NodeService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun notification(text: String): Notification =
-        NotificationCompat.Builder(this, "stohn_node")
+    /**
+     * Notification content is deliberately coarse. Block heights, peer counts and anything
+     * wallet-related stay out of the shade and off the lock screen, and the notification is
+     * hidden entirely on secure lock screens.
+     */
+    private fun notification(status: NodeController.Status): Notification {
+        val text = publicText(status)
+        val publicVersion = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Stohn Wallet — Full Mode")
+            .setContentTitle("Stohn Wallet")
+            .setContentText("Background service active")
+            .setOngoing(true)
+            .build()
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("Stohn Wallet")
             .setContentText(text)
+            .setPublicVersion(publicVersion)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
+    }
+
+    private fun publicText(status: NodeController.Status): String = when (status) {
+        NodeController.Status.STARTING -> "Preparing the local node"
+        NodeController.Status.SYNCING -> "Local node synchronizing"
+        NodeController.Status.READY -> "Local node is running"
+        NodeController.Status.ERROR -> "Local node stopped"
+        NodeController.Status.STOPPED -> "Local node is stopped"
+    }
 
     private fun createChannel() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel("stohn_node", "Stohn Full Node", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL_ID, "Stohn Full Node", NotificationManager.IMPORTANCE_LOW)
         )
+    }
+
+    private companion object {
+        const val CHANNEL_ID = "stohn_node"
+        const val NOTIFICATION_ID = 42
     }
 }

@@ -1,6 +1,5 @@
 package org.stohncoin.wallet.ui
 
-import android.widget.Toast
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
@@ -18,7 +17,6 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -39,38 +37,61 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
+import kotlinx.coroutines.delay
 import org.stohncoin.wallet.security.AppAuthManager
 
+/**
+ * Gate shown on cold start and after the app returns from a background period longer than the
+ * configured grace. PIN entry is throttled; biometric is only offered when a PIN backs it up.
+ */
 @Composable
 fun LockScreen(onUnlocked: () -> Unit) {
     val context = LocalContext.current
     var pin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var blockedMillis by remember { mutableStateOf(0L) }
     val hasPin = remember { AppAuthManager.hasPin(context) }
     val biometricEnabled = remember { AppAuthManager.isBiometricEnabled(context) }
 
     fun showBiometric() {
+        if (!hasPin) return
         val activity = context as? FragmentActivity ?: return
         val executor = ContextCompat.getMainExecutor(context)
-        val biometricManager = BiometricManager.from(context)
-        if (biometricManager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL) == BiometricManager.BIOMETRIC_SUCCESS) {
-            val prompt = BiometricPrompt(activity, executor, object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    super.onAuthenticationSucceeded(result)
-                    onUnlocked()
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
+            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        if (BiometricManager.from(context).canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) return
+        val prompt = BiometricPrompt(activity, executor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                blockedMillis = 0L
+                error = null
+                onUnlocked()
+            }
+
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                super.onAuthenticationError(errorCode, errString)
+                // Cancelling the system prompt falls back to the PIN field; never unlock on error.
+                if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                    error = errString.toString()
                 }
-            })
-            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            }
+        })
+        prompt.authenticate(
+            BiometricPrompt.PromptInfo.Builder()
                 .setTitle("Unlock Stohn Wallet")
                 .setSubtitle("Authenticate to access your wallet")
-                .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                .setAllowedAuthenticators(authenticators)
                 .build()
-            prompt.authenticate(promptInfo)
-        }
+        )
     }
 
     LaunchedEffect(Unit) {
-        if (biometricEnabled) {
-            showBiometric()
+        if (biometricEnabled) showBiometric()
+    }
+    LaunchedEffect(blockedMillis) {
+        while (blockedMillis > 0L) {
+            delay(1000)
+            blockedMillis = (blockedMillis - 1000L).coerceAtLeast(0L)
         }
     }
 
@@ -92,25 +113,54 @@ fun LockScreen(onUnlocked: () -> Unit) {
         if (hasPin) {
             OutlinedTextField(
                 value = pin,
-                onValueChange = { if (it.length <= 6) pin = it },
+                onValueChange = {
+                    if (it.length <= AppAuthManager.MAX_PIN_LENGTH) {
+                        pin = it
+                        error = null
+                    }
+                },
                 label = { Text("Enter PIN") },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                isError = error != null,
+                enabled = blockedMillis == 0L
             )
+            error?.let {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(it, color = Color(0xFFFF665F), fontSize = 12.sp)
+            }
+            if (blockedMillis > 0L) {
+                Text(
+                    "Try again in ${(blockedMillis / 1000L) + 1L}s",
+                    color = Color(0xFF9CA3AF),
+                    fontSize = 12.sp
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
-                    if (AppAuthManager.verifyPin(context, pin)) {
-                        onUnlocked()
-                    } else {
-                        Toast.makeText(context, "Incorrect PIN", Toast.LENGTH_SHORT).show()
-                        pin = ""
+                    when (val verdict = AppAuthManager.submitPin(context, pin)) {
+                        is AppAuthManager.PinVerdict.Success -> {
+                            pin = ""
+                            error = null
+                            blockedMillis = 0L
+                            onUnlocked()
+                        }
+                        is AppAuthManager.PinVerdict.Incorrect -> {
+                            pin = ""
+                            error = "Incorrect PIN"
+                        }
+                        is AppAuthManager.PinVerdict.Blocked -> {
+                            pin = ""
+                            blockedMillis = verdict.retryAfterMillis
+                            error = "Too many attempts"
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = pin.length >= 4
+                enabled = pin.length >= AppAuthManager.MIN_PIN_LENGTH && blockedMillis == 0L
             ) {
                 Text("Unlock")
             }
@@ -118,7 +168,11 @@ fun LockScreen(onUnlocked: () -> Unit) {
 
         if (biometricEnabled) {
             Spacer(modifier = Modifier.height(16.dp))
-            OutlinedButton(onClick = { showBiometric() }, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { showBiometric() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = blockedMillis == 0L
+            ) {
                 Icon(Icons.Default.Fingerprint, contentDescription = null)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Use Biometric/Device Unlock")

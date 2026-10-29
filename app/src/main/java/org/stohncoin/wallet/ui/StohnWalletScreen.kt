@@ -588,7 +588,7 @@ private fun SecurityPage(info: WalletRpc.WalletInfoSnapshot?, onBackup: () -> Un
         item {
             SettingCard(
                 "App Lock (PIN)",
-                if (hasPin && appLockEnabled) "Enabled" else "Disabled",
+                if (hasPin && appLockEnabled) "Enabled · PIN " + "•".repeat(4) else "Disabled",
                 Icons.Default.Lock,
                 onClick = { showPinDialog = true }
             )
@@ -600,9 +600,12 @@ private fun SecurityPage(info: WalletRpc.WalletInfoSnapshot?, onBackup: () -> Un
                 Icons.Default.Fingerprint,
                 onClick = {
                     val enabled = !biometricEnabled
-                    AppAuthManager.setBiometricEnabled(context, enabled)
-                    biometricEnabled = enabled
-                    Toast.makeText(context, if (enabled) "Biometric unlock enabled" else "Biometric unlock disabled", Toast.LENGTH_SHORT).show()
+                    if (AppAuthManager.setBiometricEnabled(context, enabled)) {
+                        biometricEnabled = enabled
+                        Toast.makeText(context, if (enabled) "Biometric unlock enabled" else "Biometric unlock disabled", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Set an app-lock PIN before enabling biometric unlock", Toast.LENGTH_LONG).show()
+                    }
                 }
             )
         }
