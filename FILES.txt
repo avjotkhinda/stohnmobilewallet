@@ -1,5 +1,6 @@
 ./.github/workflows/android-build.yml
 ./.github/workflows/proot-android-bundle.yml
+./.gitignore
 ./FILES.txt
 ./LICENSE
 ./README.md
