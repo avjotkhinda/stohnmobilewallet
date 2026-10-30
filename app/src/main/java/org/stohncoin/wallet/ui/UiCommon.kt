@@ -166,4 +166,8 @@ fun shareableQrImage(context: Context, bitmap: android.graphics.Bitmap): File? =
 const val MAX_IMPORT_BYTES = 256L * 1024 * 1024
 
 
+/** App-private directory that holds address-book labels. */
+const val ADDRESS_BOOK_DIR = "addressbook"
+
+
 const val MAX_BACKUP_BYTES = 600L * 1024 * 1024

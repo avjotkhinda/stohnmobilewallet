@@ -128,7 +128,8 @@ fun SettingsPage(
     onImport: () -> Unit,
     onLock: () -> Unit,
     onNode: () -> Unit,
-    onWallets: () -> Unit
+    onWallets: () -> Unit,
+    onAddressBook: () -> Unit
 ) {
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
         item { Text("Settings", fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Wallet and node preferences", color = DarkMuted, fontSize = 12.sp) }
@@ -136,6 +137,7 @@ fun SettingsPage(
         item { SettingCard("Security", "PIN, passkey and wallet protection", Icons.Default.Lock, onSecurity) }
         item { SettingCard("Node Status", "${state.status} · ${state.peers} peers", Icons.Default.Dns, onNode) }
         item { SettingCard("Wallet", if (info?.encrypted == true) "Encrypted wallet · Manage keys" else "Manage wallet and keys", Icons.Default.AccountBalanceWallet, onWallets) }
+        item { SettingCard("Address book", "Saved addresses and their labels", Icons.Default.Contacts, onAddressBook) }
         item { SettingCard("Import wallet.dat", "Migrate with official Core tooling", Icons.Default.FileOpen, onImport) }
         item { SettingCard("Lock Wallet", "Remove the decryption key from memory", Icons.Default.Lock, onLock) }
         item { SettingCard("About Stohn", "Full node · Local RPC", Icons.Default.Info, {}) }

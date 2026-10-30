@@ -63,11 +63,14 @@ fun StohnWalletScreen(node: NodeController) {
     var dialog by remember { mutableStateOf<DialogKind?>(null) }
     var busy by remember { mutableStateOf(false) }
     var selectedTx by remember { mutableStateOf<WalletRpc.WalletTransaction?>(null) }
+    var sendAddress by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val rootRoutes = setOf("home", "wallets", "activity", "settings")
     BackHandler(enabled = route !in rootRoutes) {
-        route = when (route) { "security", "node" -> "settings"; "backup" -> "security"; "txdetail" -> "activity"; else -> "home" }
+        route = when (route) { "security", "node", "addressbook" -> "settings"; "backup" -> "security"; "txdetail" -> "activity"; else -> "home" }
     }
+    // Leaving the send screen drops the prefilled recipient so a later visit starts empty.
+    LaunchedEffect(route) { if (route != "send") sendAddress = "" }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -182,7 +185,7 @@ fun StohnWalletScreen(node: NodeController) {
                 topBar = {
                     AppHeader(
                         route = route,
-                        onBack = { route = when (route) { "security", "node" -> "settings"; "backup" -> "security"; "txdetail" -> "activity"; else -> "home" } },
+                        onBack = { route = when (route) { "security", "node", "addressbook" -> "settings"; "backup" -> "security"; "txdetail" -> "activity"; else -> "home" } },
                         onActivity = { route = "activity" }
                     )
                 },
@@ -224,7 +227,7 @@ fun StohnWalletScreen(node: NodeController) {
                             transactions = transactions,
                             busy = busy,
                             onTransaction = { tx -> selectedTx = tx; route = "txdetail" },
-                            onSend = { route = "send" },
+                            onSend = { sendAddress = ""; route = "send" },
                             onReceive = {
                                 scope.launch {
                                     busy = true
@@ -258,20 +261,26 @@ fun StohnWalletScreen(node: NodeController) {
                             onImport = { importLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
                             onLock = { scope.launch { runCatching { node.lockWallet() } } },
                             onNode = { route = "node" },
-                            onWallets = { route = "wallets" }
+                            onWallets = { route = "wallets" },
+                            onAddressBook = { route = "addressbook" }
                         )
                         "send" -> SendPage(
                             node = node,
                             info = walletInfo,
                             balance = balance,
                             busy = busy,
+                            initialAddress = sendAddress,
                             onBusy = { busy = it },
                             onComplete = {
+                                sendAddress = ""
                                 route = "home"
                                 scope.launch { runCatching { refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi } } }
                             }
                         )
                         "receive" -> ReceivePage(receiveAddress, onCopy = { copy(context, receiveAddress) })
+                        "addressbook" -> AddressBookPage(
+                            onSend = { target -> sendAddress = target; route = "send" }
+                        )
                         "node" -> NodeStatusPage(state, onRetry = { node.start() })
                         "security" -> SecurityPage(info = walletInfo, onBackup = { route = "backup" }, onChangePasskey = { dialog = DialogKind.Security }, onLock = { scope.launch { runCatching { node.lockWallet() } } })
                         "backup" -> BackupPage(
@@ -318,6 +327,7 @@ private fun AppHeader(route: String, onBack: () -> Unit, onActivity: () -> Unit)
         "node" -> "Node Status"
         "security" -> "Security"
         "backup" -> "Backup Wallet"
+        "addressbook" -> "Address book"
         "txdetail" -> "Transaction"
         else -> "Stohn"
     }
@@ -378,7 +388,7 @@ private fun WalletHome(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         QuickAction("Send", Icons.Default.NorthEast, onSend)
                         QuickAction("Receive", Icons.Default.SouthWest, onReceive)
-                        QuickAction("Scan", Icons.Default.QrCodeScanner, onReceive)
+                        QuickAction("Scan", Icons.Default.QrCodeScanner, onSend)
                         QuickAction("History", Icons.Default.Schedule, onActivity)
                     }
                 }

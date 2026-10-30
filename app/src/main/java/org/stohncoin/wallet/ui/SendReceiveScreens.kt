@@ -42,9 +42,12 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
+import org.stohncoin.wallet.wallet.AddressBook
 import org.stohncoin.wallet.wallet.Amounts
 import org.stohncoin.wallet.wallet.WalletRpc
 import org.stohncoin.wallet.security.AppAuthManager
@@ -56,38 +59,39 @@ fun SendPage(
     info: WalletRpc.WalletInfoSnapshot?,
     balance: Long,
     busy: Boolean,
+    initialAddress: String = "",
     onBusy: (Boolean) -> Unit,
     onComplete: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var address by rememberSaveable { mutableStateOf("") }
+    var address by rememberSaveable(initialAddress) { mutableStateOf(initialAddress) }
     var amountText by rememberSaveable { mutableStateOf("") }
     var passphrase by rememberSaveable { mutableStateOf("") }
     var subtractFee by rememberSaveable { mutableStateOf(false) }
     var estimate by remember { mutableStateOf<WalletRpc.FeeEstimate?>(null) }
     var feePreset by rememberSaveable { mutableStateOf(FeePreset.Automatic.name) }
     var showConfirm by remember { mutableStateOf(false) }
+    var savedLabel by remember { mutableStateOf("") }
+    var requestLabel by remember { mutableStateOf("") }
+    var showSaveLabel by remember { mutableStateOf(false) }
+    val book = remember(context) { AddressBook.initialize(File(context.filesDir, ADDRESS_BOOK_DIR)) }
+    LaunchedEffect(address) {
+        savedLabel = if (address.isBlank()) "" else withContext(Dispatchers.IO) { book.labelFor(address) }
+    }
     val confTarget = FeePreset.of(feePreset).confTarget
+    // The tested `stohn:` parser handles our own QR codes, other wallets' schemes and bare
+    // addresses, so scanning never guesses at the payload format here.
     val scanLauncher = rememberLauncherForActivityResult(ScanContract()) { result ->
-        val contents = result.contents ?: return@rememberLauncherForActivityResult
-        val raw = contents.trim()
-        if (raw.isEmpty()) return@rememberLauncherForActivityResult
-        val parsed = if (raw.contains(":")) {
-            val withoutScheme = raw.substringAfterLast(":")
-            withoutScheme.substringBefore("?").substringBefore("&")
-        } else {
-            raw
+        val request = result.contents?.let { Amounts.parseUri(it) }
+        if (request == null) {
+            Toast.makeText(context, "That QR code does not contain a Stohn address", Toast.LENGTH_LONG).show()
+            return@rememberLauncherForActivityResult
         }
-        if (parsed.isNotBlank()) {
-            address = parsed
-            estimate = null
-        }
-        val amountMatch = Regex("""amount=([0-9]*\.?[0-9]+)""").find(raw)
-        amountMatch?.groupValues?.getOrNull(1)?.let {
-            amountText = it
-            estimate = null
-        }
+        address = request.address
+        request.satoshis?.let { amountText = Amounts.format(it) }
+        requestLabel = request.label.orEmpty()
+        estimate = null
     }
 
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(15.dp), contentPadding = PaddingValues(bottom = 22.dp)) {
@@ -95,7 +99,7 @@ fun SendPage(
         item {
             OutlinedTextField(
                 value = address,
-                onValueChange = { address = it; estimate = null },
+                onValueChange = { address = it; requestLabel = ""; estimate = null },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("To") },
                 placeholder = { Text("Enter address or scan QR") },
@@ -104,7 +108,7 @@ fun SendPage(
                 trailingIcon = {
                     IconButton(onClick = {
                         val options = ScanOptions()
-                        options.setPrompt("Scan a Stohn address")
+                        options.setPrompt("Scan a Stohn payment request")
                         options.setBeepEnabled(true)
                         options.setOrientationLocked(false)
                         scanLauncher.launch(options)
@@ -113,6 +117,27 @@ fun SendPage(
                     }
                 }
             )
+        }
+        if (address.isNotBlank()) item {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.BookmarkBorder, null, tint = DarkMuted, modifier = Modifier.size(15.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    when {
+                        savedLabel.isNotBlank() -> "Saved as ${savedLabel}"
+                        requestLabel.isNotBlank() -> "${requestLabel} · not saved yet"
+                        else -> "Not in your address book"
+                    },
+                    color = DarkMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { showSaveLabel = true }) {
+                    Text(if (savedLabel.isBlank()) "Save" else "Rename", color = Electric, fontSize = 11.sp)
+                }
+            }
         }
         item {
             OutlinedTextField(
@@ -188,6 +213,41 @@ fun SendPage(
         item { Text("Only send STOHN to a STOHN address. Transactions cannot be reversed.", color = DarkMuted, fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
     }
 
+    if (showSaveLabel && address.isNotBlank()) {
+        var labelText by remember(address, savedLabel) { mutableStateOf(savedLabel.ifBlank { requestLabel }) }
+        AlertDialog(
+            onDismissRequest = { showSaveLabel = false },
+            title = { Text("Address book", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(address, fontSize = 11.sp, color = DarkMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    OutlinedTextField(
+                        value = labelText,
+                        onValueChange = { labelText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Label") },
+                        placeholder = { Text("e.g. Rent") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    Text("Labels stay on this device and are never sent to the network. Clear the label to remove the entry.", color = DarkMuted, fontSize = 10.sp)
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val clean = labelText.trim()
+                    scope.launch {
+                        withContext(Dispatchers.IO) { book.setLabel(address, clean) }
+                        savedLabel = clean
+                        showSaveLabel = false
+                        Toast.makeText(context, if (clean.isEmpty()) "Removed from the address book" else "Saved as $clean", Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { showSaveLabel = false }) { Text("Cancel") } }
+        )
+    }
+
     if (showConfirm) {
         val confirmAmount = Amounts.parse(amountText) ?: 0L
         AlertDialog(
@@ -247,7 +307,11 @@ enum class FeePreset(val label: String, val confTarget: Int?) {
 @Composable
 fun ReceivePage(address: String, onCopy: () -> Unit) {
     val context = LocalContext.current
-    val bitmap = remember(address) { qr(address, 720) }
+    // The QR and the share sheet carry a `stohn:` request so a scanning wallet can prefill it.
+    val request = remember(address) {
+        if (address.isBlank()) address else runCatching { Amounts.buildUri(address) }.getOrDefault(address)
+    }
+    val bitmap = remember(request) { qr(request, 720) }
     Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("Receive STOHN", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text("Share this address to receive funds", color = DarkMuted, fontSize = 12.sp)
@@ -263,7 +327,7 @@ fun ReceivePage(address: String, onCopy: () -> Unit) {
                         onClick = {
                             val intent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, address)
+                                putExtra(Intent.EXTRA_TEXT, request)
                             }
                             context.startActivity(Intent.createChooser(intent, "Share Stohn address"))
                         },

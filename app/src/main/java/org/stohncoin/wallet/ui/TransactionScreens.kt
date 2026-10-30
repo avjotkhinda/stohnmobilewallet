@@ -42,9 +42,12 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
+import org.stohncoin.wallet.wallet.AddressBook
 import org.stohncoin.wallet.wallet.Amounts
 import org.stohncoin.wallet.wallet.WalletRpc
 import org.stohncoin.wallet.security.AppAuthManager
@@ -98,6 +101,11 @@ fun TransactionDetailPage(tx: WalletRpc.WalletTransaction?) {
         return
     }
     val received = tx.amountSatoshis >= 0
+    val book = remember(context) { AddressBook.initialize(File(context.filesDir, ADDRESS_BOOK_DIR)) }
+    var addressLabel by remember(tx.address) { mutableStateOf("") }
+    LaunchedEffect(tx.address) {
+        addressLabel = if (tx.address.isBlank()) "" else withContext(Dispatchers.IO) { book.labelFor(tx.address) }
+    }
     val timestamp = remember(tx.time) {
         runCatching {
             java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(tx.time * 1000))
@@ -116,7 +124,9 @@ fun TransactionDetailPage(tx: WalletRpc.WalletTransaction?) {
         item { DetailCard("Status", if (tx.confirmations > 0) "Confirmed · ${tx.confirmations} confirmations" else "Unconfirmed") }
         item { DetailCard("Amount", Amounts.formatFixed(tx.amountSatoshis) + " STOHN") }
         item { DetailCard("Fee", if (tx.feeSatoshis == 0L) "Included in transaction" else Amounts.formatFixed(tx.feeSatoshis) + " STOHN") }
-        if (tx.address.isNotBlank()) item { DetailCard("Address", tx.address) }
+        if (tx.address.isNotBlank()) item {
+            DetailCard(if (addressLabel.isBlank()) "Address" else "Address · $addressLabel", tx.address)
+        }
         item { DetailCard("Type", tx.category) }
         item { DetailCard("Transaction ID", tx.txid) }
         item {
