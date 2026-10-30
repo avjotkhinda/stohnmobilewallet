@@ -15,6 +15,7 @@
 ./app/src/main/java/org/stohncoin/wallet/core/NodeController.kt
 ./app/src/main/java/org/stohncoin/wallet/core/NodeService.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/EmbeddedLinuxRuntime.kt
+./app/src/main/java/org/stohncoin/wallet/runtime/KeyExportGuard.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeBackend.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeInstaller.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt
@@ -35,6 +36,7 @@
 ./app/src/main/java/org/stohncoin/wallet/ui/SendReceiveScreens.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/AddressBookScreen.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/SettingsScreens.kt
+./app/src/test/java/org/stohncoin/wallet/runtime/KeyExportGuardTest.kt
 ./app/src/test/java/org/stohncoin/wallet/security/PinHasherTest.kt
 ./app/src/test/java/org/stohncoin/wallet/security/PinThrottleTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupContainerTest.kt
