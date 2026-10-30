@@ -21,7 +21,8 @@ The app never asks Stohn Core for an unencrypted key, seed, or `dumpwallet` file
 - Every Core RPC call passes the same guard, which rejects `dumpwallet`, `dumpprivkey`,
   `dumphdinfo`, `dumpmasterprivkey` and `dumpmasterkey` before a request is sent.
 - `scripts/verify-wallet-migration.sh` uses the same record `dump` and keeps its output in a
-  temporary directory that the script removes on exit.
+  temporary directory that the script removes on exit. `scripts/verify-restore-path.sh` runs
+  in CI and fails when the restore path stops matching that script.
 
 The rule is exercised by `KeyExportGuardTest`: a backup or migration copies only the encrypted
 `wallet.dat`, so no code path can write plaintext key material into app storage.

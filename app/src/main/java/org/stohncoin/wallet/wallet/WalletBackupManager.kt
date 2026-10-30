@@ -63,39 +63,13 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
         val plaintext = File.createTempFile("stohn-backup-", ".snapshot", context.cacheDir)
         try {
             // Keep the temporary plaintext inside app-private cache and delete it immediately.
-            java.util.zip.ZipOutputStream(FileOutputStream(plaintext)).use { zip ->
-                zip.putNextEntry(ZipEntry("wallet.dat"))
-                FileInputStream(snapshot).use { copyLimited(it, zip, MAX_WALLET_BYTES) }
-                zip.closeEntry()
-                zip.putNextEntry(ZipEntry("MANIFEST.sha256"))
-                zip.write(sha256(snapshot).toByteArray(Charsets.US_ASCII))
-                zip.closeEntry()
-            }
+            BackupContainer.packageSnapshot(snapshot, plaintext, MAX_WALLET_BYTES)
             BackupCrypto.encrypt(plaintext, destination, password)
             return BackupResult(destination, sha256(destination))
         } finally {
             plaintext.delete()
             password.fill('\u0000')
         }
-    }
-
-    private fun copyLimited(input: java.io.InputStream, output: java.io.OutputStream, limit: Long): Long {
-        require(limit >= 0L) { "Invalid copy limit" }
-        val buffer = ByteArray(64 * 1024)
-        var total = 0L
-        while (true) {
-            val maxRead = minOf(buffer.size.toLong(), limit - total).toInt()
-            if (maxRead == 0) {
-                // A further byte means the entry exceeds the limit.
-                require(input.read() < 0) { "Restored wallet exceeds safety limit" }
-                break
-            }
-            val n = input.read(buffer, 0, maxRead)
-            if (n < 0) break
-            total += n
-            output.write(buffer, 0, n)
-        }
-        return total
     }
 
     private fun sha256(file: File): String {
@@ -133,6 +107,20 @@ object BackupContainer {
         val wallet: File,
         val walletSha256: String
     )
+
+    /** Writes the archive [restore] accepts, so writer and reader cannot disagree. */
+    fun packageSnapshot(snapshot: File, archive: File, maxWalletBytes: Long) {
+        require(snapshot.isFile) { "Backup snapshot does not exist" }
+        require(maxWalletBytes > 0L) { "Backup wallet size limit must be positive" }
+        java.util.zip.ZipOutputStream(FileOutputStream(archive)).use { zip ->
+            zip.putNextEntry(ZipEntry(ENTRY_WALLET))
+            FileInputStream(snapshot).use { copyLimited(it, zip, maxWalletBytes) }
+            zip.closeEntry()
+            zip.putNextEntry(ZipEntry(ENTRY_MANIFEST))
+            zip.write(sha256(snapshot).toByteArray(Charsets.US_ASCII))
+            zip.closeEntry()
+        }
+    }
 
     fun restore(archive: File, stagedWallet: File, maxWalletBytes: Long): Contents {
         require(archive.isFile) { "Backup archive does not exist" }

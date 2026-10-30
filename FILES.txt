@@ -40,6 +40,7 @@
 ./app/src/test/java/org/stohncoin/wallet/security/PinHasherTest.kt
 ./app/src/test/java/org/stohncoin/wallet/security/PinThrottleTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupContainerTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/BackupRestoreRoundTripTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupCryptoTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AmountsTest.kt
@@ -81,6 +82,7 @@
 ./scripts/release-preflight.sh
 ./scripts/verify-apk-artifact.sh
 ./scripts/verify-proot-bundle.sh
+./scripts/verify-restore-path.sh
 ./scripts/verify-wallet-migration.sh
 ./settings.gradle.kts
 ./tools/security-audit.sh

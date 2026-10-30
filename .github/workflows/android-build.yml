@@ -23,6 +23,8 @@ jobs:
         run: bash tools/verify-fullmode-repair.sh
       - name: Run source security audit
         run: bash tools/security-audit.sh
+      - name: Cross-check the restore path against the wallet-migration script
+        run: bash scripts/verify-restore-path.sh
       - name: Unit tests
         run: ./gradlew test
       - name: Build debug APK (release builds need signing secrets; see release job)
