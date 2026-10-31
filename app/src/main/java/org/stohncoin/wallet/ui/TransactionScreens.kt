@@ -45,6 +45,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
+import org.stohncoin.wallet.wallet.AddressBook
 import org.stohncoin.wallet.wallet.Amounts
 import org.stohncoin.wallet.wallet.WalletRpc
 import org.stohncoin.wallet.security.AppAuthManager
@@ -103,6 +104,8 @@ fun TransactionDetailPage(tx: WalletRpc.WalletTransaction?) {
             java.text.SimpleDateFormat("dd MMM yyyy, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(tx.time * 1000))
         }.getOrDefault("Unknown")
     }
+    // Labels live in the app's address book, outside the wallet, so look them up by address.
+    val savedLabel = remember(tx.address) { AddressBook.load(File(context.filesDir, "addressbook")).labelFor(tx.address) }
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1824)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF203548))) {
@@ -117,6 +120,7 @@ fun TransactionDetailPage(tx: WalletRpc.WalletTransaction?) {
         item { DetailCard("Amount", Amounts.formatFixed(tx.amountSatoshis) + " STOHN") }
         item { DetailCard("Fee", if (tx.feeSatoshis == 0L) "Included in transaction" else Amounts.formatFixed(tx.feeSatoshis) + " STOHN") }
         if (tx.address.isNotBlank()) item { DetailCard("Address", tx.address) }
+        if (savedLabel != null) item { DetailCard("Label", savedLabel) }
         item { DetailCard("Type", tx.category) }
         item { DetailCard("Transaction ID", tx.txid) }
         item {

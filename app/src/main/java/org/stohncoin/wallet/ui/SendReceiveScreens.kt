@@ -42,9 +42,13 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
+import org.stohncoin.wallet.wallet.AddressBook
+import org.stohncoin.wallet.wallet.AddressBookLabel
 import org.stohncoin.wallet.wallet.Amounts
 import org.stohncoin.wallet.wallet.WalletRpc
 import org.stohncoin.wallet.security.AppAuthManager
@@ -56,13 +60,23 @@ fun SendPage(
     info: WalletRpc.WalletInfoSnapshot?,
     balance: Long,
     busy: Boolean,
+    initialAddress: String = "",
+    onAddressBook: () -> Unit,
     onBusy: (Boolean) -> Unit,
     onComplete: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var address by rememberSaveable { mutableStateOf("") }
+    var address by rememberSaveable { mutableStateOf(initialAddress) }
     var amountText by rememberSaveable { mutableStateOf("") }
+    var label by rememberSaveable { mutableStateOf("") }
+    val addressBookDir = remember { File(context.filesDir, "addressbook") }
+    // The label field always follows the address being paid to, so a saved name shows up as soon
+    // as the recipient is entered or scanned.
+    LaunchedEffect(address) {
+        val trimmed = address.trim()
+        label = withContext(Dispatchers.IO) { AddressBook.load(addressBookDir).labelFor(trimmed) } ?: ""
+    }
     var passphrase by rememberSaveable { mutableStateOf("") }
     var subtractFee by rememberSaveable { mutableStateOf(false) }
     var estimate by remember { mutableStateOf<WalletRpc.FeeEstimate?>(null) }
@@ -91,7 +105,19 @@ fun SendPage(
     }
 
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(15.dp), contentPadding = PaddingValues(bottom = 22.dp)) {
-        item { Text("Send STOHN", fontSize = 24.sp, fontWeight = FontWeight.Bold); Text("Send from your local Stohn wallet", color = DarkMuted, fontSize = 12.sp) }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Send STOHN", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text("Send from your local Stohn wallet", color = DarkMuted, fontSize = 12.sp)
+                }
+                TextButton(onClick = onAddressBook) {
+                    Icon(Icons.Default.Person, null, Modifier.size(16.dp), tint = Electric)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Address book", color = Electric, fontSize = 12.sp)
+                }
+            }
+        }
         item {
             OutlinedTextField(
                 value = address,
@@ -112,6 +138,17 @@ fun SendPage(
                         Icon(Icons.Default.QrCodeScanner, "Scan QR", tint = Electric)
                     }
                 }
+            )
+        }
+        item {
+            OutlinedTextField(
+                value = label,
+                onValueChange = { label = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Label") },
+                placeholder = { Text("Name this address (optional)") },
+                singleLine = true,
+                shape = RoundedCornerShape(15.dp)
             )
         }
         item {
@@ -197,6 +234,7 @@ fun SendPage(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("RECIPIENT", color = DarkMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Text(address, fontSize = 12.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    if (label.isNotBlank()) Text(label, fontSize = 12.sp, color = Electric, fontWeight = FontWeight.SemiBold)
                     HorizontalDivider(color = Color(0xFF1D2F3E))
                     DetailRow("Amount", Amounts.formatFixed(confirmAmount) + " STOHN")
                     DetailRow("Network fee", estimate?.let { Amounts.formatFixed(it.feeSatoshis) + " STOHN" } ?: "Estimated above")
@@ -213,6 +251,7 @@ fun SendPage(
                         onBusy(true)
                         try {
                             node.send(address, amount, if (info?.encrypted == true) passphrase.toCharArray() else null, subtractFee, confTarget)
+                            runCatching { withContext(Dispatchers.IO) { persistLabel(addressBookDir, address.trim(), label) } }
                             Toast.makeText(context, "Transaction sent", Toast.LENGTH_LONG).show()
                             passphrase = ""
                             onComplete()
@@ -228,6 +267,185 @@ fun SendPage(
             dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("Cancel") } }
         )
     }
+}
+
+
+/**
+ * Searchable address book backed by the same `labels.json` the send screen writes, so everything
+ * here travels inside the encrypted backup container.
+ */
+@Composable
+fun AddressBookPage(onSend: (String) -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val addressBookDir = remember { File(context.filesDir, "addressbook") }
+    var query by rememberSaveable { mutableStateOf("") }
+    var entries by remember { mutableStateOf(AddressBook.load(addressBookDir).labels) }
+    var draftAddress by rememberSaveable { mutableStateOf("") }
+    var draftLabel by rememberSaveable { mutableStateOf("") }
+    var editingRaw by rememberSaveable { mutableStateOf("") }
+    var showEditor by rememberSaveable { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<AddressBookLabel?>(null) }
+
+    fun write(next: List<AddressBookLabel>) {
+        scope.launch {
+            val saved = withContext(Dispatchers.IO) { runCatching { AddressBook.save(addressBookDir, next) } }
+            saved.onFailure { Toast.makeText(context, "Could not save the address book", Toast.LENGTH_SHORT).show() }
+            entries = withContext(Dispatchers.IO) { runCatching { AddressBook.load(addressBookDir).labels }.getOrElse { emptyList() } }
+        }
+    }
+
+    val visible = remember(entries, query) {
+        val needle = query.trim().lowercase()
+        entries
+            .filter { needle.isEmpty() || it.label.lowercase().contains(needle) || it.raw.lowercase().contains(needle) }
+            .sortedBy { it.label.lowercase() }
+    }
+    val renaming = showEditor && editingRaw.isNotEmpty()
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Search") },
+            placeholder = { Text("Name or address") },
+            singleLine = true,
+            shape = RoundedCornerShape(15.dp),
+            trailingIcon = {
+                if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear search", tint = DarkMuted) }
+            }
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+            Text("${visible.size} saved", color = DarkMuted, fontSize = 11.sp, modifier = Modifier.weight(1f))
+            TextButton(onClick = { editingRaw = ""; draftAddress = ""; draftLabel = ""; showEditor = true }) {
+                Icon(Icons.Default.Add, null, Modifier.size(16.dp), tint = Electric)
+                Spacer(Modifier.width(4.dp))
+                Text("Add", color = Electric, fontSize = 12.sp)
+            }
+        }
+        when {
+            visible.isEmpty() && entries.isEmpty() -> EmptyCard("No saved names yet. A name is saved when you send, or add one here.")
+            visible.isEmpty() -> EmptyCard("Nothing matches \"${query.trim()}\"")
+            else -> LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
+                items(visible, key = { it.raw }) { entry ->
+                    AddressBookRow(
+                        entry = entry,
+                        onSend = { onSend(entry.raw) },
+                        onRename = {
+                            draftAddress = entry.raw
+                            draftLabel = entry.label
+                            editingRaw = entry.raw
+                            showEditor = true
+                        },
+                        onDelete = { pendingDelete = entry }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showEditor) {
+        AlertDialog(
+            onDismissRequest = { showEditor = false },
+            containerColor = DarkSurface2,
+            title = { Text(if (renaming) "Rename contact" else "Add contact", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (!renaming) OutlinedTextField(
+                        value = draftAddress,
+                        onValueChange = { draftAddress = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Address") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = draftLabel,
+                        onValueChange = { draftLabel = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Name") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val addr = draftAddress.trim()
+                    val name = draftLabel.trim()
+                    when {
+                        name.isEmpty() -> Toast.makeText(context, "Enter a name for this address", Toast.LENGTH_SHORT).show()
+                        renaming -> {
+                            val raw = editingRaw
+                            write(entries.map { if (it.raw == raw) AddressBookLabel(raw, name) else it })
+                            showEditor = false
+                        }
+                        addr.isEmpty() -> Toast.makeText(context, "Enter an address", Toast.LENGTH_SHORT).show()
+                        else -> {
+                            write(entries.filter { it.raw != addr } + AddressBookLabel(addr, name))
+                            showEditor = false
+                        }
+                    }
+                }) { Text("Save", color = Electric) }
+            },
+            dismissButton = { TextButton(onClick = { showEditor = false }) { Text("Cancel") } }
+        )
+    }
+
+    pendingDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            containerColor = DarkSurface2,
+            title = { Text("Remove ${target.label}?", fontWeight = FontWeight.Bold) },
+            text = { Text("${target.raw} is removed from your address book only. Wallet and coins are untouched.", fontSize = 12.sp, color = DarkMuted) },
+            confirmButton = {
+                TextButton(onClick = { write(entries.filterNot { it.raw == target.raw }); pendingDelete = null }) { Text("Remove", color = Danger) }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } }
+        )
+    }
+}
+
+
+@Composable
+private fun AddressBookRow(entry: AddressBookLabel, onSend: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit) {
+    val context = LocalContext.current
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(17.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0A1722)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1D2F3E))
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(entry.label, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(entry.raw, color = DarkMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+            }
+            IconButton(onClick = onSend, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.NorthEast, "Send to ${entry.label}", tint = Electric, modifier = Modifier.size(18.dp))
+            }
+            IconButton(onClick = { copy(context, entry.raw) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.ContentCopy, "Copy address", tint = DarkMuted, modifier = Modifier.size(18.dp))
+            }
+            IconButton(onClick = onRename, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.Edit, "Rename", tint = DarkMuted, modifier = Modifier.size(18.dp))
+            }
+            IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Default.DeleteOutline, "Remove", tint = Danger, modifier = Modifier.size(18.dp))
+            }
+        }
+    }
+}
+
+
+/** Saves the label typed on the send screen; clearing the field removes the saved entry. */
+private fun persistLabel(dir: File, address: String, label: String) {
+    if (address.isBlank()) return
+    val trimmed = label.trim()
+    val others = AddressBook.load(dir).labels.filter { it.raw != address }
+    val updated = if (trimmed.isEmpty()) others else others + AddressBookLabel(address, trimmed)
+    AddressBook.save(dir, updated)
 }
 
 

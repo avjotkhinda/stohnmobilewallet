@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import org.stohncoin.wallet.core.NodeController
 import org.stohncoin.wallet.security.AppAuthManager
+import org.stohncoin.wallet.security.LockGate
 import org.stohncoin.wallet.ui.LockScreen
 import org.stohncoin.wallet.ui.StohnWalletScreen
 
@@ -46,14 +47,15 @@ class MainActivity : FragmentActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (!AppAuthManager.isAppLockEnabled(this)) {
-            locked = false
-            return
-        }
-        // Re-lock when the app was away longer than the grace period; short trips into a system
-        // dialog (biometric prompt, scanner, file picker) do not throw the user back to the lock.
-        val away = if (backgroundedAtMillis > 0L) System.currentTimeMillis() - backgroundedAtMillis else Long.MAX_VALUE
-        if (away >= AppAuthManager.lockGraceMillis(this)) locked = true
+        // The decision itself is pure (LockGate) so the cold-start/resume transitions are unit
+        // tested: re-lock once the configured grace has passed, stay open for a short trip into a
+        // system dialog, and never gate when no PIN is configured.
+        locked = LockGate.mustRelockOnStart(
+            appLockEnabled = AppAuthManager.isAppLockEnabled(this),
+            backgroundedAtMillis = backgroundedAtMillis,
+            now = System.currentTimeMillis(),
+            graceMillis = AppAuthManager.lockGraceMillis(this)
+        )
     }
 
     override fun onStop() {

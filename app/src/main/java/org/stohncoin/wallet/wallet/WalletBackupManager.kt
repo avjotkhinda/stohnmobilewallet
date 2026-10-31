@@ -43,12 +43,26 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
             BackupCrypto.decrypt(input, decrypted, password, MAX_BACKUP_PLAINTEXT_BYTES)
             val contents = BackupContainer.restore(decrypted, stagedWallet, MAX_WALLET_BYTES)
             destination.parentFile?.mkdirs()
-            CoreWalletMigration(runtime).import(contents.wallet, destination)
+            val imported = CoreWalletMigration(runtime).import(contents.wallet, destination)
+            // Labels live outside the wallet file, so re-apply them only after the import succeeds.
+            restoreAddressBook(contents.labels)
+            imported
         } finally {
             decrypted.delete()
             if (stagedWallet.exists()) stagedWallet.delete()
             password.fill('\u0000')
         }
+    }
+
+    private fun restoreAddressBook(restored: List<AddressBookLabel>) {
+        val usable = restored.filter { it.raw.isNotBlank() && it.label.isNotBlank() }
+        if (usable.isEmpty()) return
+        val dir = File(context.filesDir, "addressbook")
+        // Keep labels saved after the backup was taken; the backup wins for the same address.
+        val merged = LinkedHashMap<String, AddressBookLabel>()
+        AddressBook.load(dir).labels.forEach { merged[it.raw] = it }
+        usable.forEach { merged[it.raw] = it }
+        AddressBook.save(dir, merged.values.toList())
     }
 
     fun packageMigrationSnapshot(snapshot: File, destination: File, password: CharArray): BackupResult {
@@ -64,12 +78,19 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
         try {
             // Keep the temporary plaintext inside app-private cache and delete it immediately.
             java.util.zip.ZipOutputStream(FileOutputStream(plaintext)).use { zip ->
-                zip.putNextEntry(ZipEntry("wallet.dat"))
+                zip.putNextEntry(ZipEntry(ENTRY_WALLET))
                 FileInputStream(snapshot).use { copyLimited(it, zip, MAX_WALLET_BYTES) }
                 zip.closeEntry()
-                zip.putNextEntry(ZipEntry("MANIFEST.sha256"))
+                zip.putNextEntry(ZipEntry(ENTRY_MANIFEST))
                 zip.write(sha256(snapshot).toByteArray(Charsets.US_ASCII))
                 zip.closeEntry()
+                // Include the app-level address-book labels in the backup container.
+                val labelsFile = File(context.filesDir, "addressbook/labels.json")
+                if (labelsFile.isFile) {
+                    zip.putNextEntry(ZipEntry(ENTRY_LABELS))
+                    FileInputStream(labelsFile).use { copyLimited(it, zip, 1024 * 1024) }
+                    zip.closeEntry()
+                }
             }
             BackupCrypto.encrypt(plaintext, destination, password)
             return BackupResult(destination, sha256(destination))
@@ -117,6 +138,12 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
         private const val MAX_WALLET_BYTES = 512L * 1024 * 1024
         private const val MAX_BACKUP_PLAINTEXT_BYTES = 520L * 1024 * 1024
         private const val MAX_BACKUP_CONTAINER_BYTES = 600L * 1024 * 1024
+        internal const val ENTRY_WALLET = "wallet.dat"
+
+        internal const val ENTRY_MANIFEST = "MANIFEST.sha256"
+
+        internal const val ENTRY_LABELS = "labels.json"
+
     }
 }
 
@@ -126,12 +153,15 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
  * dependencies so the restore rules stay unit-testable on the JVM.
  */
 object BackupContainer {
-    const val ENTRY_WALLET = "wallet.dat"
-    const val ENTRY_MANIFEST = "MANIFEST.sha256"
+
+    internal const val ENTRY_WALLET = "wallet.dat"
+    internal const val ENTRY_MANIFEST = "MANIFEST.sha256"
+    internal const val ENTRY_LABELS = "labels.json"
 
     data class Contents(
         val wallet: File,
-        val walletSha256: String
+        val walletSha256: String,
+        val labels: List<AddressBookLabel>
     )
 
     fun restore(archive: File, stagedWallet: File, maxWalletBytes: Long): Contents {
@@ -141,12 +171,13 @@ object BackupContainer {
         var foundWallet = false
         var entries = 0
         var total = 0L
+        var labelsJson: String? = null
         ZipInputStream(FileInputStream(archive)).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
                 require(++entries <= 8) { "Backup contains too many entries" }
                 val name = entry.name.replace('\\', '/')
-                require(name == ENTRY_WALLET || name == ENTRY_MANIFEST) { "Unexpected backup entry" }
+                require(name == ENTRY_WALLET || name == ENTRY_MANIFEST || name == ENTRY_LABELS) { "Unexpected backup entry" }
                 require(!entry.isDirectory && !name.contains("..") && !name.startsWith('/')) { "Unsafe backup entry" }
                 when (name) {
                     ENTRY_WALLET -> {
@@ -157,6 +188,18 @@ object BackupContainer {
                             total += copyLimited(zip, out, remaining)
                         }
                         foundWallet = true
+                    }
+                    ENTRY_LABELS -> {
+                        require(labelsJson == null) { "Backup contains duplicate labels.json entries" }
+                        val buf = ByteArray(64 * 1024)
+                        val baos = java.io.ByteArrayOutputStream()
+                        while (true) {
+                            val n = zip.read(buf)
+                            if (n < 0) break
+                            baos.write(buf, 0, n)
+                        }
+                        require(baos.size() <= 1024 * 1024L) { "Backup labels.json is too large" }
+                        labelsJson = String(baos.toByteArray(), Charsets.UTF_8)
                     }
                     else -> {
                         require(expectedHash == null) { "Backup contains duplicate manifest entries" }
@@ -175,7 +218,8 @@ object BackupContainer {
         require(expectedHash?.matches(Regex("[0-9a-f]{64}")) == true) { "Backup manifest is invalid" }
         val walletSha256 = sha256(stagedWallet)
         require(walletSha256 == expectedHash) { "Backup wallet checksum mismatch" }
-        return Contents(stagedWallet, walletSha256)
+        val labels = if (labelsJson != null) AddressBook.parse(labelsJson).labels else emptyList()
+        return Contents(stagedWallet, walletSha256, labels)
     }
 
     private fun copyLimited(input: java.io.InputStream, output: java.io.OutputStream, limit: Long): Long {

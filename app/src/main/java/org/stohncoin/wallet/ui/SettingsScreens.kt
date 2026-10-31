@@ -128,7 +128,8 @@ fun SettingsPage(
     onImport: () -> Unit,
     onLock: () -> Unit,
     onNode: () -> Unit,
-    onWallets: () -> Unit
+    onWallets: () -> Unit,
+    onAddressBook: () -> Unit
 ) {
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
         item { Text("Settings", fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Wallet and node preferences", color = DarkMuted, fontSize = 12.sp) }
@@ -136,10 +137,20 @@ fun SettingsPage(
         item { SettingCard("Security", "PIN, passkey and wallet protection", Icons.Default.Lock, onSecurity) }
         item { SettingCard("Node Status", "${state.status} · ${state.peers} peers", Icons.Default.Dns, onNode) }
         item { SettingCard("Wallet", if (info?.encrypted == true) "Encrypted wallet · Manage keys" else "Manage wallet and keys", Icons.Default.AccountBalanceWallet, onWallets) }
+        item { SettingCard("Address Book", "Saved names for people you pay", Icons.Default.Person, onAddressBook) }
         item { SettingCard("Import wallet.dat", "Migrate with official Core tooling", Icons.Default.FileOpen, onImport) }
         item { SettingCard("Lock Wallet", "Remove the decryption key from memory", Icons.Default.Lock, onLock) }
         item { SettingCard("About Stohn", "Full node · Local RPC", Icons.Default.Info, {}) }
     }
+}
+
+
+/** Human-readable form of the re-lock grace stored by [AppAuthManager.lockGraceMillis]. */
+private fun graceLabel(millis: Long): String = when (millis) {
+    0L -> "Immediately in background"
+    AppAuthManager.DEFAULT_LOCK_GRACE_MILLIS -> "After 30 seconds in background"
+    120_000L -> "After 2 minutes in background"
+    else -> "After ${millis / 1000L} seconds in background"
 }
 
 
@@ -150,6 +161,8 @@ fun SecurityPage(info: WalletRpc.WalletInfoSnapshot?, onBackup: () -> Unit, onCh
     var appLockEnabled by remember { mutableStateOf(AppAuthManager.isAppLockEnabled(context)) }
     var biometricEnabled by remember { mutableStateOf(AppAuthManager.isBiometricEnabled(context)) }
     var hasPin by remember { mutableStateOf(AppAuthManager.hasPin(context)) }
+    var lockGraceMillis by remember { mutableStateOf(AppAuthManager.lockGraceMillis(context)) }
+    var showGraceDialog by remember { mutableStateOf(false) }
 
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("Security", fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Protect access to your wallet", color = DarkMuted, fontSize = 12.sp) }
@@ -178,11 +191,63 @@ fun SecurityPage(info: WalletRpc.WalletInfoSnapshot?, onBackup: () -> Unit, onCh
                 }
             )
         }
+        item {
+            SettingCard(
+                "Re-lock App",
+                graceLabel(lockGraceMillis),
+                Icons.Default.Timer,
+                onClick = { showGraceDialog = true }
+            )
+        }
         item { Text("WALLET SECURITY", color = Electric, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp, modifier = Modifier.padding(top = 8.dp)) }
         item { SettingCard("Wallet passkey", if (info?.encrypted == true) "Encrypted · Change passkey" else "Not encrypted · Add passkey", Icons.Default.Lock, onChangePasskey) }
         item { SettingCard("Backup Wallet", "Create or restore an encrypted backup", Icons.Default.Backup, onBackup) }
         item { SettingCard("Lock wallet", "Lock spending keys now", Icons.Default.Lock, onLock) }
         item { Text("Your wallet passkey is handled by Stohn Core on this device. Keep a separate, tested backup of your wallet file.", color = DarkMuted, fontSize = 11.sp, modifier = Modifier.padding(4.dp)) }
+    }
+
+    if (showGraceDialog) {
+        val options = listOf(
+            0L to "Immediately",
+            AppAuthManager.DEFAULT_LOCK_GRACE_MILLIS to "After 30 seconds",
+            120_000L to "After 2 minutes"
+        )
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showGraceDialog = false },
+            confirmButton = { TextButton(onClick = { showGraceDialog = false }) { Text("Done") } },
+            title = { Text("Re-lock App") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "How long the app may stay in the background before the PIN is asked for again. Shorter is safer; a long grace is easier on the biometric prompt and the scanner.",
+                        color = DarkMuted,
+                        fontSize = 11.sp
+                    )
+                    options.forEach { (value, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    AppAuthManager.setLockGraceMillis(context, value)
+                                    lockGraceMillis = value
+                                    showGraceDialog = false
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = lockGraceMillis == value,
+                                onClick = {
+                                    AppAuthManager.setLockGraceMillis(context, value)
+                                    lockGraceMillis = value
+                                    showGraceDialog = false
+                                }
+                            )
+                            Text(label, fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
+        )
     }
 
     if (showPinDialog) {
