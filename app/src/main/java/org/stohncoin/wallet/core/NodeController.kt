@@ -20,6 +20,8 @@ import org.stohncoin.wallet.runtime.RuntimeBackendFactory
 import org.stohncoin.wallet.runtime.RuntimeInstaller
 import org.stohncoin.wallet.wallet.CoreWalletMigration
 import org.stohncoin.wallet.wallet.WalletBackupManager
+import org.stohncoin.wallet.wallet.WalletBackupVerifier
+import org.stohncoin.wallet.wallet.BackupVerification
 import org.stohncoin.wallet.wallet.ImportResult
 import org.stohncoin.wallet.wallet.WalletInfo
 import org.stohncoin.wallet.wallet.WalletRpc
@@ -227,6 +229,15 @@ class NodeController private constructor(context: Context) {
             embedded().rpcCall("loadwallet", org.json.JSONArray().put(walletName))
             setActiveWalletName(walletName)
             result
+        }
+
+    /**
+     * Test-restore: proves a backup decrypts and holds a wallet Core can open, without touching
+     * the live wallet or loading anything. Safe to run before a real restore.
+     */
+    suspend fun verifyWalletBackup(input: File, password: CharArray): BackupVerification =
+        walletMutex.withLock {
+            WalletBackupVerifier(appContext, backend as? EmbeddedLinuxRuntime).verify(input, password)
         }
 
     fun stop() = appContext.stopService(Intent(appContext, NodeService::class.java))

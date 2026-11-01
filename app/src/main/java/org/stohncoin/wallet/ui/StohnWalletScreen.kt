@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
 import org.stohncoin.wallet.wallet.Amounts
+import org.stohncoin.wallet.wallet.BackupVerification
 import org.stohncoin.wallet.wallet.WalletRpc
 import org.stohncoin.wallet.security.AppAuthManager
 import java.io.File
@@ -60,6 +61,9 @@ fun StohnWalletScreen(node: NodeController) {
     var walletInfo by remember { mutableStateOf<WalletRpc.WalletInfoSnapshot?>(null) }
     var receiveAddress by remember { mutableStateOf("") }
     var backupPassword by rememberSaveable { mutableStateOf("") }
+    // Result of the last Test Backup, cleared whenever the password or the chosen file changes.
+    var backupVerification by remember { mutableStateOf<BackupVerification?>(null) }
+    var backupVerifyError by remember { mutableStateOf<String?>(null) }
     var dialog by remember { mutableStateOf<DialogKind?>(null) }
     var busy by remember { mutableStateOf(false) }
     var selectedTx by remember { mutableStateOf<WalletRpc.WalletTransaction?>(null) }
@@ -171,6 +175,40 @@ fun StohnWalletScreen(node: NodeController) {
             } finally {
                 staged.delete()
                 backupPassword = ""
+                busy = false
+            }
+        }
+    }
+
+    val backupVerifyLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val staged = File(context.cacheDir, "stohn-backup-verify-${System.currentTimeMillis()}.stohnbackup")
+            busy = true
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    staged.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        var total = 0L
+                        while (true) {
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            total += n
+                            require(total <= MAX_BACKUP_BYTES) { "Backup file is too large" }
+                            output.write(buffer, 0, n)
+                        }
+                        output.fd.sync()
+                    }
+                } ?: error("Unable to read the backup file")
+                require(backupPassword.isNotBlank()) { "Enter the backup password first" }
+                // Decrypts and unpacks in cache only; the live wallet is never opened or replaced.
+                backupVerification = node.verifyWalletBackup(staged, backupPassword.toCharArray())
+                backupVerifyError = null
+            } catch (t: Throwable) {
+                backupVerification = null
+                backupVerifyError = t.message ?: "The backup could not be verified"
+            } finally {
+                staged.delete()
                 busy = false
             }
         }
@@ -293,9 +331,16 @@ fun StohnWalletScreen(node: NodeController) {
                         "security" -> SecurityPage(info = walletInfo, onBackup = { route = "backup" }, onChangePasskey = { dialog = DialogKind.Security }, onLock = { scope.launch { runCatching { node.lockWallet() } } })
                         "backup" -> BackupPage(
                             password = backupPassword,
-                            onPasswordChange = { backupPassword = it },
+                            verification = backupVerification,
+                            verifyError = backupVerifyError,
+                            onPasswordChange = {
+                                backupPassword = it
+                                backupVerification = null
+                                backupVerifyError = null
+                            },
                             onExport = { backupExportLauncher.launch("stohn-wallet-backup.stohnbackup") },
-                            onRestore = { backupImportLauncher.launch(arrayOf("application/octet-stream", "*/*")) }
+                            onRestore = { backupImportLauncher.launch(arrayOf("application/octet-stream", "*/*")) },
+                            onVerify = { backupVerifyLauncher.launch(arrayOf("application/octet-stream", "*/*")) }
                         )
                     }
                 }

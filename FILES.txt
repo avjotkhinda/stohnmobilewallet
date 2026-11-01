@@ -21,6 +21,7 @@
 ./app/src/main/java/org/stohncoin/wallet/wallet/BackupCrypto.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/Amounts.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/CoreWalletMigration.kt
+./app/src/main/java/org/stohncoin/wallet/wallet/BackupVerifier.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/WalletBackupManager.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/WalletMigration.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/WalletRpc.kt
@@ -38,6 +39,7 @@
 ./app/src/test/java/org/stohncoin/wallet/security/PinThrottleTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupContainerTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupCryptoTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/BackupVerifierTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookRoundTripTest.kt
 ./app/src/main/res/values/styles.xml
 ./app/src/main/res/xml/data_extraction_rules.xml

@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
 import org.stohncoin.wallet.wallet.Amounts
+import org.stohncoin.wallet.wallet.BackupVerification
 import org.stohncoin.wallet.wallet.WalletRpc
 import org.stohncoin.wallet.security.AppAuthManager
 import java.io.File
@@ -309,7 +310,15 @@ fun SecurityPage(info: WalletRpc.WalletInfoSnapshot?, onBackup: () -> Unit, onCh
 
 
 @Composable
-fun BackupPage(password: String, onPasswordChange: (String) -> Unit, onExport: () -> Unit, onRestore: () -> Unit) {
+fun BackupPage(
+    password: String,
+    verification: BackupVerification?,
+    verifyError: String?,
+    onPasswordChange: (String) -> Unit,
+    onExport: () -> Unit,
+    onRestore: () -> Unit,
+    onVerify: () -> Unit
+) {
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Text("Backup Wallet", fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Export or restore an encrypted wallet backup", color = DarkMuted, fontSize = 12.sp) }
         item {
@@ -329,6 +338,69 @@ fun BackupPage(password: String, onPasswordChange: (String) -> Unit, onExport: (
         item {
             OutlinedButton(onClick = onRestore, enabled = password.length >= 8, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(15.dp)) {
                 Icon(Icons.Default.Restore, null); Spacer(Modifier.width(8.dp)); Text("Restore from Backup")
+            }
+        }
+        item {
+            OutlinedButton(onClick = onVerify, enabled = password.length >= 8, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(15.dp)) {
+                Icon(Icons.Default.FactCheck, null); Spacer(Modifier.width(8.dp)); Text("Test Backup")
+            }
+        }
+        item {
+            Text(
+                "Test Backup decrypts the file you pick, unpacks it and (with the node running) asks Stohn Core to open it. Your live wallet is never touched.",
+                color = DarkMuted,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+        }
+        verification?.let { v ->
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0C2620)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Success)
+                ) {
+                    Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CheckCircle, null, tint = Success, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(7.dp))
+                            Text("Backup verified", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Success)
+                        }
+                        Text("${v.walletBytes} byte wallet \u00b7 SHA-256 ${v.walletSha256.take(16)}\u2026", color = DarkMuted, fontSize = 11.sp)
+                        Text(
+                            when {
+                                v.walletFormat == null -> "Container and checksum checked. Start the node for a Core wallet check."
+                                v.walletEncrypted == true -> "Core opened it: ${v.walletFormat} wallet, passkey-protected."
+                                else -> "Core opened it: ${v.walletFormat} wallet, no passkey set."
+                            },
+                            color = DarkMuted,
+                            fontSize = 11.sp
+                        )
+                        if (v.labelCount > 0) {
+                            Text("${v.labelCount} address-book label${if (v.labelCount == 1) "" else "s"} included", color = DarkMuted, fontSize = 11.sp)
+                        }
+                        Text("This backup is good. Restore it only after a real loss.", color = DarkMuted, fontSize = 10.sp)
+                    }
+                }
+            }
+        }
+        verifyError?.let { message ->
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1114)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Danger)
+                ) {
+                    Column(Modifier.padding(15.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.ErrorOutline, null, tint = Danger, modifier = Modifier.size(17.dp))
+                            Spacer(Modifier.width(7.dp))
+                            Text("Backup failed verification", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Danger)
+                        }
+                        Text(message, color = DarkMuted, fontSize = 11.sp)
+                        Text("Do not rely on this file. Create a new backup on a working device.", color = DarkMuted, fontSize = 10.sp)
+                    }
+                }
             }
         }
     }
