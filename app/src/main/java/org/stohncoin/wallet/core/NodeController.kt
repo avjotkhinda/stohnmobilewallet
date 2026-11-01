@@ -21,6 +21,7 @@ import org.stohncoin.wallet.runtime.RuntimeInstaller
 import org.stohncoin.wallet.wallet.CoreWalletMigration
 import org.stohncoin.wallet.wallet.WalletBackupManager
 import org.stohncoin.wallet.wallet.WalletBackupVerifier
+import org.stohncoin.wallet.wallet.BackupReminder
 import org.stohncoin.wallet.wallet.BackupVerification
 import org.stohncoin.wallet.wallet.ImportResult
 import org.stohncoin.wallet.wallet.WalletInfo
@@ -36,6 +37,8 @@ class NodeController private constructor(context: Context) {
     private val prefs = appContext.getSharedPreferences("stohn_wallet", Context.MODE_PRIVATE)
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
+    private val _backupReminder = MutableStateFlow(readBackupReminder())
+    val backupReminder: StateFlow<BackupReminder.State> = _backupReminder
 
     @Volatile private var backend: RuntimeBackend? = null
     @Volatile private var activeWalletName: String? = prefs.getString(KEY_WALLET_NAME, null)
@@ -167,7 +170,10 @@ class NodeController private constructor(context: Context) {
             val rpc = walletRpc()
             try {
                 if (passphrase != null && passphrase.isNotEmpty()) rpc.unlock(passphrase)
-                rpc.send(address, amountSatoshis, subtractFeeFromAmount, confTarget = confTarget)
+                val txid = rpc.send(address, amountSatoshis, subtractFeeFromAmount, confTarget = confTarget)
+                // A spend is when a stale backup starts losing real money, so count it.
+                recordSend()
+                txid
             } finally {
                 if (passphrase != null && passphrase.isNotEmpty()) runCatching { rpc.lock() }
                 passphrase?.fill('\u0000')
@@ -219,7 +225,9 @@ class NodeController private constructor(context: Context) {
 
     suspend fun createWalletBackup(destination: File, password: CharArray): WalletBackupManager.BackupResult =
         walletMutex.withLock {
-            WalletBackupManager(appContext, embedded()).createCoreBackup(destination, password, activeWalletName)
+            val result = WalletBackupManager(appContext, embedded()).createCoreBackup(destination, password, activeWalletName)
+            recordBackupCreated()
+            result
         }
 
     suspend fun restoreWalletBackup(input: File, password: CharArray, destination: File): ImportResult =
@@ -240,6 +248,23 @@ class NodeController private constructor(context: Context) {
             WalletBackupVerifier(appContext, backend as? EmbeddedLinuxRuntime).verify(input, password)
         }
 
+    private fun readBackupReminder(): BackupReminder.State = BackupReminder.State(
+        lastBackupAt = prefs.getLong(KEY_LAST_BACKUP_AT, 0L),
+        sendsSinceBackup = prefs.getInt(KEY_SENDS_SINCE_BACKUP, 0)
+    )
+
+    private fun recordBackupCreated() {
+        val now = System.currentTimeMillis()
+        prefs.edit().putLong(KEY_LAST_BACKUP_AT, now).putInt(KEY_SENDS_SINCE_BACKUP, 0).apply()
+        _backupReminder.value = BackupReminder.State(lastBackupAt = now, sendsSinceBackup = 0)
+    }
+
+    private fun recordSend() {
+        val sends = prefs.getInt(KEY_SENDS_SINCE_BACKUP, 0) + 1
+        prefs.edit().putInt(KEY_SENDS_SINCE_BACKUP, sends).apply()
+        _backupReminder.value = _backupReminder.value.copy(sendsSinceBackup = sends)
+    }
+
     fun stop() = appContext.stopService(Intent(appContext, NodeService::class.java))
 
     internal fun stopCoreFromService() {
@@ -253,6 +278,8 @@ class NodeController private constructor(context: Context) {
 
     companion object {
         private const val KEY_WALLET_NAME = "active_wallet_name"
+        private const val KEY_LAST_BACKUP_AT = "last_backup_at"
+        private const val KEY_SENDS_SINCE_BACKUP = "sends_since_backup"
         private const val DEFAULT_WALLET_NAME = "stohn-wallet"
         @Volatile private var instance: NodeController? = null
         fun get(context: Context): NodeController = instance ?: synchronized(this) {

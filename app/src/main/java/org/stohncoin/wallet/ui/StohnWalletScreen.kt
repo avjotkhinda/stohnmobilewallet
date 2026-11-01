@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
 import org.stohncoin.wallet.wallet.Amounts
+import org.stohncoin.wallet.wallet.BackupReminder
 import org.stohncoin.wallet.wallet.BackupVerification
 import org.stohncoin.wallet.wallet.WalletRpc
 import org.stohncoin.wallet.security.AppAuthManager
@@ -55,6 +56,7 @@ import java.io.File
 fun StohnWalletScreen(node: NodeController) {
     val context = LocalContext.current
     val state by node.state.collectAsState()
+    val backupReminder by node.backupReminder.collectAsState()
     var route by rememberSaveable { mutableStateOf("home") }
     var balance by remember { mutableStateOf(0L) }
     var transactions by remember { mutableStateOf(emptyList<WalletRpc.WalletTransaction>()) }
@@ -69,6 +71,8 @@ fun StohnWalletScreen(node: NodeController) {
     var selectedTx by remember { mutableStateOf<WalletRpc.WalletTransaction?>(null) }
     // Address book is opened from Settings or Send; back returns to whichever one opened it.
     var addressBookFrom by rememberSaveable { mutableStateOf("home") }
+    // Backup is reachable from Settings and from the home reminder; back returns to whichever.
+    var backupFrom by rememberSaveable { mutableStateOf("security") }
     // Address chosen in the address book, prefilled on the send screen.
     var pendingSendAddress by rememberSaveable { mutableStateOf("") }
     val scope = rememberCoroutineScope()
@@ -76,7 +80,7 @@ fun StohnWalletScreen(node: NodeController) {
     val goBack: () -> Unit = {
         route = when (route) {
             "security", "node" -> "settings"
-            "backup" -> "security"
+            "backup" -> backupFrom
             "txdetail" -> "activity"
             "addressbook" -> addressBookFrom
             else -> "home"
@@ -269,6 +273,7 @@ fun StohnWalletScreen(node: NodeController) {
                         "home" -> WalletHome(
                             node = node,
                             state = state,
+                            reminder = backupReminder,
                             balance = balance,
                             transactions = transactions,
                             busy = busy,
@@ -291,7 +296,8 @@ fun StohnWalletScreen(node: NodeController) {
                                 }
                             },
                             onActivity = { route = "activity" },
-                            onNode = { route = "node" }
+                            onNode = { route = "node" },
+                            onBackup = { backupFrom = "home"; route = "backup" }
                         )
                         "wallets" -> WalletManagerPage(balance, walletInfo, onImport = { importLauncher.launch(arrayOf("application/octet-stream", "*/*")) }, onSecurity = { route = "security" })
                         "activity" -> ActivityPage(
@@ -328,11 +334,12 @@ fun StohnWalletScreen(node: NodeController) {
                         )
                         "receive" -> ReceivePage(receiveAddress, onCopy = { copy(context, receiveAddress) })
                         "node" -> NodeStatusPage(state, onRetry = { node.start() })
-                        "security" -> SecurityPage(info = walletInfo, onBackup = { route = "backup" }, onChangePasskey = { dialog = DialogKind.Security }, onLock = { scope.launch { runCatching { node.lockWallet() } } })
+                        "security" -> SecurityPage(info = walletInfo, onBackup = { backupFrom = "security"; route = "backup" }, onChangePasskey = { dialog = DialogKind.Security }, onLock = { scope.launch { runCatching { node.lockWallet() } } })
                         "backup" -> BackupPage(
                             password = backupPassword,
                             verification = backupVerification,
                             verifyError = backupVerifyError,
+                            lastBackupSummary = BackupReminder.summary(backupReminder, System.currentTimeMillis()),
                             onPasswordChange = {
                                 backupPassword = it
                                 backupVerification = null
@@ -407,6 +414,7 @@ private fun AppHeader(route: String, onBack: () -> Unit, onActivity: () -> Unit)
 private fun WalletHome(
     node: NodeController,
     state: NodeController.State,
+    reminder: BackupReminder.State,
     balance: Long,
     transactions: List<WalletRpc.WalletTransaction>,
     busy: Boolean,
@@ -415,7 +423,8 @@ private fun WalletHome(
     onReceive: () -> Unit,
     onRefresh: () -> Unit,
     onActivity: () -> Unit,
-    onNode: () -> Unit
+    onNode: () -> Unit,
+    onBackup: () -> Unit
 ) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 22.dp)) {
         item {
@@ -443,6 +452,31 @@ private fun WalletHome(
                         QuickAction("Receive", Icons.Default.SouthWest, onReceive)
                         QuickAction("Scan", Icons.Default.QrCodeScanner, onReceive)
                         QuickAction("History", Icons.Default.Schedule, onActivity)
+                    }
+                }
+            }
+        }
+        if (BackupReminder.shouldRemind(reminder, System.currentTimeMillis())) {
+            item {
+                Card(
+                    onClick = onBackup,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF2A1B06)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7A5A18))
+                ) {
+                    Row(Modifier.padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Backup, null, tint = Color(0xFFFFC24B), modifier = Modifier.size(21.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(if (reminder.hasBackup) "Your backup is out of date" else "No backup yet", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(
+                                "${BackupReminder.summary(reminder, System.currentTimeMillis())}. Without a recent backup this wallet cannot be recovered.",
+                                color = DarkMuted,
+                                fontSize = 10.sp
+                            )
+                        }
+                        Icon(Icons.Default.ChevronRight, null, tint = DarkMuted, modifier = Modifier.size(19.dp))
                     }
                 }
             }

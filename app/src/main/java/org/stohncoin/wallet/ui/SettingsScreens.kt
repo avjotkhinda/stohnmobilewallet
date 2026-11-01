@@ -314,6 +314,7 @@ fun BackupPage(
     password: String,
     verification: BackupVerification?,
     verifyError: String?,
+    lastBackupSummary: String,
     onPasswordChange: (String) -> Unit,
     onExport: () -> Unit,
     onRestore: () -> Unit,
@@ -339,6 +340,9 @@ fun BackupPage(
             OutlinedButton(onClick = onRestore, enabled = password.length >= 8, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(15.dp)) {
                 Icon(Icons.Default.Restore, null); Spacer(Modifier.width(8.dp)); Text("Restore from Backup")
             }
+        }
+        item {
+            Text("Last successful backup \u00b7 $lastBackupSummary", color = DarkMuted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 4.dp))
         }
         item {
             OutlinedButton(onClick = onVerify, enabled = password.length >= 8, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(15.dp)) {
