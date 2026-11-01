@@ -52,6 +52,9 @@ import org.stohncoin.wallet.wallet.WalletRpc
 import org.stohncoin.wallet.security.AppAuthManager
 import java.io.File
 
+/** A backup file that has been checked against its manifest and is waiting for confirmation. */
+private data class PendingRestore(val file: File, val verification: BackupVerification)
+
 @Composable
 fun StohnWalletScreen(node: NodeController) {
     val context = LocalContext.current
@@ -66,6 +69,8 @@ fun StohnWalletScreen(node: NodeController) {
     // Result of the last Test Backup, cleared whenever the password or the chosen file changes.
     var backupVerification by remember { mutableStateOf<BackupVerification?>(null) }
     var backupVerifyError by remember { mutableStateOf<String?>(null) }
+    // A chosen backup that has been unpacked and checked but not yet installed; confirmed first.
+    var pendingRestore by remember { mutableStateOf<PendingRestore?>(null) }
     var dialog by remember { mutableStateOf<DialogKind?>(null) }
     var busy by remember { mutableStateOf(false) }
     var selectedTx by remember { mutableStateOf<WalletRpc.WalletTransaction?>(null) }
@@ -169,19 +174,74 @@ fun StohnWalletScreen(node: NodeController) {
                 } ?: error("Unable to read the backup file")
                 require(backupPassword.isNotBlank()) { "Enter the backup password first" }
                 require(!destination.exists()) { "A restored wallet already exists" }
-                node.restoreWalletBackup(staged, backupPassword.toCharArray(), destination)
+                // Read the manifest before installing anything: the user sees which wallet this
+                // file says it holds, and can still walk away.
+                pendingRestore = PendingRestore(staged, node.verifyWalletBackup(staged, backupPassword.toCharArray()))
+            } catch (t: Throwable) {
+                staged.delete()
+                Toast.makeText(context, "Backup could not be checked: ${t.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun installPendingRestore(pending: PendingRestore) {
+        scope.launch {
+            val destination = File(context.filesDir, "fullmode/stohn-data/restored-wallet")
+            busy = true
+            try {
+                require(!destination.exists()) { "A restored wallet already exists" }
+                node.restoreWalletBackup(pending.file, backupPassword.toCharArray(), destination)
                 refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi }
                 Toast.makeText(context, "Wallet restored successfully", Toast.LENGTH_LONG).show()
-                backupPassword = ""
                 route = "home"
             } catch (t: Throwable) {
                 Toast.makeText(context, "Restore failed: ${t.message}", Toast.LENGTH_LONG).show()
             } finally {
-                staged.delete()
+                pending.file.delete()
+                pendingRestore = null
                 backupPassword = ""
                 busy = false
             }
         }
+    }
+
+    pendingRestore?.let { pending ->
+        val verification = pending.verification
+        AlertDialog(
+            onDismissRequest = { pending.file.delete(); pendingRestore = null },
+            title = { Text("Restore this wallet?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        verification.summary
+                            ?: "This backup does not record wallet details.",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                    Text(
+                        "${verification.walletBytes} byte wallet \u00b7 SHA-256 ${verification.walletSha256.take(16)}\u2026",
+                        color = DarkMuted,
+                        fontSize = 11.sp
+                    )
+                    verification.notes.forEach { note ->
+                        Text(note, color = Color(0xFFE9B455), fontSize = 11.sp)
+                    }
+                    Text(
+                        "Restoring installs this wallet on this device. Nothing is replaced until the import succeeds.",
+                        color = DarkMuted,
+                        fontSize = 10.sp
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { installPendingRestore(pending) }) { Text("Restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pending.file.delete(); pendingRestore = null }) { Text("Cancel") }
+            }
+        )
     }
 
     val backupVerifyLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->

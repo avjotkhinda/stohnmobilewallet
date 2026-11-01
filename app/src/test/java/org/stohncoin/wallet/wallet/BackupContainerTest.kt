@@ -159,4 +159,48 @@ class BackupContainerTest {
         runCatching { BackupContainer.restore(archive, staged, 1024L * 1024) }
             .onSuccess { error("Invalid manifest was unexpectedly accepted") }
     }
+
+
+    @Test
+    fun `restore reads the wallet details a current manifest records`() {
+        val data = walletData()
+        val staged = File(temporaryFolder.root, "staged.dat")
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(data)
+            .joinToString("") { "%02x".format(it) }
+        val archive = newArchive("manifest.backup") {
+            putNextEntry(ZipEntry(BackupContainer.ENTRY_WALLET))
+            write(data)
+            closeEntry()
+            putNextEntry(ZipEntry(BackupContainer.ENTRY_MANIFEST))
+            write(BackupManifest.render("0.28.2", "stohn-wallet", 98765L, sha).toByteArray(Charsets.US_ASCII))
+            closeEntry()
+        }
+
+        val contents = BackupContainer.restore(archive, staged, 1024L * 1024)
+
+        assertEquals("0.28.2", contents.manifest.appVersion)
+        assertEquals("stohn-wallet", contents.manifest.walletName)
+        assertEquals(98765L, contents.manifest.creationHeight)
+        assertEquals(sha, contents.manifest.walletSha256)
+    }
+
+    @Test
+    fun `restore refuses a manifest whose checksum is not well formed`() {
+        val staged = File(temporaryFolder.root, "staged.dat")
+        val archive = newArchive("badsha.backup") {
+            putNextEntry(ZipEntry(BackupContainer.ENTRY_WALLET))
+            write(walletData())
+            closeEntry()
+            putNextEntry(ZipEntry(BackupContainer.ENTRY_MANIFEST))
+            write(
+                BackupManifest.render("0.28.2", "stohn-wallet", 1L, "0123456789abcdef".repeat(4))
+                    .replace("sha256=".plus("0123456789abcdef".repeat(4)), "sha256=zz")
+                    .toByteArray(Charsets.US_ASCII)
+            )
+            closeEntry()
+        }
+
+        runCatching { BackupContainer.restore(archive, staged, 1024L * 1024) }
+            .onSuccess { error("A manifest with a malformed checksum was unexpectedly accepted") }
+    }
 }

@@ -10,6 +10,7 @@ import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
+import org.stohncoin.wallet.runtime.RuntimeManifest
 
 /**
  * Creates an app-owned encrypted-wallet backup container without ever modifying a live Core wallet.
@@ -19,19 +20,31 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
     private val root = File(context.filesDir, "fullmode")
     private val walletDir = File(root, "stohn-data")
 
-    suspend fun createCoreBackup(destination: File, password: CharArray, walletName: String?): BackupResult = withContext(Dispatchers.IO) {
+    /**
+     * [creationHeight] is the wallet's birthday as this app knows it: the chain height at which the
+     * wallet first appeared on this device, carried forward by later restores. It is written into
+     * the manifest so a restore can say which wallet it is about to install, and from when.
+     */
+    suspend fun createCoreBackup(
+        destination: File,
+        password: CharArray,
+        walletName: String,
+        creationHeight: Long
+    ): BackupResult = withContext(Dispatchers.IO) {
         require(password.isNotEmpty()) { "Backup password is required" }
+        require(walletName.isNotBlank()) { "Wallet name is required" }
+        require(creationHeight >= 0L) { "Creation height cannot be negative" }
         val core = runtime
         val snapshot = core.backupWalletSnapshot(java.util.UUID.randomUUID().toString().replace("-", ""), walletName)
         try {
-            packageMigrationSnapshot(snapshot, destination, password)
+            packageMigrationSnapshot(snapshot, destination, password, walletName, creationHeight)
         } finally {
             snapshot.delete()
         }
     }
 
 
-    suspend fun restoreCoreBackup(input: File, password: CharArray, destination: File): ImportResult = withContext(Dispatchers.IO) {
+    suspend fun restoreCoreBackup(input: File, password: CharArray, destination: File): RestoreResult = withContext(Dispatchers.IO) {
         require(input.isFile) { "Backup file does not exist" }
         require(password.isNotEmpty()) { "Backup password is required" }
         require(!destination.exists()) { "Restore destination must not already exist" }
@@ -46,7 +59,7 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
             val imported = CoreWalletMigration(runtime).import(contents.wallet, destination)
             // Labels live outside the wallet file, so re-apply them only after the import succeeds.
             restoreAddressBook(contents.labels)
-            imported
+            RestoreResult(imported, contents.manifest)
         } finally {
             decrypted.delete()
             if (stagedWallet.exists()) stagedWallet.delete()
@@ -65,7 +78,13 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
         AddressBook.save(dir, merged.values.toList())
     }
 
-    fun packageMigrationSnapshot(snapshot: File, destination: File, password: CharArray): BackupResult {
+    fun packageMigrationSnapshot(
+        snapshot: File,
+        destination: File,
+        password: CharArray,
+        walletName: String,
+        creationHeight: Long
+    ): BackupResult {
         require(snapshot.isFile) { "Backup snapshot does not exist" }
         require(password.isNotEmpty()) { "Backup password is required" }
         require(snapshot.canonicalFile != destination.canonicalFile) {
@@ -82,7 +101,15 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
                 FileInputStream(snapshot).use { copyLimited(it, zip, MAX_WALLET_BYTES) }
                 zip.closeEntry()
                 zip.putNextEntry(ZipEntry(ENTRY_MANIFEST))
-                zip.write(sha256(snapshot).toByteArray(Charsets.US_ASCII))
+                // App version first, so the first line of a manifest always says which build wrote it.
+                zip.write(
+                    BackupManifest.render(
+                        appVersion = RuntimeManifest.APP_VERSION,
+                        walletName = walletName,
+                        creationHeight = creationHeight,
+                        walletSha256 = sha256(snapshot)
+                    ).toByteArray(Charsets.US_ASCII)
+                )
                 zip.closeEntry()
                 // Include the app-level address-book labels in the backup container.
                 val labelsFile = File(context.filesDir, "addressbook/labels.json")
@@ -134,6 +161,9 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
 
     data class BackupResult(val file: File, val sha256: String)
 
+    /** What a restore installed, plus the manifest that identified the wallet before it ran. */
+    data class RestoreResult(val import: ImportResult, val manifest: BackupManifest)
+
     companion object {
         private const val MAX_WALLET_BYTES = 512L * 1024 * 1024
         private const val MAX_BACKUP_PLAINTEXT_BYTES = 520L * 1024 * 1024
@@ -161,13 +191,14 @@ object BackupContainer {
     data class Contents(
         val wallet: File,
         val walletSha256: String,
-        val labels: List<AddressBookLabel>
+        val labels: List<AddressBookLabel>,
+        val manifest: BackupManifest
     )
 
     fun restore(archive: File, stagedWallet: File, maxWalletBytes: Long): Contents {
         require(archive.isFile) { "Backup archive does not exist" }
         require(maxWalletBytes > 0L) { "Restore wallet size limit must be positive" }
-        var expectedHash: String? = null
+        var manifestText: String? = null
         var foundWallet = false
         var entries = 0
         var total = 0L
@@ -202,12 +233,12 @@ object BackupContainer {
                         labelsJson = String(baos.toByteArray(), Charsets.UTF_8)
                     }
                     else -> {
-                        require(expectedHash == null) { "Backup contains duplicate manifest entries" }
+                        require(manifestText == null) { "Backup contains duplicate manifest entries" }
                         val manifest = ByteArray(1024)
                         val count = zip.read(manifest)
                         require(count >= 0) { "Unable to read backup manifest" }
                         require(zip.read() < 0) { "Backup manifest is too large" }
-                        expectedHash = String(manifest, 0, count, Charsets.US_ASCII).trim()
+                        manifestText = String(manifest, 0, count, Charsets.US_ASCII)
                     }
                 }
                 require(total <= maxWalletBytes) { "Restored wallet exceeds safety limit" }
@@ -215,11 +246,11 @@ object BackupContainer {
             }
         }
         require(foundWallet && stagedWallet.length() > 0L) { "Backup contains no wallet.dat" }
-        require(expectedHash?.matches(Regex("[0-9a-f]{64}")) == true) { "Backup manifest is invalid" }
+        val manifest = BackupManifest.parse(manifestText ?: error("Backup manifest is missing"))
         val walletSha256 = sha256(stagedWallet)
-        require(walletSha256 == expectedHash) { "Backup wallet checksum mismatch" }
+        require(walletSha256 == manifest.walletSha256) { "Backup wallet checksum mismatch" }
         val labels = if (labelsJson != null) AddressBook.parse(labelsJson).labels else emptyList()
-        return Contents(stagedWallet, walletSha256, labels)
+        return Contents(stagedWallet, walletSha256, labels, manifest)
     }
 
     private fun copyLimited(input: java.io.InputStream, output: java.io.OutputStream, limit: Long): Long {

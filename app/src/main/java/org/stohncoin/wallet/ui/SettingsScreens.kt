@@ -383,6 +383,15 @@ fun BackupPage(
                         if (v.labelCount > 0) {
                             Text("${v.labelCount} address-book label${if (v.labelCount == 1) "" else "s"} included", color = DarkMuted, fontSize = 11.sp)
                         }
+                        val manifestLine = v.summary
+                        if (manifestLine != null) {
+                            Text(manifestLine, color = DarkMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Text("No wallet details recorded: this backup predates them.", color = DarkMuted, fontSize = 11.sp)
+                        }
+                        v.notes.forEach { note ->
+                            Text(note, color = Color(0xFFE9B455), fontSize = 11.sp)
+                        }
                         Text("This backup is good. Restore it only after a real loss.", color = DarkMuted, fontSize = 10.sp)
                     }
                 }

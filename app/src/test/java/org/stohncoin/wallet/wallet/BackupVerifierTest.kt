@@ -148,4 +148,23 @@ class BackupVerifierTest {
         assertEquals("Verification must not create files next to the backup", before, after)
         assertTrue("Verification must not leave files in its workspace", workspace.listFiles().isNullOrEmpty())
     }
+
+
+    @Test
+    fun `a current backup reports the wallet details recorded in its manifest`() {
+        val wallet = walletData()
+        val sha = sha256Hex(wallet)
+        val backup = buildBackup(
+            "with-manifest",
+            wallet,
+            manifestHash = BackupManifest.render("0.28.2", "stohn-wallet", 4242L, sha)
+        )
+
+        val report = runBlocking { BackupVerifier.verify(backup, password.toCharArray(), workspace()) }
+
+        assertEquals("0.28.2", report.appVersion)
+        assertEquals("stohn-wallet", report.walletName)
+        assertEquals(4242L, report.creationHeight)
+        assertEquals(sha, report.walletSha256)
+    }
 }

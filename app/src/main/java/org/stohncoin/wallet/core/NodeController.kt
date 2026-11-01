@@ -18,6 +18,8 @@ import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
 import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.runtime.RuntimeBackendFactory
 import org.stohncoin.wallet.runtime.RuntimeInstaller
+import org.stohncoin.wallet.runtime.RuntimeManifest
+import org.stohncoin.wallet.wallet.BackupManifest
 import org.stohncoin.wallet.wallet.CoreWalletMigration
 import org.stohncoin.wallet.wallet.WalletBackupManager
 import org.stohncoin.wallet.wallet.WalletBackupVerifier
@@ -225,18 +227,27 @@ class NodeController private constructor(context: Context) {
 
     suspend fun createWalletBackup(destination: File, password: CharArray): WalletBackupManager.BackupResult =
         walletMutex.withLock {
-            val result = WalletBackupManager(appContext, embedded()).createCoreBackup(destination, password, activeWalletName)
+            val name = activeWalletName ?: DEFAULT_WALLET_NAME
+            val result = WalletBackupManager(appContext, embedded()).createCoreBackup(
+                destination,
+                password,
+                name,
+                walletCreationHeight(name)
+            )
             recordBackupCreated()
             result
         }
 
     suspend fun restoreWalletBackup(input: File, password: CharArray, destination: File): ImportResult =
         walletMutex.withLock {
-            val result = WalletBackupManager(appContext, embedded()).restoreCoreBackup(input, password, destination)
+            val restored = WalletBackupManager(appContext, embedded()).restoreCoreBackup(input, password, destination)
             val walletName = destination.name
             embedded().rpcCall("loadwallet", org.json.JSONArray().put(walletName))
             setActiveWalletName(walletName)
-            result
+            // The creation height belongs to the wallet, not to this restore: carry it forward so
+            // the next backup still says when the wallet began.
+            restored.manifest.creationHeight?.let { rememberWalletCreationHeight(walletName, it) }
+            restored.import
         }
 
     /**
@@ -245,8 +256,51 @@ class NodeController private constructor(context: Context) {
      */
     suspend fun verifyWalletBackup(input: File, password: CharArray): BackupVerification =
         walletMutex.withLock {
-            WalletBackupVerifier(appContext, backend as? EmbeddedLinuxRuntime).verify(input, password)
+            val verification = WalletBackupVerifier(appContext, backend as? EmbeddedLinuxRuntime).verify(input, password)
+            // Compare what the backup claims with this device: a different wallet, a different
+            // build, or a height the node has not reached yet are all worth saying out loud.
+            verification.copy(
+                notes = BackupManifest.notes(
+                    BackupManifest(
+                        appVersion = verification.appVersion,
+                        walletName = verification.walletName,
+                        creationHeight = verification.creationHeight,
+                        walletSha256 = verification.walletSha256
+                    ),
+                    currentAppVersion = RuntimeManifest.APP_VERSION,
+                    chainHeight = currentChainHeight(),
+                    activeWalletName = activeWalletName
+                )
+            )
         }
+
+    /** Chain height as the node reports it, or null when the node cannot answer. */
+    private suspend fun currentChainHeight(): Long? = runCatching {
+        embedded().rpcCall("getblockchaininfo").optLong("blocks", -1L).takeIf { it >= 0L }
+    }.getOrNull()
+
+    /**
+     * The wallet's birthday on this device: remembered the first time this wallet is seen and
+     * carried forward by restores, so every backup repeats one value instead of inventing a new one.
+     */
+    private suspend fun walletCreationHeight(walletName: String): Long {
+        prefs.getLong(creationHeightKey(walletName), -1L).takeIf { it >= 0L }?.let { return it }
+        val height = currentChainHeight()
+            ?: error("The node did not report a chain height, so this wallet's creation height is unknown")
+        rememberWalletCreationHeight(walletName, height)
+        return height
+    }
+
+    /** Keeps the earliest height known for a wallet: a birthday only moves earlier, never later. */
+    private fun rememberWalletCreationHeight(walletName: String, height: Long) {
+        if (height < 0L) return
+        val key = creationHeightKey(walletName)
+        val current = prefs.getLong(key, -1L)
+        if (current >= 0L && current <= height) return
+        prefs.edit().putLong(key, height).apply()
+    }
+
+    private fun creationHeightKey(walletName: String) = KEY_CREATED_HEIGHT + walletName
 
     private fun readBackupReminder(): BackupReminder.State = BackupReminder.State(
         lastBackupAt = prefs.getLong(KEY_LAST_BACKUP_AT, 0L),
@@ -280,6 +334,7 @@ class NodeController private constructor(context: Context) {
         private const val KEY_WALLET_NAME = "active_wallet_name"
         private const val KEY_LAST_BACKUP_AT = "last_backup_at"
         private const val KEY_SENDS_SINCE_BACKUP = "sends_since_backup"
+        private const val KEY_CREATED_HEIGHT = "created_height:"
         private const val DEFAULT_WALLET_NAME = "stohn-wallet"
         @Volatile private var instance: NodeController? = null
         fun get(context: Context): NodeController = instance ?: synchronized(this) {

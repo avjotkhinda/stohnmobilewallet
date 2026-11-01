@@ -27,7 +27,10 @@ object BackupVerifier {
         val walletSha256: String,
         val labelCount: Int,
         val walletFormat: String?,
-        val walletEncrypted: Boolean?
+        val walletEncrypted: Boolean?,
+        val walletName: String?,
+        val creationHeight: Long?,
+        val appVersion: String?
     )
 
     const val MAX_WALLET_BYTES = 512L * 1024 * 1024
@@ -61,7 +64,10 @@ object BackupVerifier {
                 walletSha256 = contents.walletSha256,
                 labelCount = contents.labels.count { it.raw.isNotBlank() && it.label.isNotBlank() },
                 walletFormat = check?.format,
-                walletEncrypted = check?.encrypted
+                walletEncrypted = check?.encrypted,
+                walletName = contents.manifest.walletName,
+                creationHeight = contents.manifest.creationHeight,
+                appVersion = contents.manifest.appVersion
             )
         } finally {
             plaintext.delete()
@@ -77,10 +83,24 @@ data class BackupVerification(
     val walletSha256: String,
     val labelCount: Int,
     val walletFormat: String?,
-    val walletEncrypted: Boolean?
+    val walletEncrypted: Boolean?,
+    /** Wallet details from the manifest; null when the backup predates them. */
+    val walletName: String? = null,
+    val creationHeight: Long? = null,
+    val appVersion: String? = null,
+    /** Differences between this backup and this device, e.g. a different wallet or app version. */
+    val notes: List<String> = emptyList()
 ) {
     /** True only when Core itself read the unpacked wallet; false means the structure alone was checked. */
     val coreChecked: Boolean get() = walletFormat != null
+
+    /** One line for a toast or card: which wallet, from when, made by which build. */
+    val summary: String? = when {
+        walletName != null && creationHeight != null ->
+            "Wallet '$walletName' \u00b7 created at height $creationHeight" +
+                (appVersion?.let { " \u00b7 app $it" } ?: "")
+        else -> null
+    }
 }
 
 /**
@@ -116,7 +136,10 @@ class WalletBackupVerifier(private val context: Context, private val runtime: Em
                 walletSha256 = report.walletSha256,
                 labelCount = report.labelCount,
                 walletFormat = report.walletFormat,
-                walletEncrypted = report.walletEncrypted
+                walletEncrypted = report.walletEncrypted,
+                walletName = report.walletName,
+                creationHeight = report.creationHeight,
+                appVersion = report.appVersion
             )
         } finally {
             workspace.deleteRecursively()

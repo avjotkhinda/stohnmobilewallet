@@ -19,6 +19,7 @@
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/StohnWalletScreen.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/BackupCrypto.kt
+./app/src/main/java/org/stohncoin/wallet/wallet/BackupManifest.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/BackupReminder.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/Amounts.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/CoreWalletMigration.kt
@@ -41,6 +42,7 @@
 ./app/src/test/java/org/stohncoin/wallet/security/PinThrottleTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupContainerTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupCryptoTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/BackupManifestTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupReminderTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupVerifierTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/ScryptTest.kt
