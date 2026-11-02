@@ -7,7 +7,9 @@ import java.io.File
 
 /**
  * Migration boundary around the official Stohn Core wallet tool.
- * No Berkeley DB/SQLite records are parsed by Android code.
+ * No Berkeley DB/SQLite records are parsed by Android code. Only `info`, `dump` (encrypted key
+ * records) and `createfromdump` reach Core; plaintext key export is refused by
+ * [org.stohncoin.wallet.runtime.KeyExportGuard].
  */
 class CoreWalletMigration(private val runtime: EmbeddedLinuxRuntime) : WalletMigration {
     override suspend fun inspect(source: File): WalletInfo = withContext(Dispatchers.IO) {

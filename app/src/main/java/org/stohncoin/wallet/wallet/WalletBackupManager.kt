@@ -96,54 +96,26 @@ class WalletBackupManager(private val context: Context, private val runtime: Emb
         val plaintext = File.createTempFile("stohn-backup-", ".snapshot", context.cacheDir)
         try {
             // Keep the temporary plaintext inside app-private cache and delete it immediately.
-            java.util.zip.ZipOutputStream(FileOutputStream(plaintext)).use { zip ->
-                zip.putNextEntry(ZipEntry(ENTRY_WALLET))
-                FileInputStream(snapshot).use { copyLimited(it, zip, MAX_WALLET_BYTES) }
-                zip.closeEntry()
-                zip.putNextEntry(ZipEntry(ENTRY_MANIFEST))
-                // App version first, so the first line of a manifest always says which build wrote it.
-                zip.write(
-                    BackupManifest.render(
-                        appVersion = RuntimeManifest.APP_VERSION,
-                        walletName = walletName,
-                        creationHeight = creationHeight,
-                        walletSha256 = sha256(snapshot)
-                    ).toByteArray(Charsets.US_ASCII)
-                )
-                zip.closeEntry()
-                // Include the app-level address-book labels in the backup container.
-                val labelsFile = File(context.filesDir, "addressbook/labels.json")
-                if (labelsFile.isFile) {
-                    zip.putNextEntry(ZipEntry(ENTRY_LABELS))
-                    FileInputStream(labelsFile).use { copyLimited(it, zip, 1024 * 1024) }
-                    zip.closeEntry()
-                }
-            }
+            // The writer lives next to the reader in BackupContainer so the two cannot drift, and
+            // the manifest and the address-book labels ride along in the same archive.
+            BackupContainer.packageSnapshot(
+                snapshot = snapshot,
+                archive = plaintext,
+                maxWalletBytes = MAX_WALLET_BYTES,
+                manifest = BackupManifest.render(
+                    appVersion = RuntimeManifest.APP_VERSION,
+                    walletName = walletName,
+                    creationHeight = creationHeight,
+                    walletSha256 = sha256(snapshot)
+                ),
+                labels = File(context.filesDir, "addressbook/labels.json")
+            )
             BackupCrypto.encrypt(plaintext, destination, password)
             return BackupResult(destination, sha256(destination))
         } finally {
             plaintext.delete()
             password.fill('\u0000')
         }
-    }
-
-    private fun copyLimited(input: java.io.InputStream, output: java.io.OutputStream, limit: Long): Long {
-        require(limit >= 0L) { "Invalid copy limit" }
-        val buffer = ByteArray(64 * 1024)
-        var total = 0L
-        while (true) {
-            val maxRead = minOf(buffer.size.toLong(), limit - total).toInt()
-            if (maxRead == 0) {
-                // A further byte means the entry exceeds the limit.
-                require(input.read() < 0) { "Restored wallet exceeds safety limit" }
-                break
-            }
-            val n = input.read(buffer, 0, maxRead)
-            if (n < 0) break
-            total += n
-            output.write(buffer, 0, n)
-        }
-        return total
     }
 
     private fun sha256(file: File): String {
@@ -194,6 +166,38 @@ object BackupContainer {
         val labels: List<AddressBookLabel>,
         val manifest: BackupManifest
     )
+
+    /**
+     * Writes the archive [restore] accepts, so writer and reader cannot disagree.
+     *
+     * [manifest] carries the wallet name, creation height and app version a versioned backup
+     * records; without it the entry holds the bare wallet checksum of an older backup. [labels]
+     * is the app's address-book file, copied in so a restore brings the names back too.
+     */
+    fun packageSnapshot(
+        snapshot: File,
+        archive: File,
+        maxWalletBytes: Long,
+        manifest: String? = null,
+        labels: File? = null,
+        maxLabelsBytes: Long = 1024L * 1024
+    ) {
+        require(snapshot.isFile) { "Backup snapshot does not exist" }
+        require(maxWalletBytes > 0L) { "Backup wallet size limit must be positive" }
+        java.util.zip.ZipOutputStream(FileOutputStream(archive)).use { zip ->
+            zip.putNextEntry(ZipEntry(ENTRY_WALLET))
+            FileInputStream(snapshot).use { copyLimited(it, zip, maxWalletBytes) }
+            zip.closeEntry()
+            zip.putNextEntry(ZipEntry(ENTRY_MANIFEST))
+            zip.write((manifest ?: sha256(snapshot)).toByteArray(Charsets.US_ASCII))
+            zip.closeEntry()
+            if (labels != null && labels.isFile) {
+                zip.putNextEntry(ZipEntry(ENTRY_LABELS))
+                FileInputStream(labels).use { copyLimited(it, zip, maxLabelsBytes) }
+                zip.closeEntry()
+            }
+        }
+    }
 
     fun restore(archive: File, stagedWallet: File, maxWalletBytes: Long): Contents {
         require(archive.isFile) { "Backup archive does not exist" }

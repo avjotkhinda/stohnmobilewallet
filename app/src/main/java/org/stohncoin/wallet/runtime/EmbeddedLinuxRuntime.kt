@@ -130,6 +130,7 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
     ): ToolResult {
         check(walletTool.isFile) { "Official stohncoin-wallet tool is not installed in the runtime" }
         check(workspace.isDirectory) { "Wallet migration workspace is missing" }
+        val guardedCommand = KeyExportGuard.requireWalletToolCommand(command)
         val linuxWorkspace = "/workspace"
         val linuxWalletTool = "/opt/stohn/bin/stohncoin-wallet"
         val args = mutableListOf(
@@ -151,7 +152,8 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
             }
             args += "-format=$walletFormat"
         }
-        args += command
+        // The guard has already rejected any command that could export plaintext keys.
+        args += guardedCommand
         // The wallet tool runs through the same PRoot launcher, so it shares the scoped temp dir.
         val tmp = RuntimeTemp.prepare(context.cacheDir)
         val process = ProcessBuilder(args)
@@ -266,6 +268,7 @@ val servers = dnsServers
 
 private class LocalRpc(private val dataDir: File, private val rpcPort: Int, private val walletName: String? = null) {
     private fun request(method: String, params: org.json.JSONArray): org.json.JSONObject {
+        val guardedMethod = KeyExportGuard.requireRpcMethod(method)
         val cookie = File(dataDir, ".cookie")
         check(cookie.isFile && cookie.length() > 0L) { "Core RPC cookie not available yet" }
         val endpoint = walletName?.let { "/wallet/" + java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") } ?: "/"
@@ -282,7 +285,7 @@ private class LocalRpc(private val dataDir: File, private val rpcPort: Int, priv
             val body = org.json.JSONObject().apply {
                 put("jsonrpc", "1.0")
                 put("id", "stohn-wallet")
-                put("method", method)
+                put("method", guardedMethod)
                 put("params", params)
             }.toString()
             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }

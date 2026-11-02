@@ -48,6 +48,22 @@ home to. The supported responses are local:
 Documented here as the M0 decision: without a remote channel there is no code path to implement a
 wipe-after-N, and adding one would weaken the offline threat model above.
 
+## Plaintext key export
+
+The app never asks Stohn Core for an unencrypted key, seed, or `dumpwallet` file:
+
+- The wallet tool is invoked only through an allowlist (`info`, `dump`, `createfromdump`) in
+  `runtime/KeyExportGuard`, so `dumpwallet` cannot be reached from app code. The record `dump`
+  used for migration carries encrypted key records, and its workspace is deleted afterwards.
+- Every Core RPC call passes the same guard, which rejects `dumpwallet`, `dumpprivkey`,
+  `dumphdinfo`, `dumpmasterprivkey` and `dumpmasterkey` before a request is sent.
+- `scripts/verify-wallet-migration.sh` uses the same record `dump` and keeps its output in a
+  temporary directory that the script removes on exit. `scripts/verify-restore-path.sh` runs
+  in CI and fails when the restore path stops matching that script.
+
+The rule is exercised by `KeyExportGuardTest`: a backup or migration copies only the encrypted
+`wallet.dat`, so no code path can write plaintext key material into app storage.
+
 ## Release blockers
 
 Before a release is recommended for real funds, the project needs an independent security review, a successful Android build and testing on supported physical devices, and verified repository and release-signing access controls. Source code and CI checks alone cannot enforce GitHub branch protection, require independent reviewers, or protect an offline signing key; those controls must be configured and verified by repository maintainers.

@@ -1,0 +1,17 @@
+# Gradle build output and local caches
+build/
+.gradle/
+.kotlin/
+
+# Machine-local configuration (Android SDK path, signing details)
+local.properties
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.hprof
+captures/
+
+# Filesystem noise
+.DS_Store
+Thumbs.db

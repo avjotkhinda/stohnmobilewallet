@@ -1,5 +1,6 @@
 ./.github/workflows/android-build.yml
 ./.github/workflows/proot-android-bundle.yml
+./.gitignore
 ./FILES.txt
 ./LICENSE
 ./README.md
@@ -16,6 +17,7 @@
 ./app/src/main/java/org/stohncoin/wallet/core/NodeService.kt
 ./app/src/main/java/org/stohncoin/wallet/core/SyncProgress.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/EmbeddedLinuxRuntime.kt
+./app/src/main/java/org/stohncoin/wallet/runtime/KeyExportGuard.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeBackend.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeInstaller.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt
@@ -48,10 +50,13 @@
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupContainerTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupCryptoTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupManifestTest.kt
+./app/src/test/java/org/stohncoin/wallet/runtime/KeyExportGuardTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupReminderTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/BackupRestoreRoundTripTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupVerifierTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/ScryptTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookRoundTripTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/AmountsTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/RuntimeTempTest.kt
 ./app/src/main/res/values/styles.xml
 ./app/src/main/res/xml/data_extraction_rules.xml
@@ -96,6 +101,7 @@
 ./tools/security-audit.sh
 
 scripts/integrate-runtime-manifest.sh
+./scripts/verify-restore-path.sh
 scripts/pin-debian-rootfs.sh
 tools/verify-fullmode-repair.sh
 app/src/main/res/drawable-nodpi/stohn_logo.png
