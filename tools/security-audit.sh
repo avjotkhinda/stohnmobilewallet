@@ -26,6 +26,8 @@ grep -F 'android:allowBackup="false"' "$AM" >/dev/null || fail "Android backup i
 grep -F 'android:exported="false"' "$AM" >/dev/null || fail "foreground service exported"
 ! grep -E 'LD_LIBRARY_PATH.*nativeDir|nativeDir.*LD_LIBRARY_PATH' "$EMBED" >/dev/null || fail "Android native library directory leaked into glibc runtime"
 grep -F 'PROOT_LOADER' "$EMBED" >/dev/null || fail "PRoot loader not configured"
+grep -F 'RuntimeTemp.prepare' "$EMBED" >/dev/null || fail "PRoot temp directory is not scoped to its own cache folder"
+grep -F 'RuntimeTemp.purge' "$EMBED" >/dev/null || fail "PRoot temp directory is never cleaned up"
 grep -F 'rpcallowip=127.0.0.1' "$EMBED" >/dev/null || fail "RPC allowlist is not loopback-only"
 grep -F 'rpcbind=127.0.0.1' "$EMBED" >/dev/null || fail "RPC bind is not loopback-only"
 grep -F 'https://' "$INSTALL" >/dev/null || fail "runtime installer lacks HTTPS enforcement"

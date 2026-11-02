@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import org.stohncoin.wallet.core.NodeController
+import org.stohncoin.wallet.runtime.RuntimeTemp
 import org.stohncoin.wallet.security.AppAuthManager
 import org.stohncoin.wallet.security.LockGate
 import org.stohncoin.wallet.ui.LockScreen
@@ -35,6 +36,11 @@ class MainActivity : FragmentActivity() {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         val node = NodeController.get(applicationContext)
+        // A process that dies mid-run leaves PRoot's unpacked loader in the app cache. Collect it
+        // at start, but only while no node is running so a live process keeps its own files.
+        if (!node.state.value.isRunning) {
+            Thread { runCatching { RuntimeTemp.purge(cacheDir) } }.start()
+        }
         locked = AppAuthManager.isAppLockEnabled(this)
         setContent {
             if (locked) {

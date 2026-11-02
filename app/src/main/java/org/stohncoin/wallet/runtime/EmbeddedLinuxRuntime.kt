@@ -59,7 +59,11 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
         check(sha256(libTalloc) == RuntimeManifest.LIBTALLOC_SHA256) { "Bundled libtalloc integrity check failed" }
         check(sha256(libShmem) == RuntimeManifest.LIBANDROID_SHMEM_SHA256) { "Bundled libandroid-shmem integrity check failed" }
         rpcPort = reserveRpcPort()
-        process = ProcessBuilder(
+        // PRoot unpacks its loader into PROOT_TMP_DIR on every run, so it gets a directory of its
+        // own and leftover copies can be deleted without touching other cache entries.
+        val tmp = RuntimeTemp.prepare(context.cacheDir)
+        process = try {
+            ProcessBuilder(
             proot.absolutePath,
             "-r", rootfs.absolutePath,
             "-b", dataDir.absolutePath + ":/home/stohn/.stohn",
@@ -73,11 +77,16 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
             // Prune depth is fixed for the life of a chain database; NodeStorage clears the chain
             // when the mode changes, because Core refuses to reuse one built under another mode.
             "-prune=$pruneMiB"
-        ).apply {
-            environment()["PROOT_LOADER"] = loader.absolutePath
-            environment()["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
-            environment()["TMPDIR"] = context.cacheDir.absolutePath
-        }.redirectErrorStream(true).start()
+            ).apply {
+                environment()["PROOT_LOADER"] = loader.absolutePath
+                environment()["PROOT_TMP_DIR"] = tmp.absolutePath
+                environment()["TMPDIR"] = tmp.absolutePath
+            }.redirectErrorStream(true).start()
+        } catch (failure: Throwable) {
+            // A refused exec leaves PRoot's unpacked loader behind and nothing else collects it.
+            RuntimeTemp.purge(context.cacheDir)
+            throw failure
+        }
         // Drain Core output so a full pipe can never stall the node.
         Thread { process?.inputStream?.bufferedReader()?.forEachLine { } }.start()
     }
@@ -143,12 +152,14 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
             args += "-format=$walletFormat"
         }
         args += command
+        // The wallet tool runs through the same PRoot launcher, so it shares the scoped temp dir.
+        val tmp = RuntimeTemp.prepare(context.cacheDir)
         val process = ProcessBuilder(args)
             .directory(workspace)
             .apply {
                 environment()["PROOT_LOADER"] = loader.absolutePath
-                environment()["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
-                environment()["TMPDIR"] = context.cacheDir.absolutePath
+                environment()["PROOT_TMP_DIR"] = tmp.absolutePath
+                environment()["TMPDIR"] = tmp.absolutePath
             }
             .start()
         val stdout = StringBuilder()
@@ -165,6 +176,7 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
             process.destroyForcibly()
             stdoutDrain.join(2_000)
             stderrDrain.join(2_000)
+            RuntimeTemp.purge(context.cacheDir)
             error("stohncoin-wallet timed out")
         }
         stdoutDrain.join(2_000)
