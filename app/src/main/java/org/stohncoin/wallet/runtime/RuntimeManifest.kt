@@ -14,4 +14,9 @@ object RuntimeManifest {
     const val PROOT_LOADER_SHA256 = "1da54355333cca3fb6ee10e3b82a24df24fb230c99241ce83809bf9e240609b5"
     const val LIBTALLOC_SHA256 = "742b438c4d09e276985a61d44164c9de207b6d8cc268f3018cb3001961bcb309"
     const val LIBANDROID_SHMEM_SHA256 = "84475798e07c8174dbbfaec70a827fdb02f19ffa69a589380c13e7507fd0e731"
+    // The NDK-native backend. Both pins stay blank until a bionic Stohn Core is actually built and
+    // published: with no pin the factory keeps running the glibc runtime, and a pin that does not
+    // match the shipped binary is a hard failure, never a quiet swap to another backend.
+    const val NATIVE_CORE_SHA256 = ""
+    const val NATIVE_WALLET_TOOL_SHA256 = ""
 }

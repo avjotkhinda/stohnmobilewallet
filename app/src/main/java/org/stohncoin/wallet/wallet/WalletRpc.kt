@@ -2,7 +2,7 @@ package org.stohncoin.wallet.wallet
 
 import org.json.JSONArray
 import org.json.JSONObject
-import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
+import org.stohncoin.wallet.runtime.RuntimeBackend
 
 /**
  * High-level wallet operations delegated to Stohn Core JSON-RPC.
@@ -10,7 +10,7 @@ import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
  * Every amount crossing this boundary is a `Long` of satoshis; Core's decimal coin values are
  * converted once on the way in and once on the way out, never through `Double` arithmetic.
  */
-class WalletRpc(private val runtime: EmbeddedLinuxRuntime, private val walletName: String? = null) {
+class WalletRpc(private val runtime: RuntimeBackend, private val walletName: String? = null) {
     suspend fun walletInfo(): WalletInfoSnapshot = runtime.rpcCall("getwalletinfo", walletName = walletName).let { r ->
         WalletInfoSnapshot(
             balanceSatoshis = Amounts.fromJsonCoin(r.optDouble("balance", 0.0)),

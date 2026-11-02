@@ -9,14 +9,14 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
+import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.runtime.RuntimeManifest
 
 /**
  * Creates an app-owned encrypted-wallet backup container without ever modifying a live Core wallet.
  * The actual wallet.dat import remains delegated to the official Core migration engine.
  */
-class WalletBackupManager(private val context: Context, private val runtime: EmbeddedLinuxRuntime) {
+class WalletBackupManager(private val context: Context, private val runtime: RuntimeBackend) {
     private val root = File(context.filesDir, "fullmode")
     private val walletDir = File(root, "stohn-data")
 

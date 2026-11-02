@@ -3,12 +3,7 @@ package org.stohncoin.wallet.runtime
 import android.content.Context
 import android.net.ConnectivityManager
 import java.io.File
-import java.io.FileOutputStream
-import java.util.UUID
 import java.util.concurrent.TimeUnit
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.zip.GZIPInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -16,8 +11,9 @@ import kotlinx.coroutines.withContext
  * Runs the glibc Stohn Core through an embedded Linux userspace. Nothing is installed as a
  * separate Termux/Debian app. The runtime lives entirely inside this application's private files.
  *
- * Production path: replace this backend with the Android-native NDK backend once stohncoind is
- * successfully ported to bionic. The interface stays identical.
+ * This is the runtime every APK ships today. [NativeRuntime] takes over from it the moment a
+ * pinned bionic build is published; the interface is identical, so the app cannot tell the two
+ * apart — only [RuntimeBackendFactory] decides which one starts.
  */
 class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: Int = 0) : RuntimeBackend {
     private val root = File(context.filesDir, "fullmode")
@@ -25,13 +21,15 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
     private val rootfs = File(runtime, "rootfs")
     private val coreBin = File(runtime, "bin/stohncoind")
     private val walletTool = File(runtime, "bin/stohncoin-wallet")
-    private val dataDir = dataDirectory(context)
+    override val dataDir: File = RuntimeBackend.dataDirectory(context)
     private val conf = File(dataDir, "stohn.conf")
     private var process: Process? = null
     // RPC listens on a fresh random loopback port for every start so another app on the
     // device cannot pre-bind a fixed, publicly known port. A caller (or attacker) that wins
     // the bind race simply prevents Core from starting; the readiness check then fails.
-    @Volatile private var rpcPort: Int = 0
+    @Volatile
+    override var rpcPort: Int = 0
+        private set
     private val nativeDir = File(context.applicationInfo.nativeLibraryDir)
     private val proot = File(nativeDir, "libproot.so")
     private val loader = File(nativeDir, "libproot-loader.so")
@@ -39,12 +37,15 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
     private val libShmem = File(nativeDir, "libandroid-shmem.so")
     private val dnsConfig = File(dataDir, "resolv.conf")
 
+    /** The data directory is bound into the chroot at a fixed path, so that is the path Core sees. */
+    override fun corePath(file: File): String = "/home/stohn/.stohn/${file.name}"
+
     override suspend fun start() = withContext(Dispatchers.IO) {
         root.mkdirs(); runtime.mkdirs(); dataDir.mkdirs()
         check(rootfs.isDirectory) { "Embedded Debian rootfs is missing" }
         check(coreBin.isFile) { "Stohn Core binary is missing" }
         coreBin.setExecutable(true)
-        if (!conf.exists()) conf.writeText(defaultConfig())
+        if (!conf.exists()) conf.writeText(RuntimeBackend.coreConfig())
         writeDnsConfig()
         check(proot.isFile) { "Embedded Android PRoot is missing from nativeLibraryDir" }
         check(loader.isFile) { "Embedded PRoot loader is missing from nativeLibraryDir" }
@@ -54,11 +55,11 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
         check(RuntimeManifest.PROOT_LOADER_SHA256.matches(Regex("[0-9a-f]{64}"))) { "PRoot loader SHA-256 is not pinned" }
         check(RuntimeManifest.LIBTALLOC_SHA256.matches(Regex("[0-9a-f]{64}"))) { "libtalloc SHA-256 is not pinned" }
         check(RuntimeManifest.LIBANDROID_SHMEM_SHA256.matches(Regex("[0-9a-f]{64}"))) { "libandroid-shmem SHA-256 is not pinned" }
-        check(sha256(proot) == RuntimeManifest.PROOT_SHA256) { "Bundled PRoot integrity check failed" }
-        check(sha256(loader) == RuntimeManifest.PROOT_LOADER_SHA256) { "Bundled PRoot loader integrity check failed" }
-        check(sha256(libTalloc) == RuntimeManifest.LIBTALLOC_SHA256) { "Bundled libtalloc integrity check failed" }
-        check(sha256(libShmem) == RuntimeManifest.LIBANDROID_SHMEM_SHA256) { "Bundled libandroid-shmem integrity check failed" }
-        rpcPort = reserveRpcPort()
+        check(artifactSha256(proot) == RuntimeManifest.PROOT_SHA256) { "Bundled PRoot integrity check failed" }
+        check(artifactSha256(loader) == RuntimeManifest.PROOT_LOADER_SHA256) { "Bundled PRoot loader integrity check failed" }
+        check(artifactSha256(libTalloc) == RuntimeManifest.LIBTALLOC_SHA256) { "Bundled libtalloc integrity check failed" }
+        check(artifactSha256(libShmem) == RuntimeManifest.LIBANDROID_SHMEM_SHA256) { "Bundled libandroid-shmem integrity check failed" }
+        rpcPort = RuntimeBackend.reserveRpcPort()
         // PRoot unpacks its loader into PROOT_TMP_DIR on every run, so it gets a directory of its
         // own and leftover copies can be deleted without touching other cache entries.
         val tmp = RuntimeTemp.prepare(context.cacheDir)
@@ -103,122 +104,43 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
         }
     }
 
-
-    /** Binds loopback port 0 to have the kernel pick a free private port, then releases it for Core. */
-    private fun reserveRpcPort(): Int {
-        java.net.ServerSocket().use { socket ->
-            socket.bind(java.net.InetSocketAddress(java.net.InetAddress.getByName("127.0.0.1"), 0))
-            require(socket.localPort in 1024..65535) { "Core RPC port selection failed" }
-            return socket.localPort
-        }
-    }
-
-    fun createWalletToolWorkspace(prefix: String): File {
-        val dir = File(dataDir, "migration-$prefix-${UUID.randomUUID()}")
-        check(dir.mkdirs()) { "Unable to create wallet migration workspace" }
-        return dir
-    }
-
-    data class ToolResult(val exitCode: Int, val stdout: String, val stderr: String)
-
-    fun runWalletTool(
+    override fun runWalletTool(
         workspace: File,
         walletName: String,
         command: String,
-        dumpFile: File? = null,
-        walletFormat: String? = null
-    ): ToolResult {
+        dumpFile: File?,
+        walletFormat: String?
+    ): RuntimeBackend.ToolResult {
         check(walletTool.isFile) { "Official stohncoin-wallet tool is not installed in the runtime" }
         check(workspace.isDirectory) { "Wallet migration workspace is missing" }
-        val guardedCommand = KeyExportGuard.requireWalletToolCommand(command)
         val linuxWorkspace = "/workspace"
-        val linuxWalletTool = "/opt/stohn/bin/stohncoin-wallet"
         val args = mutableListOf(
             proot.absolutePath,
             "-r", rootfs.absolutePath,
             "-b", workspace.absolutePath + ":" + linuxWorkspace,
             "-b", runtime.absolutePath + ":/opt/stohn",
-            linuxWalletTool,
-            "-datadir=$linuxWorkspace",
-            "-wallet=$walletName"
+            "/opt/stohn/bin/stohncoin-wallet"
         )
-        if (dumpFile != null) {
-            val name = dumpFile.name
-            args += "-dumpfile=$linuxWorkspace/$name"
-        }
-        if (walletFormat != null) {
-            require(command == "createfromdump" && walletFormat in setOf("sqlite", "bdb")) {
-                "Wallet format is only supported for createfromdump"
-            }
-            args += "-format=$walletFormat"
-        }
-        // The guard has already rejected any command that could export plaintext keys.
-        args += guardedCommand
+        // The key-export guard lives in WalletToolArgs, so both backends refuse the same commands.
+        args += WalletToolArgs.build(
+            dataDir = linuxWorkspace,
+            walletName = walletName,
+            command = command,
+            dumpFile = dumpFile?.let { "$linuxWorkspace/${it.name}" },
+            walletFormat = walletFormat
+        )
         // The wallet tool runs through the same PRoot launcher, so it shares the scoped temp dir.
         val tmp = RuntimeTemp.prepare(context.cacheDir)
-        val process = ProcessBuilder(args)
-            .directory(workspace)
-            .apply {
-                environment()["PROOT_LOADER"] = loader.absolutePath
-                environment()["PROOT_TMP_DIR"] = tmp.absolutePath
-                environment()["TMPDIR"] = tmp.absolutePath
-            }
-            .start()
-        val stdout = StringBuilder()
-        val stderr = StringBuilder()
-        val stdoutDrain = Thread {
-            process.inputStream.bufferedReader().forEachLine { line -> stdout.append(line).append('\n') }
-        }
-        val stderrDrain = Thread {
-            process.errorStream.bufferedReader().forEachLine { line -> stderr.append(line).append('\n') }
-        }
-        stdoutDrain.start()
-        stderrDrain.start()
-        if (!process.waitFor(120, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            stdoutDrain.join(2_000)
-            stderrDrain.join(2_000)
-            RuntimeTemp.purge(context.cacheDir)
-            error("stohncoin-wallet timed out")
-        }
-        stdoutDrain.join(2_000)
-        stderrDrain.join(2_000)
-        return ToolResult(process.exitValue(), stdout.toString(), stderr.toString())
-    }
-
-    suspend fun rpcCall(method: String, params: org.json.JSONArray = org.json.JSONArray(), walletName: String? = null): org.json.JSONObject =
-        withContext(Dispatchers.IO) { LocalRpc(dataDir, rpcPort, walletName).objectResult(method, params) }
-
-    suspend fun rpcString(method: String, params: org.json.JSONArray = org.json.JSONArray(), walletName: String? = null): String =
-        withContext(Dispatchers.IO) { LocalRpc(dataDir, rpcPort, walletName).stringResult(method, params) }
-
-    suspend fun rpcArray(method: String, params: org.json.JSONArray = org.json.JSONArray(), walletName: String? = null): org.json.JSONArray =
-        withContext(Dispatchers.IO) { LocalRpc(dataDir, rpcPort, walletName).arrayResult(method, params) }
-
-    suspend fun rpcVoid(method: String, params: org.json.JSONArray = org.json.JSONArray(), walletName: String? = null) =
-        withContext(Dispatchers.IO) { LocalRpc(dataDir, rpcPort, walletName).voidResult(method, params) }
-
-    suspend fun backupWalletSnapshot(snapshotName: String, walletName: String? = null): File = withContext(Dispatchers.IO) {
-        require(snapshotName.matches(Regex("[A-Za-z0-9._-]{1,80}"))) { "Invalid backup snapshot name" }
-        val snapshot = File(dataDir, "backup-$snapshotName.dat")
-        if (snapshot.exists()) snapshot.delete()
-        val rpc = LocalRpc(dataDir, rpcPort, walletName)
-        val linuxPath = "/home/stohn/.stohn/${snapshot.name}"
-        rpc.objectResult("backupwallet", org.json.JSONArray().put(linuxPath))
-        check(snapshot.isFile && snapshot.length() > 0L) { "Core did not create a backup snapshot" }
-        snapshot
-    }
-
-    override suspend fun status(): RuntimeBackend.NodeInfo = withContext(Dispatchers.IO) {
-        val rpc = LocalRpc(dataDir, rpcPort)
-        val chain = rpc.objectResult("getblockchaininfo")
-        val network = rpc.objectResult("getnetworkinfo")
-        RuntimeBackend.NodeInfo(
-            blocks = chain.optLong("blocks", 0),
-            headers = chain.optLong("headers", 0),
-            peers = network.optInt("connections", 0),
-            ibd = chain.optBoolean("initialblockdownload", true),
-            version = network.optString("subversion", "unknown")
+        return ProcessRunner.run(
+            command = args,
+            directory = workspace,
+            environment = mapOf(
+                "PROOT_LOADER" to loader.absolutePath,
+                "PROOT_TMP_DIR" to tmp.absolutePath,
+                "TMPDIR" to tmp.absolutePath
+            ),
+            label = "stohncoin-wallet",
+            onTimeout = { RuntimeTemp.purge(context.cacheDir) }
         )
     }
 
@@ -229,91 +151,9 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
             ?.filter { !it.isNullOrBlank() }
             .orEmpty()
         require(dnsServers.isNotEmpty()) {
-    "No system DNS servers are available"
-}
-
-val servers = dnsServers
+            "No system DNS servers are available"
+        }
         dnsConfig.parentFile?.mkdirs()
-        dnsConfig.writeText(servers.joinToString("\n") { "nameserver $it" } + "\n")
+        dnsConfig.writeText(dnsServers.joinToString("\n") { "nameserver $it" } + "\n")
     }
-
-    private fun sha256(file: File): String {
-        val md = java.security.MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
-            val buffer = ByteArray(128 * 1024)
-            while (true) {
-                val n = input.read(buffer)
-                if (n < 0) break
-                md.update(buffer, 0, n)
-            }
-        }
-        return md.digest().joinToString("") { "%02x".format(it) }
-    }
-
-    private fun defaultConfig() = """
-        server=1
-        daemon=0
-        listen=1
-        txindex=1
-        rpcbind=127.0.0.1
-        rpcallowip=127.0.0.1
-        # RPC port is chosen randomly per start and passed with -rpcport on the CLI.
-    """.trimIndent()
-
-    companion object {
-        /** The node data directory, shared with the controller so both sides measure the same tree. */
-        fun dataDirectory(context: Context): File = File(File(context.filesDir, "fullmode"), "stohn-data")
-    }
-}
-
-private class LocalRpc(private val dataDir: File, private val rpcPort: Int, private val walletName: String? = null) {
-    private fun request(method: String, params: org.json.JSONArray): org.json.JSONObject {
-        val guardedMethod = KeyExportGuard.requireRpcMethod(method)
-        val cookie = File(dataDir, ".cookie")
-        check(cookie.isFile && cookie.length() > 0L) { "Core RPC cookie not available yet" }
-        val endpoint = walletName?.let { "/wallet/" + java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20") } ?: "/"
-        check(rpcPort in 1024..65535) { "Core RPC port is not available" }
-        val connection = (URL("http://localhost:$rpcPort$endpoint").openConnection() as HttpURLConnection)
-        try {
-            connection.requestMethod = "POST"
-            connection.doOutput = true
-            connection.connectTimeout = 2500
-            connection.readTimeout = 5000
-            val auth = android.util.Base64.encodeToString(cookie.readBytes(), android.util.Base64.NO_WRAP)
-            connection.setRequestProperty("Authorization", "Basic $auth")
-            connection.setRequestProperty("Content-Type", "application/json")
-            val body = org.json.JSONObject().apply {
-                put("jsonrpc", "1.0")
-                put("id", "stohn-wallet")
-                put("method", guardedMethod)
-                put("params", params)
-            }.toString()
-            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val response = stream?.bufferedReader()?.use { it.readText() } ?: ""
-            val json = org.json.JSONObject(response)
-            if (json.has("error") && !json.isNull("error")) {
-                error(json.optJSONObject("error")?.optString("message") ?: "RPC error")
-            }
-            return json
-        } finally {
-            connection.disconnect()
-        }
-    }
-
-    fun objectResult(method: String, params: org.json.JSONArray = org.json.JSONArray()): org.json.JSONObject =
-        request(method, params).optJSONObject("result") ?: error("RPC result for $method is not an object")
-
-    fun arrayResult(method: String, params: org.json.JSONArray = org.json.JSONArray()): org.json.JSONArray =
-        request(method, params).optJSONArray("result") ?: error("RPC result for $method is not an array")
-
-    fun stringResult(method: String, params: org.json.JSONArray = org.json.JSONArray()): String =
-        request(method, params).optString("result")
-
-    fun voidResult(method: String, params: org.json.JSONArray = org.json.JSONArray()) {
-        val response = request(method, params)
-        require(response.has("result")) { "RPC response for $method has no result field" }
-        require(response.isNull("result")) { "RPC result for $method was expected to be null" }
-    }
-}
+}

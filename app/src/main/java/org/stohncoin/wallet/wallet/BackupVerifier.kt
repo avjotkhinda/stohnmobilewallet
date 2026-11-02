@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
+import org.stohncoin.wallet.runtime.RuntimeBackend
 
 /**
  * Test-restore: proves a backup decrypts and unpacks into a usable wallet *without* touching the
@@ -108,7 +108,7 @@ data class BackupVerification(
  * wallet directory, and asks the official Core wallet tool to confirm the wallet when the local
  * runtime is up so "valid" means "Core can open it", not merely "the zip looked right".
  */
-class WalletBackupVerifier(private val context: Context, private val runtime: EmbeddedLinuxRuntime?) {
+class WalletBackupVerifier(private val context: Context, private val runtime: RuntimeBackend?) {
 
     suspend fun verify(input: File, password: CharArray): BackupVerification = withContext(Dispatchers.IO) {
         require(input.isFile) { "Backup file does not exist" }

@@ -18,10 +18,14 @@
 ./app/src/main/java/org/stohncoin/wallet/core/SyncProgress.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/EmbeddedLinuxRuntime.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/KeyExportGuard.kt
+./app/src/main/java/org/stohncoin/wallet/runtime/LocalRpc.kt
+./app/src/main/java/org/stohncoin/wallet/runtime/NativeRuntime.kt
+./app/src/main/java/org/stohncoin/wallet/runtime/ProcessRunner.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeBackend.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeInstaller.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeTemp.kt
+./app/src/main/java/org/stohncoin/wallet/runtime/WalletToolArgs.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/StohnWalletScreen.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/BackupCrypto.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/BackupManifest.kt
@@ -51,10 +55,12 @@
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupCryptoTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupManifestTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/KeyExportGuardTest.kt
+./app/src/test/java/org/stohncoin/wallet/runtime/NativeLaunchTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupReminderTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupRestoreRoundTripTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupVerifierTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/ScryptTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/WalletToolArgsTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookRoundTripTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AmountsTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/RuntimeTempTest.kt

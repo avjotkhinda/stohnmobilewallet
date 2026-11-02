@@ -2,7 +2,7 @@ package org.stohncoin.wallet.wallet
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
+import org.stohncoin.wallet.runtime.RuntimeBackend
 import java.io.File
 
 /**
@@ -11,7 +11,7 @@ import java.io.File
  * records) and `createfromdump` reach Core; plaintext key export is refused by
  * [org.stohncoin.wallet.runtime.KeyExportGuard].
  */
-class CoreWalletMigration(private val runtime: EmbeddedLinuxRuntime) : WalletMigration {
+class CoreWalletMigration(private val runtime: RuntimeBackend) : WalletMigration {
     override suspend fun inspect(source: File): WalletInfo = withContext(Dispatchers.IO) {
         val staged = requireReadable(source)
         val workspace = runtime.createWalletToolWorkspace("inspect")

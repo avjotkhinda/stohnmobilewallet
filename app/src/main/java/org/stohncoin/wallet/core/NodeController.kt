@@ -16,7 +16,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
 import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.runtime.RuntimeBackendFactory
 import org.stohncoin.wallet.runtime.RuntimeInstaller
@@ -39,7 +38,7 @@ class NodeController private constructor(context: Context) {
     private val startMutex = Mutex()
     private val walletMutex = Mutex()
     private val prefs = appContext.getSharedPreferences("stohn_wallet", Context.MODE_PRIVATE)
-    private val dataDir = EmbeddedLinuxRuntime.dataDirectory(appContext)
+    private val dataDir = RuntimeBackend.dataDirectory(appContext)
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
     private val _backupReminder = MutableStateFlow(readBackupReminder())
@@ -116,12 +115,12 @@ class NodeController private constructor(context: Context) {
     }
 
     private suspend fun restoreWallet(b: RuntimeBackend) {
-        val embedded = b as? EmbeddedLinuxRuntime ?: return
-        val loadedWallets = embedded.rpcArray("listwallets")
+        val node = b
+        val loadedWallets = node.rpcArray("listwallets")
         val savedName = activeWalletName
         if (savedName != null) {
             val alreadyLoaded = (0 until loadedWallets.length()).any { loadedWallets.optString(it) == savedName }
-            if (!alreadyLoaded) embedded.rpcCall("loadwallet", org.json.JSONArray().put(savedName))
+            if (!alreadyLoaded) node.rpcCall("loadwallet", org.json.JSONArray().put(savedName))
             return
         }
 
@@ -131,16 +130,16 @@ class NodeController private constructor(context: Context) {
         }
 
         // Reuse a wallet left on disk before creating a new one; never silently replace it.
-        val walletDirectory = embedded.rpcCall("listwalletdir").optJSONArray("wallets")
+        val walletDirectory = node.rpcCall("listwalletdir").optJSONArray("wallets")
         if (walletDirectory != null && walletDirectory.length() > 0) {
             val name = walletDirectory.optJSONObject(0)?.optString("name").orEmpty()
             require(name.isNotBlank()) { "Core returned an invalid wallet directory entry" }
-            embedded.rpcCall("loadwallet", org.json.JSONArray().put(name))
+            node.rpcCall("loadwallet", org.json.JSONArray().put(name))
             setActiveWalletName(name)
             return
         }
 
-        embedded.rpcCall("createwallet", org.json.JSONArray().put(DEFAULT_WALLET_NAME))
+        node.rpcCall("createwallet", org.json.JSONArray().put(DEFAULT_WALLET_NAME))
         setActiveWalletName(DEFAULT_WALLET_NAME)
     }
 
@@ -181,8 +180,8 @@ class NodeController private constructor(context: Context) {
         }
     }
 
-    private fun embedded(): EmbeddedLinuxRuntime = backend as? EmbeddedLinuxRuntime ?: error("Full Mode node is not running")
-    private fun walletRpc(): WalletRpc = WalletRpc(embedded(), activeWalletName)
+    private fun node(): RuntimeBackend = backend ?: error("Full Mode node is not running")
+    private fun walletRpc(): WalletRpc = WalletRpc(node(), activeWalletName)
 
     suspend fun walletInfo(): WalletRpc.WalletInfoSnapshot = walletMutex.withLock { walletRpc().walletInfo() }
     suspend fun newAddress(): String = walletMutex.withLock { walletRpc().newAddress() }
@@ -208,7 +207,7 @@ class NodeController private constructor(context: Context) {
     suspend fun lockWallet() = walletMutex.withLock { walletRpc().lock() }
 
     suspend fun setWalletPassphrase(newPassphrase: CharArray) = walletMutex.withLock {
-        val b = embedded()
+        val b = node()
         try {
             walletRpc().encrypt(newPassphrase)
         } finally {
@@ -226,7 +225,7 @@ class NodeController private constructor(context: Context) {
         }
     }
 
-    private suspend fun restartCoreAfterWalletChange(b: EmbeddedLinuxRuntime, message: String) {
+    private suspend fun restartCoreAfterWalletChange(b: RuntimeBackend, message: String) {
         startJob?.cancel()
         startJob = null
         backend = null
@@ -236,13 +235,13 @@ class NodeController private constructor(context: Context) {
         startCoreFromService()
     }
 
-    suspend fun inspectWalletDat(source: File): WalletInfo = CoreWalletMigration(embedded()).inspect(source)
+    suspend fun inspectWalletDat(source: File): WalletInfo = CoreWalletMigration(node()).inspect(source)
 
     suspend fun importWalletDat(source: File, destination: File): ImportResult =
     walletMutex.withLock {
-        val result = CoreWalletMigration(embedded()).import(source, destination)
+        val result = CoreWalletMigration(node()).import(source, destination)
         val walletName = destination.name
-        embedded().rpcCall("loadwallet", org.json.JSONArray().put(walletName))
+        node().rpcCall("loadwallet", org.json.JSONArray().put(walletName))
         setActiveWalletName(walletName)
         result
     }
@@ -250,7 +249,7 @@ class NodeController private constructor(context: Context) {
     suspend fun createWalletBackup(destination: File, password: CharArray): WalletBackupManager.BackupResult =
         walletMutex.withLock {
             val name = activeWalletName ?: DEFAULT_WALLET_NAME
-            val result = WalletBackupManager(appContext, embedded()).createCoreBackup(
+            val result = WalletBackupManager(appContext, node()).createCoreBackup(
                 destination,
                 password,
                 name,
@@ -262,9 +261,9 @@ class NodeController private constructor(context: Context) {
 
     suspend fun restoreWalletBackup(input: File, password: CharArray, destination: File): ImportResult =
         walletMutex.withLock {
-            val restored = WalletBackupManager(appContext, embedded()).restoreCoreBackup(input, password, destination)
+            val restored = WalletBackupManager(appContext, node()).restoreCoreBackup(input, password, destination)
             val walletName = destination.name
-            embedded().rpcCall("loadwallet", org.json.JSONArray().put(walletName))
+            node().rpcCall("loadwallet", org.json.JSONArray().put(walletName))
             setActiveWalletName(walletName)
             // The creation height belongs to the wallet, not to this restore: carry it forward so
             // the next backup still says when the wallet began.
@@ -278,7 +277,7 @@ class NodeController private constructor(context: Context) {
      */
     suspend fun verifyWalletBackup(input: File, password: CharArray): BackupVerification =
         walletMutex.withLock {
-            val verification = WalletBackupVerifier(appContext, backend as? EmbeddedLinuxRuntime).verify(input, password)
+            val verification = WalletBackupVerifier(appContext, backend).verify(input, password)
             // Compare what the backup claims with this device: a different wallet, a different
             // build, or a height the node has not reached yet are all worth saying out loud.
             verification.copy(
@@ -298,7 +297,7 @@ class NodeController private constructor(context: Context) {
 
     /** Chain height as the node reports it, or null when the node cannot answer. */
     private suspend fun currentChainHeight(): Long? = runCatching {
-        embedded().rpcCall("getblockchaininfo").optLong("blocks", -1L).takeIf { it >= 0L }
+        node().rpcCall("getblockchaininfo").optLong("blocks", -1L).takeIf { it >= 0L }
     }.getOrNull()
 
     /**
