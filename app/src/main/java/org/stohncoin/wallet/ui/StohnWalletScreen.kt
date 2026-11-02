@@ -25,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -279,7 +280,8 @@ fun StohnWalletScreen(node: NodeController) {
     }
 
     LaunchedEffect(Unit) {
-        node.start()
+        // Auto-start on open, but a node the user stopped stays stopped across a rotation.
+        node.startUnlessStopped()
     }
     LaunchedEffect(state.status) {
         if (state.status == NodeController.Status.READY || state.status == NodeController.Status.SYNCING) {
@@ -393,7 +395,7 @@ fun StohnWalletScreen(node: NodeController) {
                             }
                         )
                         "receive" -> ReceivePage(receiveAddress, onCopy = { copy(context, receiveAddress) })
-                        "node" -> NodeStatusPage(state, onRetry = { node.start() })
+                        "node" -> NodeStatusPage(state, onStart = { node.start() }, onStop = { node.stop() })
                         "security" -> SecurityPage(info = walletInfo, onBackup = { backupFrom = "security"; route = "backup" }, onChangePasskey = { dialog = DialogKind.Security }, onLock = { scope.launch { runCatching { node.lockWallet() } } })
                         "backup" -> BackupPage(
                             password = backupPassword,
@@ -555,13 +557,22 @@ private fun WalletHome(
                         Text("${if (state.status == NodeController.Status.READY) "●" else "●"} ${state.status.name.lowercase().replaceFirstChar { it.uppercase() }}", color = if (state.status == NodeController.Status.ERROR) Danger else Success, fontSize = 12.sp)
                         Icon(Icons.Default.ChevronRight, null, tint = DarkMuted)
                     }
+                    state.syncPercent?.let { percent ->
+                        LinearProgressIndicator(
+                            progress = { percent / 100f },
+                            modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)),
+                            color = Electric,
+                            trackColor = Color(0xFF16293A)
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                         Column { Text("Block Height", fontSize = 10.sp, color = DarkMuted); Text("${state.blocks}", fontSize = 12.sp) }
+                        Column { Text("Sync", fontSize = 10.sp, color = DarkMuted); Text(state.syncPercent?.let { "$it%" } ?: "—", fontSize = 12.sp) }
                         Column { Text("Peers", fontSize = 10.sp, color = DarkMuted); Text("${state.peers}", fontSize = 12.sp) }
                         Column { Text("Connection", fontSize = 10.sp, color = DarkMuted); Text("Local Node", fontSize = 12.sp) }
                     }
-                    if (state.status == NodeController.Status.ERROR) {
-                        OutlinedButton(onClick = { node.start() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Retry node startup") }
+                    if (state.canStart) {
+                        OutlinedButton(onClick = { node.start() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Start node") }
                     }
                 }
             }

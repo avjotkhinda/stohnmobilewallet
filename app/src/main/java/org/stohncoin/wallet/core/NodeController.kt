@@ -43,6 +43,7 @@ class NodeController private constructor(context: Context) {
     val backupReminder: StateFlow<BackupReminder.State> = _backupReminder
 
     @Volatile private var backend: RuntimeBackend? = null
+    @Volatile private var userStopped = false
     @Volatile private var activeWalletName: String? = prefs.getString(KEY_WALLET_NAME, null)
     private var startJob: Job? = null
 
@@ -52,13 +53,24 @@ class NodeController private constructor(context: Context) {
         val headers: Long = 0,
         val peers: Int = 0,
         val initialBlockDownload: Boolean = true,
+        /** Whole percent of headers validated, or null before Core reports any headers. */
+        val syncPercent: Int? = null,
         val message: String = "Node stopped"
-    )
+    ) {
+        /** True while the node is up, which is when the user may ask it to stop. */
+        val isRunning: Boolean
+            get() = status == Status.STARTING || status == Status.SYNCING || status == Status.READY
 
-    enum class Status { STOPPED, STARTING, SYNCING, READY, ERROR }
+        /** True while the node is down, which is when the user may ask it to start. */
+        val canStart: Boolean
+            get() = status == Status.STOPPED || status == Status.ERROR
+    }
+
+    enum class Status { STOPPED, STARTING, SYNCING, READY, STOPPING, ERROR }
 
     fun start() {
-        if (_state.value.status == Status.READY || _state.value.status == Status.SYNCING || _state.value.status == Status.STARTING) return
+        if (_state.value.isRunning || _state.value.status == Status.STOPPING) return
+        userStopped = false
         val intent = Intent(appContext, NodeService::class.java)
         runCatching { ContextCompat.startForegroundService(appContext, intent) }
             .onFailure { _state.value = State(status = Status.ERROR, message = it.message ?: "Unable to start node service") }
@@ -137,6 +149,12 @@ class NodeController private constructor(context: Context) {
     private suspend fun poll(b: RuntimeBackend) {
         var failures = 0
         while (scope.coroutineContext.isActive && backend === b) {
+            // A stop request wins: keep the last counters on screen but never flip the status back
+            // to SYNCING or READY while the service is on its way out.
+            if (_state.value.status == Status.STOPPING) {
+                delay(500)
+                continue
+            }
             val info = try {
                 b.status()
             } catch (t: Throwable) {
@@ -153,6 +171,7 @@ class NodeController private constructor(context: Context) {
                 headers = info.headers,
                 peers = info.peers,
                 initialBlockDownload = info.ibd,
+                syncPercent = if (ready) 100 else SyncProgress.percent(info.blocks, info.headers),
                 message = if (ready) "Stohn Core is synchronized" else "Synchronizing Stohn blockchain…"
             )
             delay(3000)
@@ -319,7 +338,31 @@ class NodeController private constructor(context: Context) {
         _backupReminder.value = _backupReminder.value.copy(sendsSinceBackup = sends)
     }
 
-    fun stop() = appContext.stopService(Intent(appContext, NodeService::class.java))
+    /**
+     * Asks the foreground service to stop. The service owns the runtime, so the shutdown itself
+     * happens in [stopCoreFromService]; this only records the user's choice and shows it, so the
+     * node screen cannot offer Start until Stop has finished.
+     */
+    fun stop() {
+        if (!_state.value.isRunning) return
+        userStopped = true
+        _state.value = _state.value.copy(status = Status.STOPPING, message = "Stopping the local node…")
+        val stopped = runCatching { appContext.stopService(Intent(appContext, NodeService::class.java)) }
+            .getOrDefault(false)
+        // stopService returns false when the service was never running (for example after the
+        // system killed it), and then nothing else will release the backend.
+        if (!stopped) stopCoreFromService()
+    }
+
+    /**
+     * Auto-start on app open, unless the user has asked the node to stay stopped. A rotation or a
+     * trip through a system dialog recreates the screen and re-runs this, so the choice has to
+     * outlive the composition; it deliberately does not outlive the process.
+     */
+    fun startUnlessStopped() {
+        if (userStopped) return
+        start()
+    }
 
     internal fun stopCoreFromService() {
         startJob?.cancel()

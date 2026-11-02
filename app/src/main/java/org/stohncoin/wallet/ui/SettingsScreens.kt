@@ -25,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -92,25 +93,71 @@ fun ActivityPage(state: NodeController.State, txs: List<WalletRpc.WalletTransact
 
 
 @Composable
-fun NodeStatusPage(state: NodeController.State, onRetry: () -> Unit) {
+fun NodeStatusPage(state: NodeController.State, onStart: () -> Unit, onStop: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1B28)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3549))) {
             Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Circle, null, tint = if (state.status == NodeController.Status.ERROR) Danger else Success, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(9.dp)); Text(if (state.status == NodeController.Status.READY) "Node Synced" else state.status.name.lowercase().replaceFirstChar { it.uppercase() }, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(9.dp)); Text(nodeHeadline(state), fontWeight = FontWeight.Bold)
                 }
                 Text(state.message, color = DarkMuted, fontSize = 12.sp)
+                state.syncPercent?.let { percent -> SyncMeter(percent, state.blocks, state.headers) }
                 HorizontalDivider(color = Color(0xFF203244))
                 NodeFact("Block Height", state.blocks.toString())
                 NodeFact("Headers", state.headers.toString())
                 NodeFact("Connections", "${state.peers} peers")
                 NodeFact("Network", "Mainnet")
                 NodeFact("Node", "Local Full Node")
-                NodeFact("Sync", if (state.initialBlockDownload) "In progress" else "Up to date")
+                NodeFact("Sync", nodeSyncLabel(state))
             }
         }
-        if (state.status == NodeController.Status.ERROR) Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Retry node startup") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(onClick = onStart, enabled = state.canStart, modifier = Modifier.weight(1f)) { Text("Start node") }
+            OutlinedButton(onClick = onStop, enabled = state.isRunning, modifier = Modifier.weight(1f)) { Text("Stop node") }
+        }
+        Text(
+            "Stopping the node takes the local RPC offline. The wallet, its keys and the downloaded chain stay on this device.",
+            color = DarkMuted,
+            fontSize = 11.sp
+        )
+    }
+}
+
+
+private fun nodeHeadline(state: NodeController.State): String = when (state.status) {
+    NodeController.Status.READY -> "Node Synced"
+    NodeController.Status.STOPPED -> "Node Stopped"
+    else -> state.status.name.lowercase().replaceFirstChar { it.uppercase() }
+}
+
+
+private fun nodeSyncLabel(state: NodeController.State): String = when {
+    state.canStart -> "Not running"
+    state.status == NodeController.Status.STOPPING -> "Stopping"
+    state.syncPercent == null -> "Waiting for headers"
+    state.initialBlockDownload -> "In progress"
+    else -> "Up to date"
+}
+
+
+/** Progress bar plus the counters behind it, so "63%" is never a mystery number. */
+@Composable
+private fun SyncMeter(percent: Int, blocks: Long, headers: Long) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LinearProgressIndicator(
+            progress = { percent / 100f },
+            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+            color = Electric,
+            trackColor = Color(0xFF16293A)
+        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (percent >= 100) "Synchronized" else "${(headers - blocks).coerceAtLeast(0L)} blocks behind",
+                color = DarkMuted, fontSize = 11.sp, modifier = Modifier.weight(1f)
+            )
+            Text("$percent%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (percent >= 100) Success else Electric)
+        }
     }
 }
 

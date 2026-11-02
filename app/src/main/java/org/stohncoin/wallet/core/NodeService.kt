@@ -78,6 +78,7 @@ class NodeService : Service() {
     private fun publicText(status: NodeController.Status): String = when (status) {
         NodeController.Status.STARTING -> "Preparing the local node"
         NodeController.Status.SYNCING -> "Local node synchronizing"
+        NodeController.Status.STOPPING -> "Local node stopping"
         NodeController.Status.READY -> "Local node is running"
         NodeController.Status.ERROR -> "Local node stopped"
         NodeController.Status.STOPPED -> "Local node is stopped"
