@@ -13,5 +13,5 @@ interface RuntimeBackend {
 }
 
 object RuntimeBackendFactory {
-    fun create(context: Context): RuntimeBackend = EmbeddedLinuxRuntime(context)
+    fun create(context: Context, pruneMiB: Int = 0): RuntimeBackend = EmbeddedLinuxRuntime(context, pruneMiB)
 }

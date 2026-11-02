@@ -2,6 +2,7 @@ package org.stohncoin.wallet.core
 
 import android.content.Context
 import android.content.Intent
+import android.os.StatFs
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +15,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.stohncoin.wallet.runtime.EmbeddedLinuxRuntime
 import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.runtime.RuntimeBackendFactory
@@ -37,6 +39,7 @@ class NodeController private constructor(context: Context) {
     private val startMutex = Mutex()
     private val walletMutex = Mutex()
     private val prefs = appContext.getSharedPreferences("stohn_wallet", Context.MODE_PRIVATE)
+    private val dataDir = EmbeddedLinuxRuntime.dataDirectory(appContext)
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
     private val _backupReminder = MutableStateFlow(readBackupReminder())
@@ -85,7 +88,7 @@ class NodeController private constructor(context: Context) {
                     _state.value = State(status = Status.STARTING, message = "Installing Full Mode runtime…")
                     RuntimeInstaller.installIfNeeded(appContext)
                     _state.value = State(status = Status.STARTING, message = "Starting Stohn Core…")
-                    val b = RuntimeBackendFactory.create(appContext)
+                    val b = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB)
                     b.start()
                     backend = b
                     waitForRpc(b)
@@ -338,6 +341,50 @@ class NodeController private constructor(context: Context) {
         _backupReminder.value = _backupReminder.value.copy(sendsSinceBackup = sends)
     }
 
+    /** The prune mode the next Core start will use. */
+    fun pruneMode(): NodeStorage.Mode =
+        NodeStorage.Mode.values().firstOrNull { it.name == prefs.getString(KEY_PRUNE_MODE, null) } ?: NodeStorage.Mode.FULL
+
+    /** Bytes and files the node's data directory currently holds. */
+    suspend fun chainUsage(): NodeStorage.Usage = withContext(Dispatchers.IO) { NodeStorage.measure(dataDir) }
+
+    /** Free space on the volume the node writes to, or zero when the device will not say. */
+    fun freeBytes(): Long = runCatching { StatFs(appContext.filesDir.absolutePath).availableBytes }.getOrDefault(0L)
+
+    /**
+     * Switches prune mode by clearing the chain database, which is the only way Core accepts a
+     * different `-prune`. Wallet files, the config and the RPC cookie are untouched; the chain is
+     * downloaded again on the next start. The node is stopped first so nothing writes into a
+     * database that is about to be deleted.
+     */
+    suspend fun applyPruneMode(mode: NodeStorage.Mode): NodeStorage.Usage = withContext(Dispatchers.IO) {
+        val previous = pruneMode()
+        if (mode == previous) return@withContext NodeStorage.Usage(0L, 0)
+        val wasRunning = _state.value.isRunning || _state.value.status == Status.STOPPING
+        if (wasRunning) {
+            stop()
+            repeat(60) {
+                if (_state.value.status == Status.STOPPED) return@repeat
+                delay(250)
+            }
+            check(_state.value.status == Status.STOPPED) {
+                "The node did not stop, so the chain database was left alone"
+            }
+            // The service clears the backend before Core's process is gone; give it a moment so the
+            // delete never races a dying writer.
+            delay(1200)
+        }
+        prefs.edit().putString(KEY_PRUNE_MODE, mode.name).apply()
+        // A chain that could not be cleared must not leave a mode Core will refuse on next start.
+        val freed = runCatching { NodeStorage.resetChainData(dataDir) }.getOrElse { failure ->
+            prefs.edit().putString(KEY_PRUNE_MODE, previous.name).apply()
+            if (wasRunning) start()
+            throw failure
+        }
+        if (wasRunning) start()
+        freed
+    }
+
     /**
      * Asks the foreground service to stop. The service owns the runtime, so the shutdown itself
      * happens in [stopCoreFromService]; this only records the user's choice and shows it, so the
@@ -378,6 +425,7 @@ class NodeController private constructor(context: Context) {
         private const val KEY_LAST_BACKUP_AT = "last_backup_at"
         private const val KEY_SENDS_SINCE_BACKUP = "sends_since_backup"
         private const val KEY_CREATED_HEIGHT = "created_height:"
+        private const val KEY_PRUNE_MODE = "prune_mode"
         private const val DEFAULT_WALLET_NAME = "stohn-wallet"
         @Volatile private var instance: NodeController? = null
         fun get(context: Context): NodeController = instance ?: synchronized(this) {

@@ -12,6 +12,7 @@
 ./app/src/main/assets/legal/third_party_runtime_notices.md
 ./app/src/main/java/org/stohncoin/wallet/MainActivity.kt
 ./app/src/main/java/org/stohncoin/wallet/core/NodeController.kt
+./app/src/main/java/org/stohncoin/wallet/core/NodeStorage.kt
 ./app/src/main/java/org/stohncoin/wallet/core/NodeService.kt
 ./app/src/main/java/org/stohncoin/wallet/core/SyncProgress.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/EmbeddedLinuxRuntime.kt
@@ -39,6 +40,7 @@
 ./app/src/main/java/org/stohncoin/wallet/ui/SendReceiveScreens.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/SettingsScreens.kt
 ./app/src/test/java/org/stohncoin/wallet/security/LockGateTest.kt
+./app/src/test/java/org/stohncoin/wallet/core/NodeStorageTest.kt
 ./app/src/test/java/org/stohncoin/wallet/core/SyncProgressTest.kt
 ./app/src/test/java/org/stohncoin/wallet/security/PinHasherTest.kt
 ./app/src/test/java/org/stohncoin/wallet/security/PinThrottleTest.kt

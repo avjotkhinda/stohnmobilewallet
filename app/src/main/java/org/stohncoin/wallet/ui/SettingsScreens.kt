@@ -46,6 +46,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
+import org.stohncoin.wallet.core.NodeStorage
 import org.stohncoin.wallet.wallet.Amounts
 import org.stohncoin.wallet.wallet.BackupVerification
 import org.stohncoin.wallet.wallet.WalletRpc
@@ -93,7 +94,16 @@ fun ActivityPage(state: NodeController.State, txs: List<WalletRpc.WalletTransact
 
 
 @Composable
-fun NodeStatusPage(state: NodeController.State, onStart: () -> Unit, onStop: () -> Unit) {
+fun NodeStatusPage(
+    state: NodeController.State,
+    chainUsage: NodeStorage.Usage?,
+    freeBytes: Long?,
+    pruneMode: NodeStorage.Mode,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onPruneMode: (NodeStorage.Mode) -> Unit
+) {
+    var showStorageDialog by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1B28)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3549))) {
             Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -110,6 +120,11 @@ fun NodeStatusPage(state: NodeController.State, onStart: () -> Unit, onStop: () 
                 NodeFact("Network", "Mainnet")
                 NodeFact("Node", "Local Full Node")
                 NodeFact("Sync", nodeSyncLabel(state))
+                HorizontalDivider(color = Color(0xFF203244))
+                NodeFact("Chain data", chainUsage?.let { NodeStorage.format(it.bytes) } ?: "Measuring…")
+                NodeFact("Free space", freeBytes?.let { NodeStorage.format(it) } ?: "Unknown")
+                NodeFact("Storage mode", pruneMode.label)
+                TextButton(onClick = { showStorageDialog = true }) { Text("Change storage mode", color = Electric) }
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -122,6 +137,55 @@ fun NodeStatusPage(state: NodeController.State, onStart: () -> Unit, onStop: () 
             fontSize = 11.sp
         )
     }
+    if (showStorageDialog) {
+        StorageModeDialog(
+            current = pruneMode,
+            onDismiss = { showStorageDialog = false },
+            onSelect = { mode ->
+                showStorageDialog = false
+                if (mode != pruneMode) onPruneMode(mode)
+            }
+        )
+    }
+}
+
+
+/** Explains the one thing a prune change costs before it happens: the downloaded chain. */
+@Composable
+private fun StorageModeDialog(current: NodeStorage.Mode, onDismiss: () -> Unit, onSelect: (NodeStorage.Mode) -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Chain storage") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "A pruned node keeps only recent blocks, so it needs far less space, but it cannot serve old blocks to other wallets.",
+                    color = DarkMuted,
+                    fontSize = 11.sp
+                )
+                Text(
+                    "Stohn Core only accepts a different mode on a fresh chain database, so switching deletes the downloaded chain and the node re-syncs from the beginning. Your wallet, keys and backups are not touched.",
+                    color = Color(0xFFE9B455),
+                    fontSize = 11.sp
+                )
+                NodeStorage.Mode.values().forEach { mode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(mode) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = current == mode, onClick = { onSelect(mode) })
+                        Column {
+                            Text(mode.label, fontSize = 14.sp)
+                            Text(mode.detail, color = DarkMuted, fontSize = 10.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 

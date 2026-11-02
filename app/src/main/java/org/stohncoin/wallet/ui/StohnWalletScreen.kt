@@ -46,6 +46,7 @@ import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
+import org.stohncoin.wallet.core.NodeStorage
 import org.stohncoin.wallet.wallet.Amounts
 import org.stohncoin.wallet.wallet.BackupReminder
 import org.stohncoin.wallet.wallet.BackupVerification
@@ -74,6 +75,10 @@ fun StohnWalletScreen(node: NodeController) {
     var pendingRestore by remember { mutableStateOf<PendingRestore?>(null) }
     var dialog by remember { mutableStateOf<DialogKind?>(null) }
     var busy by remember { mutableStateOf(false) }
+    // Chain storage shown on the node screen; measured when that screen opens and after a mode change.
+    var chainUsage by remember { mutableStateOf<NodeStorage.Usage?>(null) }
+    var freeSpace by remember { mutableStateOf<Long?>(null) }
+    var pruneMode by remember { mutableStateOf(node.pruneMode()) }
     var selectedTx by remember { mutableStateOf<WalletRpc.WalletTransaction?>(null) }
     // Address book is opened from Settings or Send; back returns to whichever one opened it.
     var addressBookFrom by rememberSaveable { mutableStateOf("home") }
@@ -288,6 +293,14 @@ fun StohnWalletScreen(node: NodeController) {
             runCatching { refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi } }
         }
     }
+    // Keyed on the route and on reaching READY, so the data directory is not walked every poll tick.
+    LaunchedEffect(route, state.status == NodeController.Status.READY) {
+        if (route == "node") {
+            pruneMode = node.pruneMode()
+            runCatching { chainUsage = node.chainUsage() }
+            freeSpace = node.freeBytes()
+        }
+    }
 
     MaterialTheme(colorScheme = DarkScheme) {
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF06101C), DarkBg, Color(0xFF02070D))))) {
@@ -395,7 +408,28 @@ fun StohnWalletScreen(node: NodeController) {
                             }
                         )
                         "receive" -> ReceivePage(receiveAddress, onCopy = { copy(context, receiveAddress) })
-                        "node" -> NodeStatusPage(state, onStart = { node.start() }, onStop = { node.stop() })
+                        "node" -> NodeStatusPage(
+                            state = state,
+                            chainUsage = chainUsage,
+                            freeBytes = freeSpace,
+                            pruneMode = pruneMode,
+                            onStart = { node.start() },
+                            onStop = { node.stop() },
+                            onPruneMode = { mode ->
+                                scope.launch {
+                                    busy = true
+                                    runCatching { node.applyPruneMode(mode) }
+                                        .onSuccess {
+                                            pruneMode = node.pruneMode()
+                                            runCatching { chainUsage = node.chainUsage() }
+                                            freeSpace = node.freeBytes()
+                                            Toast.makeText(context, "Storage mode set to ${mode.label}", Toast.LENGTH_LONG).show()
+                                        }
+                                        .onFailure { Toast.makeText(context, "Storage mode unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
+                                    busy = false
+                                }
+                            }
+                        )
                         "security" -> SecurityPage(info = walletInfo, onBackup = { backupFrom = "security"; route = "backup" }, onChangePasskey = { dialog = DialogKind.Security }, onLock = { scope.launch { runCatching { node.lockWallet() } } })
                         "backup" -> BackupPage(
                             password = backupPassword,

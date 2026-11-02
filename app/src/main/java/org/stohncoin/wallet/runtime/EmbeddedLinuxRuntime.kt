@@ -19,13 +19,13 @@ import kotlinx.coroutines.withContext
  * Production path: replace this backend with the Android-native NDK backend once stohncoind is
  * successfully ported to bionic. The interface stays identical.
  */
-class EmbeddedLinuxRuntime(private val context: Context) : RuntimeBackend {
+class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: Int = 0) : RuntimeBackend {
     private val root = File(context.filesDir, "fullmode")
     private val runtime = File(root, "runtime")
     private val rootfs = File(runtime, "rootfs")
     private val coreBin = File(runtime, "bin/stohncoind")
     private val walletTool = File(runtime, "bin/stohncoin-wallet")
-    private val dataDir = File(root, "stohn-data")
+    private val dataDir = dataDirectory(context)
     private val conf = File(dataDir, "stohn.conf")
     private var process: Process? = null
     // RPC listens on a fresh random loopback port for every start so another app on the
@@ -69,7 +69,10 @@ class EmbeddedLinuxRuntime(private val context: Context) : RuntimeBackend {
             "-conf=/home/stohn/.stohn/stohn.conf",
             "-datadir=/home/stohn/.stohn",
             "-rpcport=$rpcPort",
-            "-daemon=0"
+            "-daemon=0",
+            // Prune depth is fixed for the life of a chain database; NodeStorage clears the chain
+            // when the mode changes, because Core refuses to reuse one built under another mode.
+            "-prune=$pruneMiB"
         ).apply {
             environment()["PROOT_LOADER"] = loader.absolutePath
             environment()["PROOT_TMP_DIR"] = context.cacheDir.absolutePath
@@ -242,6 +245,11 @@ val servers = dnsServers
         rpcallowip=127.0.0.1
         # RPC port is chosen randomly per start and passed with -rpcport on the CLI.
     """.trimIndent()
+
+    companion object {
+        /** The node data directory, shared with the controller so both sides measure the same tree. */
+        fun dataDirectory(context: Context): File = File(File(context.filesDir, "fullmode"), "stohn-data")
+    }
 }
 
 private class LocalRpc(private val dataDir: File, private val rpcPort: Int, private val walletName: String? = null) {
