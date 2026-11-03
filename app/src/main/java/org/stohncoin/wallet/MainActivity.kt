@@ -13,7 +13,9 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import org.stohncoin.wallet.core.NodeController
+import org.stohncoin.wallet.runtime.RuntimeManifestTransport
 import org.stohncoin.wallet.runtime.RuntimeTemp
+import org.stohncoin.wallet.runtime.SignedRuntimeManifest
 import org.stohncoin.wallet.security.AppAuthManager
 import org.stohncoin.wallet.security.LockGate
 import org.stohncoin.wallet.ui.LockScreen
@@ -41,6 +43,15 @@ class MainActivity : FragmentActivity() {
         if (!node.state.value.isRunning) {
             Thread { runCatching { RuntimeTemp.purge(cacheDir) } }.start()
         }
+        // The runtime update path. While RuntimeManifest.MANIFEST_URL is blank this is a no-op that
+        // makes no request at all; a failed fetch only declines, leaving the pins in force untouched.
+        Thread {
+            runCatching {
+                RuntimeManifestTransport.refresh(
+                    SignedRuntimeManifest.updateDirectory(applicationContext)
+                )
+            }
+        }.start()
         locked = AppAuthManager.isAppLockEnabled(this)
         setContent {
             if (locked) {
