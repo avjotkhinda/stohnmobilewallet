@@ -1,0 +1,12 @@
+{
+  "generated_at": "2026-11-03 16:51:25.195966+00:00",
+  "package": "proot",
+  "original_download": "5.1.107.101",
+  "re_pinned_to": "5.1.107.102",
+  "reason": "5.1.107.101 was withdrawn from every Termux mirror (HTTP 404 on main, Cloudflare, grimler, TUNA, USTC, BFSU).",
+  "proot_bin_so_sha256": "fc632a66a262498517080e14930740910b7beb186e1ca613d371b3cb189f17d1",
+  "integrated_sha256": "fc632a66a262498517080e14930740910b7beb186e1ca613d371b3cb189f17d1",
+  "integrated_loader_sha256": "1da54355333cca3fb6ee10e3b82a24df24fb230c99241ce83809bf9e240609b5",
+  "delta": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925",
+  "delta_hex": "66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925"
+}
