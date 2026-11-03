@@ -10,7 +10,7 @@ object RuntimeManifest {
     const val DEBIAN_URL = "https://images.linuxcontainers.org/images/debian/bookworm/arm64/default/20260928_05:24/rootfs.tar.xz"
     // SHA-256 published by the Linux Containers image server for this exact immutable snapshot.
     const val DEBIAN_SHA256 = "89481e6ddbc13590d1c74841a96a5e6f539a047f546993747eaab205898df43f"
-    const val PROOT_SHA256 = "a7356df8dc18ca1d40bddeb85b816cb2214a45c2cb9c42df66e0473b694661fa"
+    const val PROOT_SHA256 = "fc632a66a262498517080e14930740910b7beb186e1ca613d371b3cb189f17d1"
     const val PROOT_LOADER_SHA256 = "1da54355333cca3fb6ee10e3b82a24df24fb230c99241ce83809bf9e240609b5"
     const val LIBTALLOC_SHA256 = "742b438c4d09e276985a61d44164c9de207b6d8cc268f3018cb3001961bcb309"
     const val LIBANDROID_SHMEM_SHA256 = "84475798e07c8174dbbfaec70a827fdb02f19ffa69a589380c13e7507fd0e731"

@@ -14,7 +14,15 @@ base=lock['repository'].rstrip('/')+'/'
 for pkg in lock['packages']:
     p=work/'downloads'/Path(pkg['path']).name
     if not p.exists() or hashlib.sha256(p.read_bytes()).hexdigest()!=pkg['sha256']:
-        urllib.request.urlretrieve(base+pkg['path'], p)
+        url=base+pkg['path']
+        try:
+            urllib.request.urlretrieve(url, p)
+        except Exception as e:
+            raise SystemExit(
+                f"FAIL: cannot download {pkg['name']} {pkg['version']} from {url}: {e}\n"
+                'The Termux repository drops old packages. Re-pin this lock entry to a version the '
+                'index still publishes, rebuild the bundle and copy the new RuntimeManifest hashes.'
+            )
     got=hashlib.sha256(p.read_bytes()).hexdigest()
     if got!=pkg['sha256']:
         raise SystemExit(f"FAIL: package hash mismatch for {pkg['name']}: {got}")
@@ -54,7 +62,7 @@ with (out/'PACKAGE-SHA256SUMS').open('w') as f:
     'Source: official Termux package repository\n'
     'Architecture: aarch64\n'
     'Packages are verified by SHA-256 before extraction.\n'
-    'PRoot upstream source: v5.1.107.101\n'
+    'PRoot upstream source: v5.1.107.102\n'
     'PRoot source SHA-256: 29385d1ddb619a9c4449ab512bfd55032034b22f724ddf98fc95ff300ea32135\n'
     'Final APK payload hashes are generated from the exact post-patchelf binaries in SHA256SUMS.\n'
 )
