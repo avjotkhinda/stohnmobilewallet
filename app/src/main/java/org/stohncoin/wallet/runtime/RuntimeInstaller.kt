@@ -589,7 +589,7 @@ object RuntimeInstaller {
         }
     }
 
-    private fun safeLinkTarget(
+    internal fun safeLinkTarget(
         root: File,
         linkParent: File,
         target: String
@@ -632,7 +632,7 @@ object RuntimeInstaller {
         return resolved
     }
 
-   private fun safeArchivePath(
+   internal fun safeArchivePath(
     name: String
 ): String {
     require(name.isNotBlank()) {
@@ -661,7 +661,7 @@ object RuntimeInstaller {
     }
 }
 
-    private fun safeDestination(
+    internal fun safeDestination(
         root: File,
         relative: String
     ): File {
