@@ -22,7 +22,7 @@ import kotlinx.coroutines.withContext
  * the glibc backend — a native binary that does not match its pin is a hard failure, never a
  * quiet swap to some other runtime.
  */
-class NativeRuntime(private val context: Context, private val pruneMiB: Int = 0) : RuntimeBackend {
+class NativeRuntime(private val context: Context, private val pruneMiB: Int, private val pins: RuntimePins) : RuntimeBackend {
     private val nativeDir = File(context.applicationInfo.nativeLibraryDir)
     private val core = File(nativeDir, NativeLaunch.CORE_LIB)
     private val walletTool = File(nativeDir, NativeLaunch.WALLET_TOOL_LIB)
@@ -40,7 +40,7 @@ class NativeRuntime(private val context: Context, private val pruneMiB: Int = 0)
     override suspend fun start() = withContext(Dispatchers.IO) {
         // Verified again here, not only in the factory: nothing runs between the decision and the
         // exec without being checked against the pin.
-        NativeLaunch.requireReady(core, walletTool, RuntimeManifest.NATIVE_CORE_SHA256, RuntimeManifest.NATIVE_WALLET_TOOL_SHA256)
+        NativeLaunch.requireReady(core, walletTool, pins.nativeCoreSha256, pins.nativeWalletToolSha256)
         dataDir.mkdirs()
         if (!conf.exists()) conf.writeText(RuntimeBackend.coreConfig())
         // RPC listens on a fresh random loopback port for every start so another app on the
@@ -81,7 +81,7 @@ class NativeRuntime(private val context: Context, private val pruneMiB: Int = 0)
     ): RuntimeBackend.ToolResult {
         check(walletTool.isFile) { "Native stohncoin-wallet tool is not installed in this build" }
         check(workspace.isDirectory) { "Wallet migration workspace is missing" }
-        NativeLaunch.requireReady(core, walletTool, RuntimeManifest.NATIVE_CORE_SHA256, RuntimeManifest.NATIVE_WALLET_TOOL_SHA256)
+        NativeLaunch.requireReady(core, walletTool, pins.nativeCoreSha256, pins.nativeWalletToolSha256)
         // WalletToolArgs applies the key-export guard, so this launcher is as locked down as PRoot's.
         val args = listOf(walletTool.absolutePath) + WalletToolArgs.build(
             dataDir = workspace.absolutePath,

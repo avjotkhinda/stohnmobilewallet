@@ -25,6 +25,7 @@ object RuntimeInstaller {
 
     suspend fun installIfNeeded(context: Context) = withContext(Dispatchers.IO) {
         mutex.withLock {
+            val pins = SignedRuntimeManifest.effective(context)
             val root = File(context.filesDir, "fullmode/runtime")
             val bin = File(root, "bin")
             val rootfs = File(root, "rootfs")
@@ -57,7 +58,7 @@ object RuntimeInstaller {
             val rootfsValid =
                 rootfsMarker.isFile &&
                     File(rootfs, "bin/sh").isFile &&
-                    rootfsMarker.readText().trim() == RuntimeManifest.DEBIAN_SHA256
+                    rootfsMarker.readText().trim() == pins.debianSha256
 
             if (!rootfsValid) {
                 rootfs.deleteRecursively()
@@ -65,14 +66,14 @@ object RuntimeInstaller {
 
                 val archive = File(root, "debian.tar.xz")
                 downloadVerified(
-                    RuntimeManifest.DEBIAN_URL,
+                    pins.debianUrl,
                     archive,
-                    RuntimeManifest.DEBIAN_SHA256
+                    pins.debianSha256
                 )
                 extractTarXz(archive, rootfs)
                 prepareRootfs(rootfs)
                 archive.delete()
-                rootfsMarker.writeText(RuntimeManifest.DEBIAN_SHA256 + "\n")
+                rootfsMarker.writeText(pins.debianSha256 + "\n")
             }
 
             val core = File(bin, "stohncoind")
@@ -98,9 +99,9 @@ object RuntimeInstaller {
 
                 val archive = File(root, "stohn-core.tar.gz")
                 downloadVerified(
-                    RuntimeManifest.CORE_URL,
+                    pins.coreUrl,
                     archive,
-                    RuntimeManifest.CORE_SHA256
+                    pins.coreSha256
                 )
                 extractCore(archive, bin)
                 archive.delete()
@@ -120,10 +121,10 @@ object RuntimeInstaller {
 
             File(root, ".installed-v5").writeText(
                 "app=${RuntimeManifest.APP_VERSION}\n" +
-                    "debian=${RuntimeManifest.DEBIAN_VERSION}\n" +
-                    "debian-sha256=${RuntimeManifest.DEBIAN_SHA256}\n" +
-                    "core=${RuntimeManifest.CORE_VERSION}\n" +
-                    "core-archive-sha256=${RuntimeManifest.CORE_SHA256}\n" +
+                    "debian=${pins.debianVersion}\n" +
+                    "debian-sha256=${pins.debianSha256}\n" +
+                    "core=${pins.coreVersion}\n" +
+                    "core-archive-sha256=${pins.coreSha256}\n" +
                     "stohncoind-sha256=$coreHash\n" +
                     "stohncoin-wallet-sha256=$walletHash\n"
             )

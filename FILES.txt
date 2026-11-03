@@ -25,6 +25,7 @@
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeInstaller.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeTemp.kt
+./app/src/main/java/org/stohncoin/wallet/runtime/SignedRuntimeManifest.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/WalletToolArgs.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/StohnWalletScreen.kt
 ./app/src/main/java/org/stohncoin/wallet/wallet/BackupCrypto.kt
@@ -64,6 +65,7 @@
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookRoundTripTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AmountsTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/RuntimeTempTest.kt
+./app/src/test/java/org/stohncoin/wallet/runtime/SignedRuntimeManifestTest.kt
 ./app/src/main/res/values/styles.xml
 ./app/src/main/res/xml/data_extraction_rules.xml
 ./app/src/main/res/xml/network_security_config.xml

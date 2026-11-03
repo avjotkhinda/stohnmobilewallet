@@ -142,14 +142,15 @@ fun artifactSha256(file: File): String {
 object RuntimeBackendFactory {
     fun create(context: Context, pruneMiB: Int = 0): RuntimeBackend {
         val nativeDir = File(context.applicationInfo.nativeLibraryDir)
+        val pins = SignedRuntimeManifest.effective(context)
         val decision = NativeLaunch.decide(
             core = File(nativeDir, NativeLaunch.CORE_LIB),
             walletTool = File(nativeDir, NativeLaunch.WALLET_TOOL_LIB),
-            corePin = RuntimeManifest.NATIVE_CORE_SHA256,
-            walletToolPin = RuntimeManifest.NATIVE_WALLET_TOOL_SHA256
+            corePin = pins.nativeCoreSha256,
+            walletToolPin = pins.nativeWalletToolSha256
         )
         return when (decision) {
-            is NativeLaunch.Ready -> NativeRuntime(context, pruneMiB)
+            is NativeLaunch.Ready -> NativeRuntime(context, pruneMiB, pins)
             NativeLaunch.NoNativeBuild -> EmbeddedLinuxRuntime(context, pruneMiB)
             else -> error(decision.refusal)
         }

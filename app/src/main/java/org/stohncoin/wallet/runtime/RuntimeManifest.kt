@@ -19,4 +19,11 @@ object RuntimeManifest {
     // match the shipped binary is a hard failure, never a quiet swap to another backend.
     const val NATIVE_CORE_SHA256 = ""
     const val NATIVE_WALLET_TOOL_SHA256 = ""
+    // The runtime update path. Version of the pins this APK ships with; a staged manifest must be
+    // strictly newer than this to be applied, so a captured old manifest can never roll pins back.
+    const val BUILTIN_MANIFEST_VERSION = 1
+    // The public half of the release key that signs a runtime manifest (base64 SPKI, EC P-256).
+    // Blank until the project publishes one, which keeps the update path inert: with no key every
+    // staged document is refused, exactly like the blank native pins above.
+    const val RELEASE_PUBLIC_KEY = ""
 }
