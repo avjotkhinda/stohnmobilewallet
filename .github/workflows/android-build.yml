@@ -27,6 +27,21 @@ jobs:
         run: bash scripts/verify-restore-path.sh
       - name: Unit tests
         run: ./gradlew test
+      - name: Validate RuntimeManifest pins
+        run: |
+          echo 'Checking critical RuntimeManifest pins are set and valid...'
+          KEYS=("PROOT_SHA256" "PROOT_LOADER_SHA256" "LIBTALLOC_SHA256" "LIBANDROID_SHMEM_SHA256")
+          ALL_OK=true
+          for key in "${KEYS[@]}"; do
+            value=$(grep -E '^const val ${key}' app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt | head -n1 | sed -E 's/.*=\s*"([0-9a-f]+)".*/\1/')
+            if [ -z "$value" ] || ! echo "$value" | grep -qE '^[0-9a-f]{64}$'; then
+              echo "FAIL: $key is missing or not a valid 64-char hex"
+              ALL_OK=false
+            else
+              echo "OK: $key=$value"
+            fi
+          done
+          if ! $ALL_OK; then exit 1; fi
       - name: Build debug APK (release builds need signing secrets; see release job)
         run: ./gradlew assembleDebug
 
