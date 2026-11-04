@@ -1,65 +1,98 @@
 #!/usr/bin/env bash
+# Build the pinned PRoot Android bundle from the Termux archive.
+#
+#   scripts/build-proot-android-bundle.sh /path/to/bundle
+#
+# The bundle directory is populated with proot-bin.so, libproot-loader.so and
+# libs/{libtalloc,libandroid-shmem}.so, then handed to integrate-proot-bundle.sh
+# with --write-only so the caller decides when the pins land in RuntimeManifest.kt.
+#
+# Every downloaded package is checked against the sha256 recorded in
+# runtime/proot/TERMUX-PACKAGE-LOCK.json, so a mirror serving a different build
+# fails here instead of shipping a binary that disagrees with the app's pins.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUNDLE="${1:?usage: $0 /path/to/bundle [--write-only]}"
-MODE="${2:-}"
 
-# ----------------------------------------------------------------------
-# Pre-flight: download a pinned version of proot from Termux unless the
-# bundle directory was already provided by the caller (e.g. from CI).
-# ----------------------------------------------------------------------
-VERSION="5.1.107.102"
-ARCHIVE_NAME="proot_${VERSION}_aarch64.deb"
-ARCHIVE_URLS=(
-  "https://termux.dev/files/downloads/releases/${ARCHIVE_NAME}"
-  "https://termux.dev/files/downloads/releases/termux-packages-${VERSION}/packages/proot/${ARCHIVE_NAME}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BUNDLE="${1:?usage: $0 /path/to/bundle}"
+LOCK="$ROOT/runtime/proot/TERMUX-PACKAGE-LOCK.json"
+
+REPO="https://packages.termux.dev/apt/termux-main"
+MIRRORS=(
+  "https://packages.termux.dev/apt/termux-main"
+  "https://packages-cf.termux.dev/apt/termux-main"
 )
 
 DL_DIR="$ROOT/tmp"
+rm -rf "$DL_DIR"
 mkdir -p "$DL_DIR"
 
-DL_URL=""
-for url in "${ARCHIVE_URLS[@]}"; do
-  if curl --silent --head --fail --max-redirs 3 --location "$url" >/dev/null 2>&1; then
-    DL_URL="$url"
-    break
+[[ -f "$LOCK" ]] || { echo "FAIL: package lock missing at $LOCK" >&2; exit 1; }
+
+# name|path|sha256, straight from the lock file so the script cannot drift.
+PACKAGES="$(python3 - "$LOCK" <<'PY'
+import json, sys
+lock = json.load(open(sys.argv[1]))
+if lock.get("architecture") != "aarch64":
+    sys.exit("FAIL: lock architecture is %r, expected aarch64" % lock.get("architecture"))
+for pkg in lock["packages"]:
+    print("%s|%s|%s" % (pkg["name"], pkg["path"], pkg["sha256"]))
+PY
+)"
+
+fetch() {
+  local name="$1" path="$2" want="$3"
+  local deb="$DL_DIR/${name}.deb" url="" mirror
+  for mirror in "${MIRRORS[@]}"; do
+    url="$mirror/$path"
+    if curl --silent --fail --location --max-time 120 --output "$deb" "$url" 2>/dev/null; then
+      break
+    fi
+    url=""
+  done
+  if [[ -z "$url" || ! -s "$deb" ]]; then
+    {
+      echo "=== ✗  Termux package download failed ==="
+      echo "    package:  ${name}"
+      echo "    expected: ${REPO}/${path}"
+      echo "    tried mirrors:"
+      printf '      - %s\n' "${MIRRORS[@]}"
+      echo "    The pinned version is no longer served. Re-pin to a published"
+      echo "    version in ${LOCK#"$ROOT"/} and in RuntimeManifest.kt, then update"
+      echo "    the expected sha256 below to match the new artifact."
+      echo "=== ✗  Termux package download failed ==="
+    } >&2
+    exit 1
   fi
+  local got
+  got="$(sha256sum "$deb" | cut -d' ' -f1)"
+  if [[ "$got" != "$want" ]]; then
+    {
+      echo "=== ✗  Termux package hash mismatch ==="
+      echo "    package:  ${name}"
+      echo "    expected: ${want}"
+      echo "    actual:   ${got}"
+      echo "    The mirror served a different build than the one this repo pins."
+      echo "=== ✗  Termux package hash mismatch ==="
+    } >&2
+    exit 1
+  fi
+  echo "    ${name}: sha256 ok"
+}
+
+echo "==> Fetching pinned Termux packages"
+while IFS='|' read -r name path sha; do
+  [[ -n "$name" ]] || continue
+  fetch "$name" "$path" "$sha"
+done <<< "$PACKAGES"
+
+echo "==> Extracting packages"
+for name in proot libtalloc libandroid-shmem; do
+  dpkg -x "$DL_DIR/${name}.deb" "$DL_DIR/$name"
 done
 
-if [[ -z "$DL_URL" ]]; then
-  echo "=== ✗  PRoot package download failed ==="
-  echo "    package:    proot"
-  echo "    version:    ${VERSION}"
-  echo "    archive:    ${ARCHIVE_NAME}"
-  echo "    tried URLs:"
-  for url in "${ARCHIVE_URLS[@]}"; do
-    echo "      - ${url}"
-  done
-  echo "    ==> The requested package version is not available from any known"
-  echo "        Termux mirror. You can fix this by reverting to a published"
-  echo "        version (see scripts/release-preflight.sh --dry-run) or by"
-  echo "        adding a working URL to the list above and re-running this"
-  echo "        script. Do NOT silently accept a binary that does not match"
-  echo "        the SHA-256 pinned in app/src/main/java/org/stohncoin/wallet/runtime/RuntimeManifest.kt"
-  echo "        — the pin is there for the same reason the release preflight"
-  echo "        checks it. If you are in CI and this is the first error, the"
-  echo "        next step is almost certainly a stale or withdrawn package."
-  echo "=== ✗  PRoot package download failed ==="
-  exit 1
-fi
-
-echo "==> Downloading proot ${VERSION} from ${DL_URL}"
-curl --silent --fail --location --output "$DL_DIR/$ARCHIVE_NAME" "$DL_URL"
-
-echo "==> Extracting proot deb"
-EXTRACT_DIR="$DL_DIR/extract"
-rm -rf "$EXTRACT_DIR"
-mkdir -p "$EXTRACT_DIR"
-dpkg -x "$DL_DIR/$ARCHIVE_NAME" "$EXTRACT_DIR"
-
-PREFIX="$EXTRACT_DIR/data/data/com.termux/files/usr"
-BIN="$PREFIX/bin/proot"
-LOADER="$PREFIX/libexec/proot/loader"
+PROOT_PREFIX="$DL_DIR/proot/data/data/com.termux/files/usr"
+BIN="$PROOT_PREFIX/bin/proot"
+LOADER="$PROOT_PREFIX/libexec/proot/loader"
 
 [[ -x "$BIN" && -s "$BIN" ]] || { echo "FAIL: proot binary missing or empty" >&2; exit 1; }
 [[ -f "$LOADER" && -s "$LOADER" ]] || { echo "FAIL: proot loader missing or empty" >&2; exit 1; }
@@ -73,17 +106,11 @@ cp "$BIN" "$BUN/proot-bin.so"
 cp "$LOADER" "$BUN/libproot-loader.so"
 
 for dep in libtalloc libandroid-shmem; do
-  LIBDIR="$EXTRACT_DIR/$dep/data/data/com.termux/files/usr/lib"
-  CANDIDATES=$(find "$LIBDIR" -maxdepth 1 -name "${dep}.so*" -print -quit)
-  [[ -n "$CANDIDATES" ]] || { echo "FAIL: ${dep} shared library missing from archive" >&2; exit 1; }
-  cp "$LIBDIR/${dep}.so"* "$BUN/libs/" 2>/dev/null || true
-  # Pick the plain .so if available, otherwise the deepest match
-  if [[ -f "$BUN/libs/${dep}.so" ]]; then
-    echo "    copied $dep as libs/${dep}.so"
-  else
-    cp "$(find "$BUN/libs" -name "${dep}.so*" -print -quit)" "$BUN/libs/${dep}.so"
-    echo "    copied $dep as libs/${dep}.so (renamed from $(basename $(find "$BUN/libs" -name "${dep}.so*" -print -quit)))"
-  fi
+  LIBDIR="$DL_DIR/$dep/data/data/com.termux/files/usr/lib"
+  SRC="$(find "$LIBDIR" -maxdepth 1 -name "${dep}.so*" -print -quit)"
+  [[ -n "$SRC" ]] || { echo "FAIL: ${dep} shared library missing from archive" >&2; exit 1; }
+  cp "$SRC" "$BUN/libs/${dep}.so"
+  echo "    copied ${dep} as libs/${dep}.so"
 done
 
 # Normalize SONAMEs and RPATH with patchelf so the APK is self-contained.
@@ -91,15 +118,15 @@ echo "==> Normalizing shared library references with patchelf"
 for lib in libtalloc libandroid-shmem; do
   SONAME="$(readelf -d "$BUN/proot-bin.so" | grep "Shared library:" | grep "$lib" | sed 's/.*Shared library: \[\(.*\)\]/\1/')"
   if [[ -n "$SONAME" && "$SONAME" != "${lib}.so" ]]; then
-    patchelf --replace-needed "$SONAME" "${lib}.so" "$BUN/proot-bin.so" 2>/dev/null || true
+    patchelf --replace-needed "$SONAME" "${lib}.so" "$BUN/proot-bin.so"
     echo "    replaced NEEDED $SONAME -> ${lib}.so"
   fi
 done
-patchelf --set-rpath '$ORIGIN' "$BUN/proot-bin.so" 2>/dev/null || true
+patchelf --set-rpath '$ORIGIN' "$BUN/proot-bin.so"
 
 # Verify the dependency graph is exactly what we expect.
 echo "==> Verifying dependency graph"
-NEEDED="$(readelf -d "$BUN/proot-bin.so" | grep 'Shared library:' || true)"
+NEEDED="$(readelf -d "$BUN/proot-bin.so" | grep 'Shared library:')"
 for dep in libtalloc.so libandroid-shmem.so; do
   if ! echo "$NEEDED" | grep -q "$dep"; then
     echo "FAIL: $dep not present in final PRoot DT_NEEDED" >&2

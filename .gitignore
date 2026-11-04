@@ -15,3 +15,6 @@ captures/
 # Filesystem noise
 .DS_Store
 Thumbs.db
+
+# Scratch space used by scripts/build-proot-android-bundle.sh
+tmp/

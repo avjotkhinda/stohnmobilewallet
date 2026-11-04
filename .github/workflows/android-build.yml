@@ -69,7 +69,7 @@ jobs:
           sudo apt-get install -y -qq patchelf binutils dpkg-dev
           patchelf --version
       - name: Build pinned PRoot Android bundle
-        run: bash scripts/build-proot-android-bundle.sh "$RUNNER_TEMP/proot-build" "$RUNNER_TEMP/proot-bundle"
+        run: bash scripts/build-proot-android-bundle.sh "$RUNNER_TEMP/proot-bundle"
       - name: Integrate bundle and verify hashes against RuntimeManifest
         run: bash scripts/integrate-proot-bundle.sh "$RUNNER_TEMP/proot-bundle"
       - name: Release preflight (versions, pins, native artifacts)
