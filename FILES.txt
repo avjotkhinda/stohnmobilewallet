@@ -1,6 +1,10 @@
+./.github/ISSUE_TEMPLATE/bug_report.yml
+./.github/ISSUE_TEMPLATE/config.yml
+./.github/ISSUE_TEMPLATE/feature_request.yml
 ./.github/workflows/android-build.yml
 ./.github/workflows/proot-android-bundle.yml
 ./.gitignore
+./CONTRIBUTING.md
 ./FILES.txt
 ./LICENSE
 ./README.md
@@ -89,6 +93,7 @@
 ./gradlew.bat
 ./runtime/proot/README.md
 ./runtime/proot/TERMUX-PACKAGE-LOCK.json
+./runtime/proot/proot-version-runbook.json
 ./scripts/build-android-core.sh
 ./scripts/build-proot-android-bundle.sh
 ./scripts/fetch-stohn-v3.2.sh

@@ -21,6 +21,9 @@ Stohn Wallet is an experimental, pre-release Android full-node wallet prototype.
   `FLAG_SECURE` is set on the activity, and the node-service notification is `VISIBILITY_SECRET`
   with a coarse public version, so neither wallet content nor node state leaks into screenshots,
   the recents thumbnail or the lock-screen shade.
+- Runtime pins are not merely documented: `RuntimeBackendFactory` selects the native backend only
+  when both native binaries match their `RuntimeManifest` pins, and a malformed or mismatched pin is
+  a hard failure rather than a quiet fallback.
 - Wallet encryption and locking are available through Stohn Core.
 
 These controls address specific risks; they do not establish that the app or its build process is secure. In particular, app sandbox protections do not protect wallet files from a compromised or rooted device, and wallet encryption depends on the user choosing and protecting a strong passphrase.
@@ -47,6 +50,45 @@ home to. The supported responses are local:
 
 Documented here as the M0 decision: without a remote channel there is no code path to implement a
 wipe-after-N, and adding one would weaken the offline threat model above.
+
+## Backup container
+
+Backups are a single self-describing file that never leaves app-private storage except when the user
+shares it deliberately:
+
+- The payload is `wallet.dat` plus the address book, and only those. `BackupManifest` walks the
+  archive on restore and refuses any entry outside a three-name allowlist, so a crafted container
+  cannot plant a file somewhere else in app storage.
+- Encryption is AES-GCM with a 128-bit tag. Format v2 derives the key with scrypt, which costs
+  roughly 32 MiB of memory per guess on top of a 16-byte random salt; the legacy v1 path used
+  PBKDF2-HMAC-SHA256 at 600k iterations and is still readable so existing backups do not brick.
+- The stream is chunked, each chunk bound to the header and its own index as additional
+  authenticated data, and the file ends with an explicit terminal chunk. Truncating or reordering
+  a container therefore fails authentication rather than yielding a shorter wallet.
+- Writes are atomic: the container is built beside the destination and moved into place, so an
+  interrupted backup cannot replace a good one with a partial file.
+- `scripts/verify-restore-path.sh` runs in CI and fails if the restore path stops matching the
+  migration script, so the two cannot drift apart silently.
+
+The backup passphrase is the only thing protecting a written backup. It is never stored, never
+recoverable in-app, and losing it means losing the backup.
+
+## Known gaps
+
+The controls above describe what the source does, not what has been proven. The open items are:
+
+- No independent security review, and no on-device validation of the runtime, backup or app lock.
+- No instrumented or device tests, so unlock, send and restore are exercised only by unit tests
+  against fakes.
+- Release signing secrets are unset, so the release job builds and then skips signing.
+- The runtime update path (`RuntimeManifestTransport` plus `SignedRuntimeManifest`) is implemented
+  but inert: `MANIFEST_URL` and `RELEASE_PUBLIC_KEY` are blank, so no signed update can be fetched
+  or applied. The pins in force are the ones compiled into the APK.
+- `RuntimeInstaller` still fetches the Debian rootfs even when the native backend would be chosen,
+  and the bionic `stohncoind` build has not been produced, so PRoot remains the only live path.
+- A rooted or compromised device defeats the app lock at runtime; the PIN is a local access
+  control, not a defence against a hostile OS.
+- See `docs/ROADMAP.md` for the full open-work list.
 
 ## Plaintext key export
 

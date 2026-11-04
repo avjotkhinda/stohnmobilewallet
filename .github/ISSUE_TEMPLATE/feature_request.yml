@@ -1,0 +1,51 @@
+name: Feature or roadmap proposal
+description: Propose a change in behaviour, coverage or build process
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is wrong or missing today. Describe the situation, not the solution yet.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What you would change, and which part of the tree it touches.
+    validations:
+      required: true
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Which milestone does this belong to
+      description: See docs/ROADMAP.md. Pick the closest one; say in the proposal if it is not listed.
+      options:
+        - M0 — App-lock correctness
+        - M1 — Wallet UX and amount correctness
+        - M2 — Backup and recovery
+        - M3 — Node and runtime
+        - M4 — Testing and CI
+        - M5 — Release engineering
+        - M6 — Documentation and housekeeping
+        - Not on the roadmap
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Effect on the security posture
+      description: >
+        Does this touch pins, key handling, the app lock, the RPC allowlist, cleartext traffic or
+        the backup container? If so, say how the existing guards still hold. "None" is an acceptable
+        answer if you have checked.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches, and why you did not pick them.
+    validations:
+      required: false

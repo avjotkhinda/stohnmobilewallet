@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/avjotkhinda/stohnmobilewallet/blob/main/SECURITY.md
+    about: Report privately to the maintainers. Do not open a public issue for an exploitable wallet bug.
+  - name: Build and runtime documentation
+    url: https://github.com/avjotkhinda/stohnmobilewallet/blob/main/docs/BUILD.md
+    about: How to set up the JDK, Android SDK/NDK and build the app.
+  - name: Roadmap and known gaps
+    url: https://github.com/avjotkhinda/stohnmobilewallet/blob/main/docs/ROADMAP.md
+    about: What is done, what is open, and what is deliberately out of scope.

@@ -1,0 +1,81 @@
+name: Bug report
+description: Something in the app, the runtime or the build is wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Do **not** use this form for a security vulnerability — see
+        [SECURITY.md](../blob/main/SECURITY.md) for private reporting instead.
+
+        This wallet is pre-release and not safe for real funds. If a bug put funds at risk,
+        say so in the first line of the summary.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what the app did instead.
+      placeholder: I expected the send screen to..., but instead...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps. Include whether the node was synced and whether the app was locked.
+      placeholder: |
+        1. Open the app with the node running
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version and commit
+      description: The version shown in the app plus the commit you built or installed from.
+      placeholder: 0.28.2-fullmode @ 6f7d59f
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      description: Model and API level, or the emulator image if you are not on hardware.
+      placeholder: Pixel 7, Android 15 (API 35)
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - App lock / PIN / biometric
+        - Wallet and transactions
+        - Send, fees or amounts
+        - Address book
+        - Backup, restore or migration
+        - Runtime (PRoot, rootfs, Stohn Core)
+        - Node lifecycle, sync or RPC
+        - Build, CI or release
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: >
+        `adb logcat` output around the failure. Remove wallet paths, addresses, cookie values and
+        anything else you would not post publicly.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have removed secrets, addresses and key material from anything I pasted.
+          required: true
+        - label: This is not a security vulnerability (those go to the maintainers privately).
+          required: true
