@@ -86,6 +86,7 @@
 ./app/src/test/java/org/stohncoin/wallet/wallet/ScryptTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/WalletToolArgsTest.kt
 ./build.gradle.kts
+./config/detekt/detekt.yml
 ./gradle.properties
 ./gradle/wrapper/gradle-wrapper.jar
 ./gradle/wrapper/gradle-wrapper.properties

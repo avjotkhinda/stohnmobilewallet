@@ -1,0 +1,70 @@
+# Detekt configuration for Stohn Wallet.
+#
+# buildUponDefaultConfig = true loads the whole default rule set, so this file only has
+# to record the deliberate exceptions. The gate is scoped to what the code can honour
+# today: rules whose findings are style or refactor debt this change is not the place to
+# pay down are switched off, with the count observed when the gate was introduced, so the
+# size of the deferred work stays visible and each rule can be re-enabled on its own.
+
+build:
+  maxIssues: 0
+
+complexity:
+  # 49 findings: CyclomaticComplexMethod 12, LongMethod 11, LongParameterList 11,
+  # NestedBlockDepth 6, TooManyFunctions 5, LoopWithTooManyJumpStatements 4. Almost all
+  # in Compose screens, where splitting further would trade one kind of debt for another.
+  # Listed rule by rule because buildUponDefaultConfig keeps rule-level `active: true`
+  # from the shipped defaults and ignores a group-level switch alone.
+  active: false
+  CyclomaticComplexMethod:
+    active: false
+  LongMethod:
+    active: false
+  LongParameterList:
+    active: false
+  NestedBlockDepth:
+    active: false
+  TooManyFunctions:
+    active: false
+
+empty-blocks:
+  EmptyElseBlock:
+    # detekt 1.23.8 reports ui/SendReceiveScreens.kt:163, whose `if` has no `else`
+    # branch at all; the embedded parser predates Kotlin 2.3. Nothing to remove.
+    active: false
+
+exceptions:
+  # 20 findings: TooGenericExceptionCaught 12, SwallowedException 8. Several are
+  # deliberate — a failed manifest refresh must degrade to "Declined" rather than crash —
+  # so clearing this needs per-site judgement instead of a blanket rename.
+  active: false
+  TooGenericExceptionCaught:
+    active: false
+  SwallowedException:
+    active: false
+
+style:
+  MagicNumber:
+    # 393 findings: keystore, chunk and KDF sizes across wallet/ and runtime/.
+    active: false
+  MaxLineLength:
+    # 202 findings at the default 120, mostly Compose modifier chains. Raised rather than
+    # disabled so a genuinely unreadable line still fails.
+    maxLineLength: 240
+  WildcardImport:
+    # 25 findings, all Compose layout imports. Import style is not correctness.
+    active: false
+  ReturnCount:
+    # 17 findings. Early returns are the idiom in these builders.
+    active: false
+  LoopWithTooManyJumpStatements:
+    # 4 findings, all inner loops in the install/extract paths, where breaking out on the
+    # first malformed entry is clearer than restructuring the loop around a flag.
+    active: false
+
+naming:
+  FunctionNaming:
+    # Compose composables are PascalCase by convention and the default pattern rejects
+    # them; every one of the 29 findings was a @Composable function.
+    ignoreAnnotated:
+      - Composable

@@ -17,8 +17,6 @@ import org.stohncoin.wallet.runtime.RuntimeManifest
  * The actual wallet.dat import remains delegated to the official Core migration engine.
  */
 class WalletBackupManager(private val context: Context, private val runtime: RuntimeBackend) {
-    private val root = File(context.filesDir, "fullmode")
-    private val walletDir = File(root, "stohn-data")
 
     /**
      * [creationHeight] is the wallet's birthday as this app knows it: the chain height at which the

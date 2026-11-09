@@ -20,11 +20,20 @@ Every change is expected to pass, in this order:
 
 ```bash
 ./gradlew :app:testDebugUnitTest --console=plain
+./gradlew detekt --console=plain
+./gradlew :app:lintDebug --console=plain
 ./tools/security-audit.sh
 ./tools/verify-files-list.sh
 ./scripts/verify-restore-path.sh
 bash scripts/release-preflight.sh
 ```
+
+`detekt` is the static analysis gate and `lintDebug` the Android Lint gate; both run in CI. The
+detekt configuration (`config/detekt/detekt.yml`) deliberately switches off a set of style and
+complexity rules — `MagicNumber`, `WildcardImport`, the complexity group, and the exception rules —
+because the findings they raise are debt this project has not paid down yet. Each entry records how
+many findings it was hiding when the gate went in. Turning one back on is a welcome change; adding a
+new suppression is not.
 
 `verify-files-list.sh` compares `FILES.txt` against `git ls-files`. If you add, rename or delete a
 file, regenerate the inventory rather than hand-editing it:

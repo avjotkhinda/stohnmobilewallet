@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("io.gitlab.arturbosch.detekt")
 }
 
 val releaseStoreFile = System.getenv("STOHN_RELEASE_STORE_FILE")
@@ -62,6 +63,21 @@ android {
             useLegacyPackaging = true
             keepDebugSymbols += "**/*.so"
         }
+    }
+}
+
+detekt {
+    buildUponDefaultConfig = true
+    config.setFrom(rootProject.files("config/detekt/detekt.yml"))
+    parallel = true
+    source.setFrom(files("src/main/java", "src/test/java"))
+}
+
+tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+    jvmTarget = "17"
+    reports {
+        html.required.set(true)
+        sarif.required.set(true)
     }
 }
 

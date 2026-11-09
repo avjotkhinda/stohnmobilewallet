@@ -32,7 +32,11 @@ data class AddressBook(val labels: List<AddressBookLabel>) {
             val n = text.length
 
             // {"labels":[
-            check(n >= 11 && text[0] == '{' && text[1] == '"' && text[2] == 'l' && text[3] == 'a' && text[4] == 'b' && text[5] == 'e' && text[6] == 'l' && text[7] == 's' && text[8] == '"' && text[9] == ':' && text[10] == '[') { "Address book is corrupted" }
+            val headOk = n >= 11 &&
+                text[0] == '{' && text[1] == '"' && text[2] == 'l' && text[3] == 'a' &&
+                text[4] == 'b' && text[5] == 'e' && text[6] == 'l' && text[7] == 's' &&
+                text[8] == '"' && text[9] == ':' && text[10] == '['
+            check(headOk) { "Address book is corrupted" }
             i = 11
 
             while (i < n) {
@@ -60,7 +64,7 @@ data class AddressBook(val labels: List<AddressBookLabel>) {
                                     'n' -> raw.append('\n')
                                     'r' -> raw.append('\r')
                                     't' -> raw.append('\t')
-                                    else -> throw IllegalStateException("Address book is corrupted")
+                                    else -> error("Address book is corrupted")
                                 }
                                 i += 2
                             } else {
@@ -70,7 +74,12 @@ data class AddressBook(val labels: List<AddressBookLabel>) {
                         }
                         i++ // skip closing "
                         // ,"label":"  (10 chars: comma + "label" key + : + opening quote of value)
-                        check(i + 10 <= n && text[i] == ',' && text[i + 1] == '"' && text[i + 2] == 'l' && text[i + 3] == 'a' && text[i + 4] == 'b' && text[i + 5] == 'e' && text[i + 6] == 'l' && text[i + 7] == '"' && text[i + 8] == ':' && text[i + 9] == '"') { "Address book is corrupted" }
+                        val separatorOk = i + 10 <= n &&
+                            text[i] == ',' && text[i + 1] == '"' && text[i + 2] == 'l' &&
+                            text[i + 3] == 'a' && text[i + 4] == 'b' && text[i + 5] == 'e' &&
+                            text[i + 6] == 'l' && text[i + 7] == '"' && text[i + 8] == ':' &&
+                            text[i + 9] == '"'
+                        check(separatorOk) { "Address book is corrupted" }
                         i += 10 // skip ,"label":"
                         // now at first char of label VALUE
                         val label = StringBuilder()
@@ -86,7 +95,7 @@ data class AddressBook(val labels: List<AddressBookLabel>) {
                                     'n' -> label.append('\n')
                                     'r' -> label.append('\r')
                                     't' -> label.append('\t')
-                                    else -> throw IllegalStateException("Address book is corrupted")
+                                    else -> error("Address book is corrupted")
                                 }
                                 i += 2
                             } else {

@@ -47,7 +47,6 @@ object BackupCrypto {
     private const val KEY_BITS = 256
     private const val TAG_BITS = 128
     private const val TAG_BYTES = 16
-    private const val LEGACY_ITERATIONS = 600_000
 
     /** scrypt N = 2^15, r = 8 costs 32 MiB per guess: hostile to attackers, affordable on a phone. */
     private const val LOG_N = 15

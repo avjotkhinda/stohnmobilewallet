@@ -437,7 +437,15 @@ fun BackupPage(
             Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0A1722)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1D2F3E))) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Backup password", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    OutlinedTextField(password, onPasswordChange, modifier = Modifier.fillMaxWidth(), label = { Text("Use a strong backup password") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), shape = RoundedCornerShape(14.dp))
+                    OutlinedTextField(
+                        password,
+                        onPasswordChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Use a strong backup password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
                     Text("This password is separate from your wallet passkey. Keep it safe; it cannot be recovered.", color = DarkMuted, fontSize = 10.sp)
                 }
             }

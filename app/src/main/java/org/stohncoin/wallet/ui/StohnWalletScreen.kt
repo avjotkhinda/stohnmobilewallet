@@ -362,14 +362,6 @@ fun StohnWalletScreen(node: NodeController) {
                                     busy = false
                                 }
                             },
-                            onRefresh = {
-                                scope.launch {
-                                    busy = true
-                                    runCatching { refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi } }
-                                        .onFailure { Toast.makeText(context, "Refresh failed: ${it.message}", Toast.LENGTH_LONG).show() }
-                                    busy = false
-                                }
-                            },
                             onActivity = { route = "activity" },
                             onNode = { route = "node" },
                             onBackup = { backupFrom = "home"; route = "backup" }
@@ -430,7 +422,12 @@ fun StohnWalletScreen(node: NodeController) {
                                 }
                             }
                         )
-                        "security" -> SecurityPage(info = walletInfo, onBackup = { backupFrom = "security"; route = "backup" }, onChangePasskey = { dialog = DialogKind.Security }, onLock = { scope.launch { runCatching { node.lockWallet() } } })
+                        "security" -> SecurityPage(
+                            info = walletInfo,
+                            onBackup = { backupFrom = "security"; route = "backup" },
+                            onChangePasskey = { dialog = DialogKind.Security },
+                            onLock = { scope.launch { runCatching { node.lockWallet() } } }
+                        )
                         "backup" -> BackupPage(
                             password = backupPassword,
                             verification = backupVerification,
@@ -458,7 +455,7 @@ fun StohnWalletScreen(node: NodeController) {
             }
         }
 
-        when (val d = dialog) {
+        when (dialog) {
             DialogKind.Security -> SecurityDialog(node, walletInfo, onDismiss = { dialog = null })
             null -> Unit
         }
@@ -517,7 +514,6 @@ private fun WalletHome(
     onTransaction: (WalletRpc.WalletTransaction) -> Unit,
     onSend: () -> Unit,
     onReceive: () -> Unit,
-    onRefresh: () -> Unit,
     onActivity: () -> Unit,
     onNode: () -> Unit,
     onBackup: () -> Unit
@@ -588,7 +584,11 @@ private fun WalletHome(
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Node Status", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        Text("${if (state.status == NodeController.Status.READY) "●" else "●"} ${state.status.name.lowercase().replaceFirstChar { it.uppercase() }}", color = if (state.status == NodeController.Status.ERROR) Danger else Success, fontSize = 12.sp)
+                        Text(
+                            "${if (state.status == NodeController.Status.READY) "●" else "●"} ${state.status.name.lowercase().replaceFirstChar { it.uppercase() }}",
+                            color = if (state.status == NodeController.Status.ERROR) Danger else Success,
+                            fontSize = 12.sp
+                        )
                         Icon(Icons.Default.ChevronRight, null, tint = DarkMuted)
                     }
                     state.syncPercent?.let { percent ->
