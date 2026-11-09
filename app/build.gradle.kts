@@ -131,7 +131,7 @@ tasks.register<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>(
     sourceDirectories.setFrom(files("src/main/java"))
     executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
     // The floors are a ratchet, not a target: they sit just under what the suites measure
-    // today (wallet 60.8%, security 57.7% instruction) so the number can only go up. A new
+    // today (wallet 71.1%, security 57.7% instruction) so the number can only go up. A new
     // untested class in either package trips this; a refactor of covered code does not.
     violationRules {
         isFailOnViolation = true
@@ -141,7 +141,7 @@ tasks.register<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>(
             limit {
                 counter = "INSTRUCTION"
                 value = "COVEREDRATIO"
-                minimum = "0.55".toBigDecimal()
+                minimum = "0.68".toBigDecimal()
             }
         }
         rule {
@@ -188,4 +188,8 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     testImplementation("junit:junit:4.13.2")
+    // Unit tests run against the mockable android.jar, whose org.json throws "not mocked" on
+    // every call. WalletRpc speaks JSON-RPC, so its tests need a real implementation on the
+    // test classpath; this is the reference org.json that Android's own copy derives from.
+    testImplementation("org.json:json:20240303")
 }
