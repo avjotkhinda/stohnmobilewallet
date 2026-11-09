@@ -1,0 +1,47 @@
+# Keeps the pinned action SHAs and the Gradle dependencies from going stale.
+#
+# The workflow files pin actions to commit SHAs (see the `# vX.Y.Z` comment on each `uses:`),
+# so these refs only move when something updates them; Dependabot rewrites the SHA and the
+# version comment together, which keeps the pin auditable instead of silently drifting.
+#
+# A Gradle pull request will normally fail CI: gradle/verification-metadata.xml does not yet
+# contain the new hashes, which is dependency verification doing its job rather than a broken
+# PR. Record them with the command documented in CONTRIBUTING.md and commit the result
+# alongside the version bump. Never merge a bump by turning verification off.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: main
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+    # One pull request per week for all actions rather than one each: the pins move together
+    # when Actions releases land, and reviewing a single diff is the point of the pin.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: gradle
+    directory: "/"
+    target-branch: main
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: deps
+    # Patch and minor bumps arrive bundled. Majors (AGP, Kotlin, Gradle itself) are left out of
+    # the group so they come alone: those need the runtime pins and the recovery paths re-checked
+    # by hand, and PRoot package bumps in particular have to go through the bundle tooling rather
+    # than be applied by a bot.
+    groups:
+      gradle-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
