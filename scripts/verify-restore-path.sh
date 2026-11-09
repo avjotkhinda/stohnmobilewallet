@@ -43,10 +43,14 @@ grep -qF -- 'File(workspace, "wallet.dump")' "$CORE" || fail "restore dump escap
 [[ $(grep -cF -- 'workspace.deleteRecursively()' "$CORE") -ge 2 ]] || fail "restore workspace is not cleaned up"
 
 # Restore hands Core only what it decrypted into app-private cache, and deletes it afterwards.
-grep -qF -- 'File.createTempFile("stohn-restore-", ".snapshot", context.cacheDir)' "$BACKUP" \
+grep -qF -- 'File.createTempFile("stohn-restore-", ".snapshot", cacheDir)' "$BACKUP" \
   || fail "decrypted snapshot is not staged in app cache"
-grep -qF -- 'File.createTempFile("stohn-restore-wallet-", ".dat", context.cacheDir)' "$BACKUP" \
+grep -qF -- 'File.createTempFile("stohn-restore-wallet-", ".dat", cacheDir)' "$BACKUP" \
   || fail "restored wallet is not staged in app cache"
+# The class takes its working directories instead of the Context so the backup and restore paths
+# can be tested on the JVM; this is what keeps those directories the app's own private cache.
+grep -qF -- 'this(context.cacheDir, context.filesDir, runtime)' "$BACKUP" \
+  || fail "restore working directories are no longer bound to the app's private storage"
 grep -qF -- 'stagedWallet.delete()' "$BACKUP" || fail "staged wallet is not deleted"
 grep -qF -- 'CoreWalletMigration(runtime).import(contents.wallet, destination)' "$BACKUP" \
   || fail "restore no longer imports through CoreWalletMigration"

@@ -16,7 +16,17 @@ import org.stohncoin.wallet.runtime.RuntimeManifest
  * Creates an app-owned encrypted-wallet backup container without ever modifying a live Core wallet.
  * The actual wallet.dat import remains delegated to the official Core migration engine.
  */
-class WalletBackupManager(private val context: Context, private val runtime: RuntimeBackend) {
+class WalletBackupManager internal constructor(
+    private val cacheDir: File,
+    private val filesDir: File,
+    private val runtime: RuntimeBackend
+) {
+    /**
+     * The app constructs it with a [Context]; the two directories it actually uses are taken
+     * instead of the context itself so the backup and restore paths stay unit-testable on the JVM.
+     */
+    constructor(context: Context, runtime: RuntimeBackend) :
+        this(context.cacheDir, context.filesDir, runtime)
 
     /**
      * [creationHeight] is the wallet's birthday as this app knows it: the chain height at which the
@@ -47,8 +57,8 @@ class WalletBackupManager(private val context: Context, private val runtime: Run
         require(password.isNotEmpty()) { "Backup password is required" }
         require(!destination.exists()) { "Restore destination must not already exist" }
         require(destination.canonicalFile != input.canonicalFile) { "Restore destination must differ from the backup" }
-        val decrypted = File.createTempFile("stohn-restore-", ".snapshot", context.cacheDir)
-        val stagedWallet = File.createTempFile("stohn-restore-wallet-", ".dat", context.cacheDir)
+        val decrypted = File.createTempFile("stohn-restore-", ".snapshot", cacheDir)
+        val stagedWallet = File.createTempFile("stohn-restore-wallet-", ".dat", cacheDir)
         try {
             require(input.length() <= MAX_BACKUP_CONTAINER_BYTES) { "Backup file exceeds safety limit" }
             BackupCrypto.decrypt(input, decrypted, password, MAX_BACKUP_PLAINTEXT_BYTES)
@@ -68,7 +78,7 @@ class WalletBackupManager(private val context: Context, private val runtime: Run
     private fun restoreAddressBook(restored: List<AddressBookLabel>) {
         val usable = restored.filter { it.raw.isNotBlank() && it.label.isNotBlank() }
         if (usable.isEmpty()) return
-        val dir = File(context.filesDir, "addressbook")
+        val dir = File(filesDir, "addressbook")
         // Keep labels saved after the backup was taken; the backup wins for the same address.
         val merged = LinkedHashMap<String, AddressBookLabel>()
         AddressBook.load(dir).labels.forEach { merged[it.raw] = it }
@@ -91,7 +101,7 @@ class WalletBackupManager(private val context: Context, private val runtime: Run
         require(destination.canonicalFile.parentFile?.exists() != false) {
             "Backup destination directory does not exist"
         }
-        val plaintext = File.createTempFile("stohn-backup-", ".snapshot", context.cacheDir)
+        val plaintext = File.createTempFile("stohn-backup-", ".snapshot", cacheDir)
         try {
             // Keep the temporary plaintext inside app-private cache and delete it immediately.
             // The writer lives next to the reader in BackupContainer so the two cannot drift, and
@@ -106,7 +116,7 @@ class WalletBackupManager(private val context: Context, private val runtime: Run
                     creationHeight = creationHeight,
                     walletSha256 = sha256(snapshot)
                 ),
-                labels = File(context.filesDir, "addressbook/labels.json")
+                labels = File(filesDir, "addressbook/labels.json")
             )
             BackupCrypto.encrypt(plaintext, destination, password)
             return BackupResult(destination, sha256(destination))
