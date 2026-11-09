@@ -20,6 +20,7 @@ Every change is expected to pass, in this order:
 
 ```bash
 ./gradlew :app:testDebugUnitTest --console=plain
+./gradlew :app:jacocoDebugUnitTestCoverage --console=plain
 ./gradlew detekt --console=plain
 ./gradlew :app:lintDebug --console=plain
 ./tools/security-audit.sh

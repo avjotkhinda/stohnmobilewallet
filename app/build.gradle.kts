@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("io.gitlab.arturbosch.detekt")
+    jacoco
 }
 
 val releaseStoreFile = System.getenv("STOHN_RELEASE_STORE_FILE")
@@ -78,6 +79,80 @@ tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
     reports {
         html.required.set(true)
         sarif.required.set(true)
+    }
+}
+
+// ---- Unit-test coverage -------------------------------------------------------------------
+// JaCoCo over the debug unit tests. The Android plugin wires coverage for instrumented tests
+// only, so the report and the verification task are declared here and scoped to the two
+// packages whose behaviour holds the wallet together.
+jacoco { toolVersion = "0.8.12" }
+
+tasks.withType<Test>().configureEach {
+    extensions.configure<org.gradle.testing.jacoco.plugins.JacocoTaskExtension> {
+        isIncludeNoLocationClasses = true
+        excludes = listOf("jdk.internal.*")
+    }
+}
+
+val coveragePackages = listOf("wallet", "security")
+
+fun coverageClasses(): FileCollection =
+    // AGP 9's built-in Kotlin compiler reports its output under built_in_kotlinc rather than
+    // the tmp/kotlin-classes directory older setups use; the javac tree is listed too so any
+    // Java sources added later are measured rather than silently skipped.
+    files(
+        layout.buildDirectory.dir("intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"),
+        layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes")
+    ).asFileTree.matching {
+        coveragePackages.forEach { include("org/stohncoin/wallet/$it/**") }
+        exclude("**/R.class", "**/R\$*.class", "**/BuildConfig.class")
+    }
+
+val jacocoDebugUnitTestReport =
+    tasks.register<org.gradle.testing.jacoco.tasks.JacocoReport>("jacocoDebugUnitTestReport") {
+        dependsOn("testDebugUnitTest")
+        classDirectories.setFrom(coverageClasses())
+        sourceDirectories.setFrom(files("src/main/java"))
+        executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
+        reports {
+            xml.required.set(true)
+            html.required.set(true)
+        }
+    }
+
+tasks.register<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>(
+    "jacocoDebugUnitTestCoverage"
+) {
+    group = "verification"
+    description = "Fails when wallet/ or security/ coverage drops below its floor."
+    dependsOn(jacocoDebugUnitTestReport)
+    classDirectories.setFrom(coverageClasses())
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
+    // The floors are a ratchet, not a target: they sit just under what the suites measure
+    // today (wallet 60.8%, security 57.7% instruction) so the number can only go up. A new
+    // untested class in either package trips this; a refactor of covered code does not.
+    violationRules {
+        isFailOnViolation = true
+        rule {
+            element = "PACKAGE"
+            includes = listOf("org.stohncoin.wallet.wallet")
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.55".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("org.stohncoin.wallet.security")
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = "0.55".toBigDecimal()
+            }
+        }
     }
 }
 
