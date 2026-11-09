@@ -88,6 +88,7 @@
 ./build.gradle.kts
 ./config/detekt/detekt.yml
 ./gradle.properties
+./gradle/verification-metadata.xml
 ./gradle/wrapper/gradle-wrapper.jar
 ./gradle/wrapper/gradle-wrapper.properties
 ./gradlew

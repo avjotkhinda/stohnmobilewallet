@@ -28,6 +28,18 @@ Every change is expected to pass, in this order:
 bash scripts/release-preflight.sh
 ```
 
+Gradle verifies every downloaded artifact against `gradle/verification-metadata.xml`, so a build
+fails rather than trusting an unfamiliar jar. Bumping a dependency therefore needs the new hashes
+recorded; do it deliberately and read what changed:
+
+```bash
+./gradlew --write-verification-metadata sha256 help assembleDebug :app:testDebugUnitTest detekt :app:lintDebug
+git diff gradle/verification-metadata.xml
+```
+
+Commit the resulting change alongside the version bump. Never delete entries or add
+`--dependency-verification=lenient` to get a build through — that is the check doing its job.
+
 `detekt` is the static analysis gate and `lintDebug` the Android Lint gate; both run in CI. The
 detekt configuration (`config/detekt/detekt.yml`) deliberately switches off a set of style and
 complexity rules — `MagicNumber`, `WildcardImport`, the complexity group, and the exception rules —
