@@ -48,6 +48,21 @@ because the findings they raise are debt this project has not paid down yet. Eac
 many findings it was hiding when the gate went in. Turning one back on is a welcome change; adding a
 new suppression is not.
 
+Unit tests and lint never run R8 or the release signing configuration, so a pull request also gets a
+`release-smoke` job: it generates a throwaway key, runs `assembleRelease`, verifies the APK payload
+against `RuntimeManifest` and generates the SBOM. That is the cheap way to catch a missing shrinker
+rule — the failure mode that broke the release build once without any red test. Run it locally the
+same way when you touch `app/proguard-rules.pro`, the signing config or the runtime pins:
+
+```sh
+keytool -genkeypair -keystore /tmp/smoke.jks -storetype PKCS12 -storepass smoke123 \
+  -keypass smoke123 -alias smoke -keyalg RSA -keysize 2048 -validity 2 -dname "CN=smoke"
+STOHN_RELEASE_STORE_FILE=/tmp/smoke.jks STOHN_RELEASE_STORE_PASSWORD=smoke123 \
+STOHN_RELEASE_KEY_ALIAS=smoke STOHN_RELEASE_KEY_PASSWORD=smoke123 \
+  ./gradlew assembleRelease
+bash scripts/verify-apk-artifact.sh app/build/outputs/apk/release/app-release.apk
+```
+
 `verify-files-list.sh` compares `FILES.txt` against `git ls-files`. If you add, rename or delete a
 file, regenerate the inventory rather than hand-editing it:
 
