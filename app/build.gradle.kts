@@ -178,7 +178,7 @@ gradle.taskGraph.whenReady {
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.activity:activity-compose:1.10.0")
-    implementation(platform("androidx.compose:compose-bom:2025.01.00"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
@@ -206,7 +206,7 @@ dependencies {
     // needs network access; Gradle's dependency verification does not cover those downloads.
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.test:core-ktx:1.6.1")
-    testImplementation(platform("androidx.compose:compose-bom:2025.01.00"))
+    testImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
     testImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
