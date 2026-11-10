@@ -188,20 +188,40 @@ class NodeController private constructor(context: Context) : SendGateway {
     override suspend fun estimateFee(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean, confTarget: Int?): WalletRpc.FeeEstimate =
         walletMutex.withLock { walletRpc().estimateFee(address, amountSatoshis, subtractFeeFromAmount, confTarget) }
 
-    override suspend fun send(address: String, amountSatoshis: Long, passphrase: CharArray?, subtractFeeFromAmount: Boolean, confTarget: Int?): String =
-        walletMutex.withLock {
-            val rpc = walletRpc()
+    private suspend fun retrySend(
+    address: String,
+    amountSatoshis: Long,
+    passphrase: CharArray?,
+    subtractFeeFromAmount: Boolean,
+    confTarget: Int?
+): String {
+        var delayMs = 500L
+        for (attempt in 1..4) {
             try {
-                if (passphrase != null && passphrase.isNotEmpty()) rpc.unlock(passphrase)
-                val txid = rpc.send(address, amountSatoshis, subtractFeeFromAmount, confTarget = confTarget)
-                // A spend is when a stale backup starts losing real money, so count it.
-                recordSend()
-                txid
-            } finally {
-                if (passphrase != null && passphrase.isNotEmpty()) runCatching { rpc.lock() }
-                passphrase?.fill('\u0000')
+                return walletMutex.withLock {
+                    val rpc = walletRpc()
+                    try {
+                        if (passphrase != null && passphrase.isNotEmpty()) rpc.unlock(passphrase)
+                        val txid = rpc.send(address, amountSatoshis, subtractFeeFromAmount, confTarget = confTarget)
+                        // A spend is when a stale backup starts losing real money, so count it.
+                        recordSend()
+                        txid
+                    } finally {
+                        if (passphrase != null && passphrase.isNotEmpty()) runCatching { rpc.lock() }
+                        passphrase?.fill('\u0000')
+                    }
+                }
+            } catch (e: Exception) {
+                if (attempt == 4) throw e
+                Thread.sleep(delayMs)
+                delayMs = Math.min(delayMs * 2, 8000L)
             }
         }
+        throw IllegalStateException("Unreachable")
+    }
+
+    override suspend fun send(address: String, amountSatoshis: Long, passphrase: CharArray?, subtractFeeFromAmount: Boolean, confTarget: Int?): String =
+        retrySend(address, amountSatoshis, passphrase, subtractFeeFromAmount, confTarget)
 
     suspend fun transactions(): List<WalletRpc.WalletTransaction> = walletMutex.withLock { walletRpc().transactions() }
     suspend fun lockWallet() = walletMutex.withLock { walletRpc().lock() }
