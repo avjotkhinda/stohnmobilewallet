@@ -111,11 +111,17 @@ jobs:
       - name: Verify APK runtime payload against RuntimeManifest
         if: steps.signing.outputs.configured == 'true'
         run: bash scripts/verify-apk-artifact.sh app/build/outputs/apk/release/app-release.apk
+      - name: Generate CycloneDX SBOM and checksum file
+        if: steps.signing.outputs.configured == 'true'
+        run: bash scripts/generate-sbom.sh app/build/outputs/apk/release/app-release.apk
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: steps.signing.outputs.configured == 'true'
         with:
           name: stohn-wallet-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/release/stohn-wallet-*.cdx.json
+            app/build/outputs/apk/release/SHA256SUMS
           if-no-files-found: error
 
       - name: Report skipped release

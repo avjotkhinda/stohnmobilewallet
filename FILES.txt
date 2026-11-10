@@ -111,6 +111,7 @@
 ./scripts/build-android-core.sh
 ./scripts/build-proot-android-bundle.sh
 ./scripts/fetch-stohn-v3.2.sh
+./scripts/generate-sbom.sh
 ./scripts/integrate-proot-bundle.sh
 ./scripts/integrate-runtime-manifest.sh
 ./scripts/pin-debian-rootfs.sh
