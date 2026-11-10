@@ -29,10 +29,23 @@ object RuntimeInstaller {
             val root = File(context.filesDir, "fullmode/runtime")
             val bin = File(root, "bin")
             val rootfs = File(root, "rootfs")
+            val nativeDir = File(context.applicationInfo.nativeLibraryDir)
+
+            // The native backend runs Core straight out of nativeLibraryDir, so there is nothing to
+            // download or install: no PRoot launcher, no Debian rootfs and no stohncoind copy. The
+            // decision is the factory's own, so the installer can never prepare a runtime the app
+            // will not start — or skip one it will.
+            val nativeReady = NativeLaunch.decide(
+                core = File(nativeDir, NativeLaunch.CORE_LIB),
+                walletTool = File(nativeDir, NativeLaunch.WALLET_TOOL_LIB),
+                corePin = pins.nativeCoreSha256,
+                walletToolPin = pins.nativeWalletToolSha256
+            ) is NativeLaunch.Ready
+            if (nativeReady) return@withLock
+
             root.mkdirs()
             bin.mkdirs()
 
-            val nativeDir = File(context.applicationInfo.nativeLibraryDir)
             verifyNativeArtifact(
                 File(nativeDir, "libproot.so"),
                 "proot",

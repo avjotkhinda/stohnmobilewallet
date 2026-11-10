@@ -109,6 +109,36 @@ for a device. Two limits are worth knowing before reaching for it:
   jars on the first run, which Gradle's dependency verification does not cover — expect that first
   run to be slow and to need network access.
 
+## Release key custody and rotation
+
+The release job signs with four repository secrets — `STOHN_RELEASE_STORE_FILE_B64`,
+`STOHN_RELEASE_STORE_PASSWORD`, `STOHN_RELEASE_KEY_ALIAS` and `STOHN_RELEASE_KEY_PASSWORD` — and
+skips the release build when they are absent, so a fork can never produce an APK that looks
+official. The keystore itself never enters the repository, a build log or an issue.
+
+**Custody.** Keep the single `release.jks` on two offline media in two physical locations, plus one
+sealed paper copy of the passwords. Nothing else — not a laptop, not a cloud drive, not this
+repository's secrets page alone — may be the only copy. The repository secrets are a copy for CI,
+not the backup: losing them costs one push, losing the keystore costs every future upgrade, because
+Android only installs an update signed by the same key.
+
+**Access.** Two maintainers hold the passwords, and both must be present (or their sealed copies
+retrieved) for a rotation. No individual should be able to sign alone. Record who holds what, and
+where the media are, in the private key log, not in this repository.
+
+**Routine use.** The keystore is decoded into `RUNNER_TEMP` for the length of one job and removed
+with the runner. Never commit a decoded keystore, never pass it as an artifact, and never re-use a
+runner that has held one for anything else.
+
+**Rotation is not available to an app-signing key.** Android refuses an update whose signature
+changed, so "rotating" the signing key means publishing a new application id or asking every user
+to uninstall and lose their node data. Treat the key as permanent. Rotate the *passwords* only if a
+copy is compromised, and then: take the keystore offline, change the store and key passwords with
+`keytool -storepasswd` and `keytool -keypasswd`, re-upload all four secrets, and sign a release to
+confirm it installs over the previous one. If the keystore itself is lost or leaked, the decision is
+whether to ship a differently-named app or to stop shipping — write that decision down before the
+moment arrives, because it cannot be made well under time pressure.
+
 ## Reporting a vulnerability
 
 Do not open a public issue for an exploitable wallet vulnerability. Contact the maintainers privately
