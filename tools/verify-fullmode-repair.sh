@@ -28,7 +28,12 @@ require_sha_const() {
   }
 }
 
-require_const APP_VERSION "0.28.2-fullmode"
+# Same rule as release-preflight: the app version is declared once, in app/build.gradle.kts, and the
+# runtime manifest must agree with it.
+BUILD="$ROOT/app/build.gradle.kts"
+APP_VERSION_EXPECTED="$(sed -n 's/^[[:space:]]*versionName = "\(.*\)".*/\1/p' "$BUILD" | head -1)"
+[[ -n "$APP_VERSION_EXPECTED" ]] || { echo "ERROR: versionName missing from ${BUILD}" >&2; exit 1; }
+require_const APP_VERSION "$APP_VERSION_EXPECTED"
 require_const CORE_VERSION "3.2"
 require_const CORE_SHA256 "1c7fed5e4e5ef9e753146f9ada932abb20994134caaec33d1933d7f5c65531bf"
 require_sha_const CORE_SHA256

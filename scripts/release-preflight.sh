@@ -6,8 +6,16 @@ BUILD="$ROOT/app/build.gradle.kts"
 ANDROID_MANIFEST="$ROOT/app/src/main/AndroidManifest.xml"
 LOCK="$ROOT/runtime/proot/TERMUX-PACKAGE-LOCK.json"
 
-grep -F 'versionName = "0.28.2-fullmode"' "$BUILD" >/dev/null
-grep -F 'const val APP_VERSION = "0.28.2-fullmode"' "$MANIFEST" >/dev/null
+# The version lives in app/build.gradle.kts and nowhere else in the build: the runtime manifest is
+# required to agree with it, so bumping the version is a one-line change that preflight verifies
+# instead of a string this script also has to carry.
+VERSION_NAME="$(sed -n 's/^[[:space:]]*versionName = "\(.*\)".*/\1/p' "$BUILD" | head -1)"
+[[ -n "$VERSION_NAME" ]] || { echo 'FAIL: versionName missing from app/build.gradle.kts' >&2; exit 1; }
+grep -F "const val APP_VERSION = \"$VERSION_NAME\"" "$MANIFEST" >/dev/null || {
+  echo "FAIL: RuntimeManifest.APP_VERSION does not match versionName $VERSION_NAME" >&2
+  exit 1
+}
+echo "version: $VERSION_NAME"
 grep -F 'android:foregroundServiceType="specialUse"' "$ANDROID_MANIFEST" >/dev/null
 grep -F 'PROPERTY_SPECIAL_USE_FGS_SUBTYPE' "$ANDROID_MANIFEST" >/dev/null
 grep -F 'android.permission.ACCESS_NETWORK_STATE' "$ANDROID_MANIFEST" >/dev/null
