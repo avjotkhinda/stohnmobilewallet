@@ -61,6 +61,8 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-24.04
+    outputs:
+      signed: ${{ steps.signing.outputs.configured }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
@@ -113,7 +115,9 @@ jobs:
         run: bash scripts/verify-apk-artifact.sh app/build/outputs/apk/release/app-release.apk
       - name: Generate CycloneDX SBOM and checksum file
         if: steps.signing.outputs.configured == 'true'
-        run: bash scripts/generate-sbom.sh app/build/outputs/apk/release/app-release.apk
+        run: |
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+          bash scripts/generate-sbom.sh app/build/outputs/apk/release/app-release.apk
       # The checksum file is what makes a published APK checkable, so a release that cannot sign it
       # is not published at all: the failure here is deliberate, not a skipped step.
       - name: Decode release signing key
@@ -166,3 +170,81 @@ jobs:
         if: steps.signing.outputs.configured != 'true'
         run: |
           echo "::notice title=Release APK skipped::No keystore secret found. Set STOHN_RELEASE_STORE_FILE_B64 (base64-encoded keystore) together with STOHN_RELEASE_STORE_PASSWORD, STOHN_RELEASE_KEY_ALIAS and STOHN_RELEASE_KEY_PASSWORD to publish a signed APK."
+
+  # Builds the same commit again on a second clean runner and compares it with the published APK.
+  # Everything a release ships has to be a function of the commit: if two runners disagree, either
+  # the build embeds something ambient (a path, a timestamp, a host-specific ordering) or a
+  # dependency resolved to a different artifact. Both are release bugs worth stopping for.
+  reproducibility:
+    if: needs.release.outputs.signed == 'true'
+    needs: [build, release]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      - name: Install PRoot bundle tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq patchelf binutils dpkg-dev
+      - name: Build pinned PRoot Android bundle
+        run: bash scripts/build-proot-android-bundle.sh "$RUNNER_TEMP/proot-bundle"
+      - name: Integrate bundle and verify hashes against RuntimeManifest
+        run: bash scripts/integrate-proot-bundle.sh "$RUNNER_TEMP/proot-bundle"
+      - name: Decode release keystore
+        env:
+          STORE_FILE_B64: ${{ secrets.STOHN_RELEASE_STORE_FILE_B64 }}
+          LEGACY_KEYSTORE_B64: ${{ secrets.STOHN_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          keystore_b64="${STORE_FILE_B64:-$LEGACY_KEYSTORE_B64}"
+          if [ -z "$keystore_b64" ]; then
+            echo "::error title=Keystore missing::The published APK exists but this rebuild cannot sign; the two cannot be compared."
+            exit 1
+          fi
+          printf '%s' "$keystore_b64" | base64 -d > "$RUNNER_TEMP/stohn-release.jks"
+          chmod 600 "$RUNNER_TEMP/stohn-release.jks"
+          echo "STOHN_RELEASE_STORE_FILE=$RUNNER_TEMP/stohn-release.jks" >> "$GITHUB_ENV"
+      - name: Build the APK again
+        env:
+          STOHN_RELEASE_STORE_PASSWORD: ${{ secrets.STOHN_RELEASE_STORE_PASSWORD }}
+          STOHN_RELEASE_KEY_ALIAS: ${{ secrets.STOHN_RELEASE_KEY_ALIAS }}
+          STOHN_RELEASE_KEY_PASSWORD: ${{ secrets.STOHN_RELEASE_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+      - name: Generate the SBOM again
+        run: |
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+          bash scripts/generate-sbom.sh app/build/outputs/apk/release/app-release.apk
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: reproducibility-rebuild
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/release/stohn-wallet-*.cdx.json
+          if-no-files-found: error
+
+  reproducibility-compare:
+    if: needs.release.outputs.signed == 'true'
+    needs: [release, reproducibility]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: stohn-wallet-release-apk
+          path: published
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: reproducibility-rebuild
+          path: rebuild
+      # The two APKs carry different signatures by construction (apksigner randomises the nonce), so
+      # the comparison is over what ships: entry contents, plus the SBOM's component list.
+      - name: Compare the two builds
+        run: |
+          published_sbom=$(find published -name '*.cdx.json' -print -quit)
+          rebuild_sbom=$(find rebuild -name '*.cdx.json' -print -quit)
+          bash scripts/verify-reproducible-build.sh \
+            published/app-release.apk rebuild/app-release.apk \
+            "$published_sbom" "$rebuild_sbom"

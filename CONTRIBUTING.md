@@ -176,6 +176,33 @@ openssl pkeyutl -verify -pubin -inkey stohn-release-signing-key.pem -rawin \
 sha256sum -c SHA256SUMS
 ```
 
+## Reproducible releases
+
+Two clean runners build every release: the `release` job publishes the APK, and the
+`reproducibility` job builds the same commit again and compares the result with
+`scripts/verify-reproducible-build.sh`. A mismatch fails the workflow.
+
+The comparison is over what ships, not over the signed file, and that is a deliberate limit worth
+knowing. apksigner randomises the nonce on every signature (RSA uses PSS, EC uses ECDSA), so the
+APK Signing Block differs between two builds of identical source and the whole-file sha256 can never
+match. Comparing the file would make the job red forever and prove nothing. Instead the script
+compares every entry the build produced — by name and content, with `META-INF` signature files
+excluded, since those are exactly what a signature rewrites — plus the SBOM's component list. A
+difference there is real: a timestamp inside a dex, a resource ordering that depends on the host, a
+path baked into a native library. The signed file's own sha256 is still what downloaders check, and
+`SHA256SUMS` stays the record of it; it simply is not the thing reproducibility can be measured by.
+
+Run it yourself on two builds:
+
+```sh
+bash scripts/verify-reproducible-build.sh build-a/app-release.apk build-b/app-release.apk \
+  build-a/stohn-wallet-0.28.2-fullmode.cdx.json build-b/stohn-wallet-0.28.2-fullmode.cdx.json
+```
+
+Release builds run R8, so a rule missing from `app/proguard-rules.pro` breaks the release path while
+debug builds and unit tests stay green. `assembleRelease` locally, with the four `STOHN_RELEASE_*`
+variables pointing at any keystore, is the cheap way to catch that before pushing.
+
 ## Reporting a vulnerability
 
 Do not open a public issue for an exploitable wallet vulnerability. Contact the maintainers privately

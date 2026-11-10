@@ -119,6 +119,7 @@
 ./scripts/sign-release-checksums.sh
 ./scripts/verify-apk-artifact.sh
 ./scripts/verify-proot-bundle.sh
+./scripts/verify-reproducible-build.sh
 ./scripts/verify-restore-path.sh
 ./scripts/verify-wallet-migration.sh
 ./settings.gradle.kts

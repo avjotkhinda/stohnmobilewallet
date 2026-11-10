@@ -11,6 +11,10 @@
 #
 # The checksum file sits beside the APK and names it by its bare filename, so `sha256sum -c
 # SHA256SUMS` works from that directory after downloading both files.
+#
+# Set `SOURCE_DATE_EPOCH` to the commit time to make the document reproducible: every field is then a
+# function of the APK and the dependency graph, and two clean builds of the same commit produce
+# byte-identical SBOMs.
 set -euo pipefail
 
 apk=${1:?usage: generate-sbom.sh <apk> [output-directory]}
@@ -162,6 +166,17 @@ with open(apk, "rb") as handle:
         sha256.update(chunk)
 apk_hash = sha256.hexdigest()
 apk_name = os.path.basename(apk)
+# SOURCE_DATE_EPOCH makes the document byte-identical for identical inputs, which is what lets the
+# reproducible-build job compare two runners' SBOM hashes instead of timestamps.
+epoch = os.environ.get("SOURCE_DATE_EPOCH", "").strip()
+if epoch and not epoch.isdigit():
+    raise SystemExit(f"SOURCE_DATE_EPOCH must be a whole number of seconds, got {epoch!r}")
+moment = (
+    datetime.datetime.fromtimestamp(int(epoch), datetime.timezone.utc)
+    if epoch
+    else datetime.datetime.now(datetime.timezone.utc)
+)
+timestamp = moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 app_ref = f"urn:stohn:apk:{application_id}@{version_name}"
 
 # The executables the app actually runs ship inside the APK, not as Maven coordinates: PRoot and its
@@ -198,7 +213,7 @@ document = {
     # Deterministic for a given APK: the same binary always yields the same serial number.
     "serialNumber": "urn:uuid:" + str(uuid.uuid5(uuid.NAMESPACE_URL, f"{app_ref}:{apk_hash}")),
     "metadata": {
-        "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "timestamp": timestamp,
         "tools": [{"vendor": "stohncoin", "name": "scripts/generate-sbom.sh", "version": "1"}],
         "component": {
             "type": "application",
