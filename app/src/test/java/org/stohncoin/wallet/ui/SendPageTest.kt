@@ -237,6 +237,7 @@ class SendPageTest {
                 subtractFeeFromAmount: Boolean,
                 confTarget: Int?
             ): WalletRpc.FeeEstimate {
+                estimatedFor = Triple(address, amountSatoshis, subtractFeeFromAmount)
                 return WalletRpc.FeeEstimate(
                     feeSatoshis = 1_000L,
                     totalSatoshis = amountSatoshis + 1_000L,
@@ -257,8 +258,8 @@ class SendPageTest {
         type("To", recipient)
         type("Amount", "1.25")
 
-        // Estimate is handled by the gateway; set state so the UI can proceed
-        estimatedFor = Triple("recipient", 125_000_000L, false)
+        // Trigger the actual estimate call on the gateway so the UI can proceed
+        requestEstimate()
 
         scrollTo("Review & Send")
         compose.onNodeWithText("Review & Send").assertIsEnabled().performClick()
