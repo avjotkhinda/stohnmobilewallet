@@ -78,7 +78,7 @@ class SendPageTest {
         }
     }
 
-    private fun render(encrypted: Boolean = false) {
+    private fun render(gateway: SendGateway = this.gateway, encrypted: Boolean = false) {
         compose.setContent {
             SendPage(
                 node = gateway,
@@ -227,5 +227,45 @@ class SendPageTest {
         scrollTo("Review & Send")
         compose.onNodeWithText("Review & Send").assertIsNotEnabled()
         assertNull(estimatedFor)
+    }
+    @Test
+    fun `sending when the node rejects shows a failure message`() {
+        val failingGateway = object : SendGateway {
+            override suspend fun estimateFee(
+                address: String,
+                amountSatoshis: Long,
+                subtractFeeFromAmount: Boolean,
+                confTarget: Int?
+            ): WalletRpc.FeeEstimate {
+                return WalletRpc.FeeEstimate(
+                    feeSatoshis = 1_000L,
+                    totalSatoshis = amountSatoshis + 1_000L,
+                    recipientSatoshis = amountSatoshis
+                )
+            }
+            override suspend fun send(
+                address: String,
+                amountSatoshis: Long,
+                passphrase: CharArray?,
+                subtractFeeFromAmount: Boolean,
+                confTarget: Int?
+            ): String {
+                throw Exception("Node rejected the transaction")
+            }
+        }
+        render(gateway = failingGateway)
+        type("To", recipient)
+        type("Amount", "1.25")
+        requestEstimate()
+
+        scrollTo("Review & Send")
+        compose.onNodeWithText("Review & Send").assertIsEnabled().performClick()
+
+        compose.onNodeWithText("Confirm transaction").assertIsDisplayed()
+
+        compose.onNodeWithText("Send").performClick()
+
+        // The send threw, so onComplete should NOT have been called
+        assertTrue(!completed)
     }
 }
