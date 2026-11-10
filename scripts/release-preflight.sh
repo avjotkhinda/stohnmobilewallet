@@ -104,5 +104,48 @@ delta_json.write_text(json.dumps(runbook, indent=2) + "\n")
 print("Wrote", delta_json)
 INNERPY
 
+# --- versionCode must move past the last published release, before anything is built ---
+# The release job compares the built APK with the baseline, which is late: a release that cannot
+# install has already spent the build. The same numbers are in app/build.gradle.kts, so check them
+# here, on every pull request.
+python3 - "$BUILD" "$ROOT/runtime/release-baseline.json" << 'VERSIONPY'
+import json, re, sys
+
+build_file, baseline_file = sys.argv[1], sys.argv[2]
+build = open(build_file, encoding="utf-8").read()
+application_id = re.search(r'^\s*applicationId = "([^"]+)"', build, re.M)
+version_code = re.search(r'^\s*versionCode = (\d+)', build, re.M)
+version_name = re.search(r'^\s*versionName = "([^"]+)"', build, re.M)
+if not (application_id and version_code and version_name):
+    sys.exit(f"FAIL: cannot read applicationId/versionCode/versionName from {build_file}")
+package, code, name = application_id.group(1), int(version_code.group(1)), version_name.group(1)
+
+try:
+    baseline = json.load(open(baseline_file, encoding="utf-8"))
+except FileNotFoundError:
+    sys.exit(f"FAIL: missing {baseline_file}; it records the last published release")
+except json.JSONDecodeError as error:
+    sys.exit(f"FAIL: {baseline_file} is not valid JSON: {error}")
+
+base_package = baseline.get("package", "")
+base_code = int(baseline.get("versionCode", 0))
+base_name = baseline.get("versionName", "")
+
+if package != base_package:
+    sys.exit(f"FAIL: applicationId {package} differs from the released {base_package}: this would be a different app, not an update")
+if code < 1:
+    sys.exit(f"FAIL: versionCode {code} is not a positive version code")
+if code <= base_code:
+    sys.exit(
+        f"FAIL: versionCode {code} ({name}) is not greater than the released {base_code} ({base_name}). "
+        "Android refuses this update, so the release would reach nobody. Raise versionCode in app/build.gradle.kts."
+    )
+
+if base_code == 0:
+    print(f"versionCode {code} ({name}): no release has been published yet, so this one sets the floor")
+else:
+    print(f"versionCode {code} ({name}) is above the released {base_code} ({base_name})")
+VERSIONPY
+
 bash "$ROOT/tools/verify-fullmode-repair.sh"
 echo 'RELEASE PREFLIGHT: PASS'

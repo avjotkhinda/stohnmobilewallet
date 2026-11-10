@@ -50,6 +50,10 @@ jobs:
             fi
           done
           if ! $ALL_OK; then exit 1; fi
+      # The version numbers are static, so a release that could not install is caught here, on the
+      # pull request, rather than after the release job has spent a full build on it.
+      - name: Release preflight (pins, versions, versionCode against the published baseline)
+        run: bash scripts/release-preflight.sh
       - name: Build debug APK (release builds need signing secrets; see release job)
         run: ./gradlew assembleDebug
 
