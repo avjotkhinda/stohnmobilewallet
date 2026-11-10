@@ -35,8 +35,8 @@ android {
         applicationId = "org.stohncoin.wallet"
         minSdk = 26
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.28.2-fullmode"
+        versionCode = 26
+        versionName = "0.28"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
