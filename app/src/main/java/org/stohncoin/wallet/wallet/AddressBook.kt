@@ -111,7 +111,9 @@ data class AddressBook(val labels: List<AddressBookLabel>) {
                 }
             }
             // ]}
-            check(i < n && text[i] == ']' && text[i + 1] == '}') { "Address book is corrupted" }
+            // Guarded like every check above it: without the bound, a file that ends at ']'
+            // throws StringIndexOutOfBounds instead of the corruption this function promises.
+            check(i + 1 < n && text[i] == ']' && text[i + 1] == '}') { "Address book is corrupted" }
             i += 2 // skip ]}
             return AddressBook(list)
         }
