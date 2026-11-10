@@ -204,4 +204,28 @@ class SendPageTest {
         assertEquals("correct horse", submitted?.passphrase)
         assertEquals(125_000_000L, submitted?.amountSatoshis)
     }
+    @Test
+    fun `an address without an amount shown disables the estimate button`() {
+        render()
+        type("To", recipient)
+
+        scrollTo("Estimate Fee")
+        compose.onNodeWithText("Estimate Fee").assertIsNotEnabled()
+
+        scrollTo("Review & Send")
+        compose.onNodeWithText("Review & Send").assertIsNotEnabled()
+        assertNull(estimatedFor)
+    }
+    @Test
+    fun `an address without an amount shows a clear error`() {
+        render()
+        type("To", recipient)
+
+        scrollTo("Estimate Fee")
+        compose.onNodeWithText("Estimate Fee").assertIsNotEnabled()
+
+        scrollTo("Review & Send")
+        compose.onNodeWithText("Review & Send").assertIsNotEnabled()
+        assertNull(estimatedFor)
+    }
 }
