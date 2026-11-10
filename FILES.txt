@@ -66,6 +66,7 @@
 ./app/src/main/res/xml/network_security_config.xml
 ./app/src/test/java/org/stohncoin/wallet/core/NodeStorageTest.kt
 ./app/src/test/java/org/stohncoin/wallet/core/SyncProgressTest.kt
+./app/src/test/java/org/stohncoin/wallet/runtime/AppVersionSingleSourceTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/KeyExportGuardTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/NativeLaunchTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/RuntimeInstallerPathFuzzTest.kt
