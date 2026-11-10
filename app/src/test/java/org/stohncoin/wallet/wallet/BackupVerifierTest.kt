@@ -7,6 +7,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -166,5 +167,82 @@ class BackupVerifierTest {
         assertEquals("stohn-wallet", report.walletName)
         assertEquals(4242L, report.creationHeight)
         assertEquals(sha, report.walletSha256)
+    }
+
+    @Test
+    fun `a missing backup is refused before a workspace is made`() {
+        val absent = File(temporaryFolder.root, "never-written.stohnbackup")
+        val workspace = File(temporaryFolder.root, "workspace-${System.nanoTime()}")
+
+        val failure = runCatching {
+            runBlocking { BackupVerifier.verify(absent, password.toCharArray(), workspace) }
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(failure!!.message!!.contains("Backup file does not exist"))
+        assertFalse("a refused backup left a workspace behind", workspace.exists())
+    }
+
+    @Test
+    fun `an empty password is refused instead of producing an unreadable container`() {
+        val backup = buildBackup("empty-password", walletData())
+        val workspace = workspace()
+
+        val failure = runCatching {
+            runBlocking { BackupVerifier.verify(backup, CharArray(0), workspace) }
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(failure!!.message!!.contains("Backup password is required"))
+        assertTrue("a refused backup left files behind", workspace.listFiles().isNullOrEmpty())
+    }
+
+    @Test
+    fun `a non-positive wallet limit is refused rather than treated as unlimited`() {
+        val backup = buildBackup("zero-limit", walletData())
+        val workspace = workspace()
+
+        for (limit in listOf(0L, -1L)) {
+            val failure = runCatching {
+                runBlocking {
+                    BackupVerifier.verify(backup, password.toCharArray(), workspace, maxWalletBytes = limit)
+                }
+            }.exceptionOrNull()
+
+            assertTrue("$limit was accepted as a wallet limit", failure is IllegalArgumentException)
+            assertTrue(failure!!.message!!.contains("Wallet size limit must be positive"))
+        }
+        assertTrue("a refused backup left files behind", workspace.listFiles().isNullOrEmpty())
+    }
+
+    @Test
+    fun `an unusable workspace is refused before the container is opened`() {
+        val backup = buildBackup("bad-workspace", walletData())
+        // A regular file where the workspace should be: it is not a directory and cannot be created.
+        val blocked = temporaryFolder.newFile("blocked-workspace.dat")
+
+        val failure = runCatching {
+            runBlocking { BackupVerifier.verify(backup, password.toCharArray(), blocked) }
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(failure!!.message!!.contains("Verification workspace is unavailable"))
+        assertEquals("the container was opened anyway", 0L, blocked.length())
+    }
+
+    @Test
+    fun `labels missing an address or a name are not counted`() {
+        // The count is shown to the user as "N labels found in this backup"; an entry with nothing
+        // to show is not a label, and counting it would overstate what the backup actually holds.
+        val labels = """{"labels":[{"raw":"SaddrAlice","label":"Alice"},{"raw":"","label":"NoAddress"},{"raw":"SaddrBlank","label":""}]}"""
+        val backup = buildBackup("blank-labels", walletData(), labelsJson = labels)
+
+        val report = runBlocking {
+            BackupVerifier.verify(backup, password.toCharArray(), workspace()) {
+                BackupVerifier.WalletCheck("sqlite", encrypted = true)
+            }
+        }
+
+        assertEquals(1, report.labelCount)
     }
 }

@@ -137,7 +137,7 @@ tasks.register<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>(
     sourceDirectories.setFrom(files("src/main/java"))
     executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
     // The floors are a ratchet, not a target: they sit just under what the suites measure
-    // today (wallet 88.4%, security 82.8% instruction) so the number can only go up. A new
+    // today (wallet 88.9%, security 82.8% instruction) so the number can only go up. A new
     // untested class in either package trips this; a refactor of covered code does not.
     violationRules {
         isFailOnViolation = true
@@ -147,7 +147,7 @@ tasks.register<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>(
             limit {
                 counter = "INSTRUCTION"
                 value = "COVEREDRATIO"
-                minimum = "0.85".toBigDecimal()
+                minimum = "0.86".toBigDecimal()
             }
         }
         rule {
