@@ -264,8 +264,8 @@ class SendPageTest {
         compose.onNodeWithText("Confirm transaction").assertIsDisplayed()
 
         compose.onNodeWithText("Send").performClick()
+        compose.waitUntil(5_000) { !completed }
 
         // The send threw, so onComplete should NOT have been called
         assertTrue(!completed)
-    }
-}
+    }}
