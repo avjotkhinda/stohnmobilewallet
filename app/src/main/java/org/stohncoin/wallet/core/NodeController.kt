@@ -217,7 +217,7 @@ class NodeController private constructor(context: Context) : SendGateway {
                 delayMs = Math.min(delayMs * 2, 8000L)
             }
         }
-        throw IllegalStateException("Unreachable")
+        error("Unreachable")
     }
 
     override suspend fun send(address: String, amountSatoshis: Long, passphrase: CharArray?, subtractFeeFromAmount: Boolean, confTarget: Int?): String =
