@@ -114,6 +114,38 @@ jobs:
       - name: Generate CycloneDX SBOM and checksum file
         if: steps.signing.outputs.configured == 'true'
         run: bash scripts/generate-sbom.sh app/build/outputs/apk/release/app-release.apk
+      # The checksum file is what makes a published APK checkable, so a release that cannot sign it
+      # is not published at all: the failure here is deliberate, not a skipped step.
+      - name: Decode release signing key
+        if: steps.signing.outputs.configured == 'true'
+        env:
+          SIGNING_KEY_B64: ${{ secrets.STOHN_RELEASE_SIGNING_KEY_B64 }}
+          SIGNING_KEY_FINGERPRINT: ${{ vars.STOHN_RELEASE_SIGNING_KEY_FINGERPRINT }}
+        run: |
+          if [ -z "$SIGNING_KEY_B64" ]; then
+            echo "::error title=Release signing key missing::The APK is signed but its checksum file cannot be. Set STOHN_RELEASE_SIGNING_KEY_B64 to the base64 of the Ed25519 private key PEM."
+            exit 1
+          fi
+          if [ -z "$SIGNING_KEY_FINGERPRINT" ]; then
+            echo "::error title=Signing key fingerprint missing::Set the repository variable STOHN_RELEASE_SIGNING_KEY_FINGERPRINT to the key's public-key SHA-256; scripts/sign-release-checksums.sh prints it."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$SIGNING_KEY_B64" | base64 -d > "$RUNNER_TEMP/stohn-release-signing-key.pem"
+          chmod 600 "$RUNNER_TEMP/stohn-release-signing-key.pem"
+          echo "STOHN_RELEASE_SIGNING_KEY=$RUNNER_TEMP/stohn-release-signing-key.pem" >> "$GITHUB_ENV"
+          echo "STOHN_RELEASE_SIGNING_KEY_FINGERPRINT=$SIGNING_KEY_FINGERPRINT" >> "$GITHUB_ENV"
+      - name: Sign the release checksum file
+        if: steps.signing.outputs.configured == 'true'
+        run: bash scripts/sign-release-checksums.sh app/build/outputs/apk/release/SHA256SUMS
+      # The downloader's own procedure, run before anything is uploaded: if this passes with the
+      # published public key and the published checksums, it passes on someone else's machine.
+      - name: Verify the signature and checksums before upload
+        if: steps.signing.outputs.configured == 'true'
+        working-directory: app/build/outputs/apk/release
+        run: |
+          openssl pkeyutl -verify -pubin -inkey stohn-release-signing-key.pem -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig
+          sha256sum -c SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: steps.signing.outputs.configured == 'true'
         with:
@@ -122,7 +154,13 @@ jobs:
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/release/stohn-wallet-*.cdx.json
             app/build/outputs/apk/release/SHA256SUMS
+            app/build/outputs/apk/release/SHA256SUMS.sig
+            app/build/outputs/apk/release/stohn-release-signing-key.pem
           if-no-files-found: error
+
+      - name: Remove the release signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/stohn-release-signing-key.pem"
 
       - name: Report skipped release
         if: steps.signing.outputs.configured != 'true'

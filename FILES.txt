@@ -116,6 +116,7 @@
 ./scripts/integrate-runtime-manifest.sh
 ./scripts/pin-debian-rootfs.sh
 ./scripts/release-preflight.sh
+./scripts/sign-release-checksums.sh
 ./scripts/verify-apk-artifact.sh
 ./scripts/verify-proot-bundle.sh
 ./scripts/verify-restore-path.sh

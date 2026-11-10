@@ -139,6 +139,43 @@ confirm it installs over the previous one. If the keystore itself is lost or lea
 whether to ship a differently-named app or to stop shipping — write that decision down before the
 moment arrives, because it cannot be made well under time pressure.
 
+## Release checksum signing key
+
+Published downloads are checkable because `SHA256SUMS` carries a detached Ed25519 signature: the
+release job signs it and then verifies it exactly as a downloader would before anything is uploaded.
+That key is **not** the APK keystore and must never be the same file. The keystore stays offline in
+custody and signs the APK; this key exists only to authenticate the small files published beside it,
+lives in CI as `STOHN_RELEASE_SIGNING_KEY_B64` (base64 of the private key PEM), and is pinned by the
+repository variable `STOHN_RELEASE_SIGNING_KEY_FINGERPRINT` (SHA-256 of the public key's DER form).
+Because the fingerprint is checked before signing and the signature is verified against the
+published public key afterwards, a key swapped in the secret store fails the release instead of
+signing quietly. A release whose APK is signed but whose checksums cannot be fails the job: an
+unverifiable download is not published.
+
+Create the key once, offline:
+
+```sh
+openssl genpkey -algorithm ed25519 -out stohn-release-signing-key.pem
+chmod 600 stohn-release-signing-key.pem
+openssl pkey -in stohn-release-signing-key.pem -pubout -out stohn-release-signing-key.pem.pub
+openssl pkey -pubin -in stohn-release-signing-key.pem.pub -outform DER | openssl dgst -sha256 -r
+```
+
+The last command prints the fingerprint to put in the repository variable; `base64 -w0
+stohn-release-signing-key.pem` is what goes into the secret. Back the key up with the keystore — with
+the same two-media, two-location discipline, though losing it only costs re-signing future releases
+rather than the app identity. Rotating it is allowed and announces itself: publish the new public
+key, update the fingerprint variable, and sign every later release with the new key, since there is
+no chain from old signatures to new ones.
+
+Verify a download with what the release ships:
+
+```sh
+openssl pkeyutl -verify -pubin -inkey stohn-release-signing-key.pem -rawin \
+  -in SHA256SUMS -sigfile SHA256SUMS.sig
+sha256sum -c SHA256SUMS
+```
+
 ## Reporting a vulnerability
 
 Do not open a public issue for an exploitable wallet vulnerability. Contact the maintainers privately
