@@ -117,7 +117,7 @@ INNERPY
 # install has already spent the build. The same numbers are in app/build.gradle.kts, so check them
 # here, on every pull request.
 python3 - "$BUILD" "$ROOT/runtime/release-baseline.json" << 'VERSIONPY'
-import json, re, sys
+import json, os, re, sys
 
 build_file, baseline_file = sys.argv[1], sys.argv[2]
 build = open(build_file, encoding="utf-8").read()
@@ -153,6 +153,24 @@ if base_code == 0:
     print(f"versionCode {code} ({name}): no release has been published yet, so this one sets the floor")
 else:
     print(f"versionCode {code} ({name}) is above the released {base_code} ({base_name})")
+
+# An empty signer in the baseline means the release job cannot tell a normal update from one signed
+# by a different key: Android would refuse it for every user, and nothing here would notice. It is a
+# warning rather than a failure because only the published APK carries the value, so the release
+# engineer may not have it yet - but it must stay in view until it is filled in.
+if not baseline.get("signerSha256", ""):
+    message = (
+        f"the baseline pins no signing certificate for {base_name} ({base_code}), so a release signed "
+        "by a different key would not be caught. Run `apksigner verify --print-certs` on the published "
+        "APK and put its Signer #1 SHA-256 digest in runtime/release-baseline.json and in the same "
+        "release's entry in runtime/release-history.json."
+    )
+    # A runner annotation is the only form that survives to the workflow summary; keep it readable
+    # when the same script is run by hand.
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        print(f"::warning title=Release signing certificate not pinned::{message}")
+    else:
+        print(f"WARNING: {message}")
 VERSIONPY
 
 # --- the baseline must be the newest release in the history, on every pull request too ---
