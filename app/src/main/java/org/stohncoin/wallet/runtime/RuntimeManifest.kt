@@ -1,8 +1,17 @@
 package org.stohncoin.wallet.runtime
 
+import org.stohncoin.wallet.BuildConfig
+
 /** Immutable provenance and integrity metadata for the Full Mode runtime artifacts. */
 object RuntimeManifest {
-    const val APP_VERSION = "0.28.2-fullmode"
+    /**
+     * This release's version, for the config file, the user agent and backup manifests.
+     *
+     * Deliberately not a constant here: `versionName` in `app/build.gradle.kts` is the single
+     * declaration, Android copies it into [BuildConfig], and a bump must not depend on a second
+     * copy in this file that can silently disagree with the APK it ships in.
+     */
+    val APP_VERSION: String = BuildConfig.VERSION_NAME
     const val CORE_VERSION = "3.2"
     const val CORE_URL = "https://github.com/StohnCoin-Projects/StohnCoin/releases/download/v3.2/stohn-3.2-aarch64-linux-gnu.tar.gz"
     const val CORE_SHA256 = "1c7fed5e4e5ef9e753146f9ada932abb20994134caaec33d1933d7f5c65531bf"

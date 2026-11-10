@@ -11,8 +11,8 @@ LOCK="$ROOT/runtime/proot/TERMUX-PACKAGE-LOCK.json"
 # instead of a string this script also has to carry.
 VERSION_NAME="$(sed -n 's/^[[:space:]]*versionName = "\(.*\)".*/\1/p' "$BUILD" | head -1)"
 [[ -n "$VERSION_NAME" ]] || { echo 'FAIL: versionName missing from app/build.gradle.kts' >&2; exit 1; }
-grep -F "const val APP_VERSION = \"$VERSION_NAME\"" "$MANIFEST" >/dev/null || {
-  echo "FAIL: RuntimeManifest.APP_VERSION does not match versionName $VERSION_NAME" >&2
+grep -E '^[[:space:]]*val APP_VERSION: String = BuildConfig\.VERSION_NAME[[:space:]]*$' "$MANIFEST" >/dev/null || {
+  echo 'FAIL: RuntimeManifest.APP_VERSION must be BuildConfig.VERSION_NAME, not a copy' >&2
   exit 1
 }
 echo "version: $VERSION_NAME"

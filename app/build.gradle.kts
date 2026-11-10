@@ -57,6 +57,9 @@ android {
 
     buildFeatures {
         compose = true
+        // APP_VERSION is read from BuildConfig so that versionName above is the only copy of the
+        // version number; AGP stopped generating BuildConfig by default in 8.0.
+        buildConfig = true
     }
 
     testOptions {

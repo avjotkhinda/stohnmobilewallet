@@ -28,12 +28,22 @@ require_sha_const() {
   }
 }
 
-# Same rule as release-preflight: the app version is declared once, in app/build.gradle.kts, and the
-# runtime manifest must agree with it.
+# Same rule as release-preflight: the app version is declared once, as versionName in
+# app/build.gradle.kts, and the runtime manifest reads it from BuildConfig instead of keeping a copy
+# that a version bump has to remember to update.
 BUILD="$ROOT/app/build.gradle.kts"
-APP_VERSION_EXPECTED="$(sed -n 's/^[[:space:]]*versionName = "\(.*\)".*/\1/p' "$BUILD" | head -1)"
-[[ -n "$APP_VERSION_EXPECTED" ]] || { echo "ERROR: versionName missing from ${BUILD}" >&2; exit 1; }
-require_const APP_VERSION "$APP_VERSION_EXPECTED"
+[[ -n "$(sed -n 's/^[[:space:]]*versionName = "\(.*\)".*/\1/p' "$BUILD" | head -1)" ]] || {
+  echo "ERROR: versionName missing from ${BUILD}" >&2
+  exit 1
+}
+grep -E '^[[:space:]]*val APP_VERSION: String = BuildConfig\.VERSION_NAME[[:space:]]*$' "$MANIFEST" >/dev/null || {
+  echo "ERROR: RuntimeManifest.APP_VERSION must be BuildConfig.VERSION_NAME" >&2
+  exit 1
+}
+if grep -E 'APP_VERSION[[:space:]]*=[[:space:]]*"' "$MANIFEST" >/dev/null; then
+  echo "ERROR: RuntimeManifest.APP_VERSION must not be a literal; versionName is the only copy" >&2
+  exit 1
+fi
 require_const CORE_VERSION "3.2"
 require_const CORE_SHA256 "1c7fed5e4e5ef9e753146f9ada932abb20994134caaec33d1933d7f5c65531bf"
 require_sha_const CORE_SHA256

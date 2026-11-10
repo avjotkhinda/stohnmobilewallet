@@ -209,6 +209,12 @@ The same rule runs earlier, in `scripts/release-preflight.sh`, which reads `appl
 `versionCode` and `versionName` straight out of `app/build.gradle.kts` and is part of the `build` job.
 Forgetting to bump `versionCode` therefore fails on the pull request, not after a release build.
 
+`versionName` is also the single source of the app version: `RuntimeManifest.APP_VERSION` reads
+`BuildConfig.VERSION_NAME` (which is why `buildConfig` is enabled in `app/build.gradle.kts`), so the
+config file, the user agent and backup manifests all follow a one-line bump. Both preflight and
+`tools/verify-fullmode-repair.sh` refuse a literal version in `RuntimeManifest`, because a second
+copy is exactly what goes stale.
+
 The release step also writes `release-baseline.json` for the APK being released and uploads it with
 the artifact. After publishing, replace the tracked file with that one, otherwise the next release is
 only checked for its package name. A baseline with `versionCode: 0` and an empty signer means
