@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
@@ -46,7 +45,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.stohncoin.wallet.R
-import org.stohncoin.wallet.core.NodeController
+import org.stohncoin.wallet.core.SendGateway
 import org.stohncoin.wallet.wallet.AddressBook
 import org.stohncoin.wallet.wallet.AddressBookLabel
 import org.stohncoin.wallet.wallet.Amounts
@@ -56,7 +55,7 @@ import java.io.File
 
 @Composable
 fun SendPage(
-    node: NodeController,
+    node: SendGateway,
     info: WalletRpc.WalletInfoSnapshot?,
     balance: Long,
     busy: Boolean,
@@ -204,7 +203,7 @@ fun SendPage(
                     scope.launch {
                         onBusy(true)
                         runCatching { estimate = node.estimateFee(address, amount, subtractFee, confTarget) }
-                            .onFailure { Toast.makeText(context, "Fee estimate failed: ${it.message}", Toast.LENGTH_LONG).show() }
+                            .onFailure { toast(context, "Fee estimate failed: ${it.message}") }
                         onBusy(false)
                     }
                 },
@@ -252,11 +251,11 @@ fun SendPage(
                         try {
                             node.send(address, amount, if (info?.encrypted == true) passphrase.toCharArray() else null, subtractFee, confTarget)
                             runCatching { withContext(Dispatchers.IO) { persistLabel(addressBookDir, address.trim(), label) } }
-                            Toast.makeText(context, "Transaction sent", Toast.LENGTH_LONG).show()
+                            toast(context, "Transaction sent")
                             passphrase = ""
                             onComplete()
                         } catch (t: Throwable) {
-                            Toast.makeText(context, "Send failed: ${t.message}", Toast.LENGTH_LONG).show()
+                            toast(context, "Send failed: ${t.message}")
                         } finally {
                             passphrase = ""
                             onBusy(false)
@@ -290,7 +289,7 @@ fun AddressBookPage(onSend: (String) -> Unit) {
     fun write(next: List<AddressBookLabel>) {
         scope.launch {
             val saved = withContext(Dispatchers.IO) { runCatching { AddressBook.save(addressBookDir, next) } }
-            saved.onFailure { Toast.makeText(context, "Could not save the address book", Toast.LENGTH_SHORT).show() }
+            saved.onFailure { toast(context, "Could not save the address book", short = true) }
             entries = withContext(Dispatchers.IO) { runCatching { AddressBook.load(addressBookDir).labels }.getOrElse { emptyList() } }
         }
     }
@@ -375,13 +374,13 @@ fun AddressBookPage(onSend: (String) -> Unit) {
                     val addr = draftAddress.trim()
                     val name = draftLabel.trim()
                     when {
-                        name.isEmpty() -> Toast.makeText(context, "Enter a name for this address", Toast.LENGTH_SHORT).show()
+                        name.isEmpty() -> toast(context, "Enter a name for this address", short = true)
                         renaming -> {
                             val raw = editingRaw
                             write(entries.map { if (it.raw == raw) AddressBookLabel(raw, name) else it })
                             showEditor = false
                         }
-                        addr.isEmpty() -> Toast.makeText(context, "Enter an address", Toast.LENGTH_SHORT).show()
+                        addr.isEmpty() -> toast(context, "Enter an address", short = true)
                         else -> {
                             write(entries.filter { it.raw != addr } + AddressBookLabel(addr, name))
                             showEditor = false
@@ -494,7 +493,7 @@ fun ReceivePage(address: String, onCopy: () -> Unit) {
                         onClick = {
                             val png = bitmap?.let { b -> shareableQrImage(context, b) }
                             if (png == null) {
-                                Toast.makeText(context, "Unable to build the QR image", Toast.LENGTH_SHORT).show()
+                                toast(context, "Unable to build the QR image", short = true)
                                 return@OutlinedButton
                             }
                             val uri = androidx.core.content.FileProvider.getUriForFile(

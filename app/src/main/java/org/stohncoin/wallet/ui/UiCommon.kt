@@ -3,6 +3,8 @@ package org.stohncoin.wallet.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -185,3 +187,17 @@ const val ADDRESS_BOOK_DIR = "addressbook"
 
 
 const val MAX_BACKUP_BYTES = 600L * 1024 * 1024
+
+/**
+ * Shows a message on the main looper.
+ *
+ * `Toast` requires a thread with a Looper, and the send and backup flows show their result from a
+ * coroutine that can resume on another thread; posting keeps a result message from replacing the
+ * outcome with a crash.
+ */
+fun toast(context: Context, message: String, short: Boolean = false) {
+    val duration = if (short) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
+    Handler(Looper.getMainLooper()).post {
+        Toast.makeText(context.applicationContext, message, duration).show()
+    }
+}

@@ -32,7 +32,7 @@ import org.stohncoin.wallet.wallet.WalletRpc
 import java.io.File
 
 /** Process-wide owner for the single Full Mode node instance. */
-class NodeController private constructor(context: Context) {
+class NodeController private constructor(context: Context) : SendGateway {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val startMutex = Mutex()
@@ -185,10 +185,10 @@ class NodeController private constructor(context: Context) {
 
     suspend fun walletInfo(): WalletRpc.WalletInfoSnapshot = walletMutex.withLock { walletRpc().walletInfo() }
     suspend fun newAddress(): String = walletMutex.withLock { walletRpc().newAddress() }
-    suspend fun estimateFee(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean, confTarget: Int? = null): WalletRpc.FeeEstimate =
+    override suspend fun estimateFee(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean, confTarget: Int?): WalletRpc.FeeEstimate =
         walletMutex.withLock { walletRpc().estimateFee(address, amountSatoshis, subtractFeeFromAmount, confTarget) }
 
-    suspend fun send(address: String, amountSatoshis: Long, passphrase: CharArray?, subtractFeeFromAmount: Boolean, confTarget: Int? = null): String =
+    override suspend fun send(address: String, amountSatoshis: Long, passphrase: CharArray?, subtractFeeFromAmount: Boolean, confTarget: Int?): String =
         walletMutex.withLock {
             val rpc = walletRpc()
             try {
