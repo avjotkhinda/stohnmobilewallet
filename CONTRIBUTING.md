@@ -223,11 +223,12 @@ config file, the user agent and backup manifests all follow a one-line bump. Bot
 `tools/verify-fullmode-repair.sh` refuse a literal version in `RuntimeManifest`, because a second
 copy is exactly what goes stale.
 
-The release step also writes `release-baseline.json` for the APK being released and uploads it with
-the artifact. After publishing, replace the tracked file with that one, otherwise the next release is
-only checked for its package name. A baseline with `versionCode: 0` and an empty signer means
-nothing signed has been published yet; if a build was distributed before this file existed, set its
-version and fingerprint before the next release.
+The release step also writes `release-baseline.json` for the APK being released, appends the same
+release to `runtime/release-history.json`, and uploads both with the artifact. After publishing,
+replace the tracked files with those, otherwise the next release is only checked for its package
+name. The history already records the first release, `0.1` (`versionCode` 1), with an empty signer:
+fill it from the key that APK was signed with — `--emit` on the published APK does it — because until
+it is set a release signed by a different key is not caught.
 
 ## Reproducible releases
 

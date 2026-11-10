@@ -1,7 +1,7 @@
 {
   "package": "org.stohncoin.wallet",
-  "versionCode": 0,
-  "versionName": "",
+  "versionCode": 1,
+  "versionName": "0.1",
   "signerSha256": "",
-  "note": "The last release that went out. Android installs an update only with this package, this signing certificate and a higher versionCode; scripts/verify-upgrade-compatibility.sh enforces all three in the release job. versionCode 0 and an empty signer mean no signed release has been published yet: after the first one, run the script with --emit on that APK and commit the result, or the next release is only checked for the package name. If 0.28.2 (versionCode 25) was distributed before this file existed, set it to 25 now."
+  "note": "The last release that went out, and the newest entry in runtime/release-history.json. Android installs an update only with this package, this signing certificate and a higher versionCode; scripts/verify-upgrade-compatibility.sh enforces all three in the release job. It records the first release (0.1, versionCode 1), which is why every later build is already above it. signerSha256 is empty until it is taken from the key that release was signed with: run scripts/verify-upgrade-compatibility.sh <published apk> --emit <file> with that APK, or paste the SHA-256 apksigner verify --print-certs prints, and commit both files. While it is empty a release signed by a different key is not caught."
 }

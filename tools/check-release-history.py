@@ -19,7 +19,7 @@ import re
 import sys
 from pathlib import Path
 
-NAME = re.compile(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?")
+NAME = re.compile(r"\d+(?:\.\d+)+(?:-[0-9A-Za-z.-]+)?")
 SIGNER = re.compile(r"[0-9a-f]{64}")
 
 

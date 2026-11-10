@@ -18,7 +18,8 @@ import org.stohncoin.wallet.BuildConfig
  *
  * "A version" and not "the current version": a copy left behind by an earlier bump is the more
  * likely mistake, so any string shaped like this project's version name (`x.y.z-fullmode`) counts,
- * as well as every release in `runtime/release-history.json`.
+ * as well as every release in `runtime/release-history.json` — including the bare numeric core, so
+ * `0.1` from the first release is caught just like `0.28.2`.
  */
 class AppVersionSingleSourceTest {
     private val version = BuildConfig.VERSION_NAME
@@ -89,7 +90,7 @@ class AppVersionSingleSourceTest {
         .replace(LINE_COMMENT, "")
 
     private companion object {
-        val NUMERIC_VERSION = Regex("""\d+\.\d+\.\d+""")
+        val NUMERIC_VERSION = Regex("""\d+(?:\.\d+)+""")
         val SUFFIXED_VERSION = Regex("""(?<![\w.])[0-9]+\.[0-9]+\.[0-9]+-fullmode(?![\w.])""")
         val HISTORY_VERSION = Regex(""""versionName"\s*:\s*"([^"]+)"""")
         val BLOCK_COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)

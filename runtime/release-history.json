@@ -1,4 +1,10 @@
 {
-  "note": "Every release that went out, oldest first, appended by scripts/verify-upgrade-compatibility.sh --emit. This list and runtime/release-baseline.json describe the same releases, so tools/check-release-history.py (run by the preflight and the release job) refuses a baseline that is not the newest entry here; the app version guard in AppVersionSingleSourceTest rejects any versionName listed here. It is empty because no signed release is known to have shipped: if 0.28.2 (versionCode 25) was distributed before this file existed, add {\"versionCode\": 25, \"versionName\": \"0.28.2-fullmode\", \"signerSha256\": \"\"} as the only entry and set the baseline to match.",
-  "releases": []
+  "note": "Every release that went out, oldest first, appended by scripts/verify-upgrade-compatibility.sh --emit. This list and runtime/release-baseline.json describe the same releases, so tools/check-release-history.py (run by the preflight and the release job) refuses a baseline that is not the newest entry here; the app version guard in AppVersionSingleSourceTest rejects any versionName listed here. signerSha256 is deliberately empty for the first release: it must come from the key the APK was actually signed with, so fill it by running scripts/verify-upgrade-compatibility.sh <published apk> --emit <file> (which re-records this release) or by pasting the 'Signer #1 certificate SHA-256 digest' that apksigner verify --print-certs prints. Until it is set, the signing-certificate check is skipped for the next release.",
+  "releases": [
+    {
+      "versionCode": 1,
+      "versionName": "0.1",
+      "signerSha256": ""
+    }
+  ]
 }
