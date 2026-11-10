@@ -96,7 +96,38 @@ def main():
             "scripts/verify-upgrade-compatibility.sh <apk> --emit <baseline>."
         )
 
-    print(f"HISTORY: PASS: {len(releases)} release(s) recorded, baseline is the newest ({base_name})")
+    # --emit reads the certificate out of a signed APK, so a baseline written by the release job
+    # always names one. An empty signer is therefore either a release recorded by hand from an APK
+    # nobody can read any more - which must say so with signerPending - or a baseline that lost the
+    # value, and then the certificate check is silently off. That is the case this refuses.
+    base_signer = baseline.get("signerSha256", "")
+    pending = baseline.get("signerPending", False)
+    if not isinstance(base_signer, str) or (base_signer and not SIGNER.fullmatch(base_signer)):
+        fail(f"{baseline_path}: signerSha256 must be a lowercase SHA-256 or empty, was {base_signer!r}")
+    if not isinstance(pending, bool):
+        fail(f'{baseline_path}: "signerPending" must be true or false')
+    if base_signer != newest["signerSha256"]:
+        fail(
+            f"{baseline_path} names signer {base_signer or '(none)'} but the newest release in "
+            f"{history_path} names {newest['signerSha256'] or '(none)'}; the two files describe the "
+            "same release, so record them together with --emit."
+        )
+    if not base_signer and not pending:
+        fail(
+            f"{baseline_path} records {base_name} ({base_code}) with no signing certificate and no "
+            'signerPending exemption. A baseline written by --emit always names one, so either paste '
+            "the digest from the published APK or, when that APK predates the tooling and cannot be "
+            'read any more, set "signerPending": true and say why in its note.'
+        )
+    if base_signer and pending:
+        fail(
+            f'{baseline_path} names a signing certificate and still carries "signerPending": true. '
+            "Remove the exemption: keeping it would let a later baseline drop the certificate "
+            "unnoticed."
+        )
+
+    state = "signer pinned" if base_signer else "signer pending"
+    print(f"HISTORY: PASS: {len(releases)} release(s) recorded, baseline is the newest ({base_name}, {state})")
 
 
 if __name__ == "__main__":

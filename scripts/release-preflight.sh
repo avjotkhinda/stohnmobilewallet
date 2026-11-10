@@ -155,9 +155,11 @@ else:
     print(f"versionCode {code} ({name}) is above the released {base_code} ({base_name})")
 
 # An empty signer in the baseline means the release job cannot tell a normal update from one signed
-# by a different key: Android would refuse it for every user, and nothing here would notice. It is a
-# warning rather than a failure because only the published APK carries the value, so the release
-# engineer may not have it yet - but it must stay in view until it is filled in.
+# by a different key: Android would refuse it for every user, and nothing here would notice. A
+# baseline written by --emit always names one, so an empty signer is only tolerable while the
+# release says "signerPending": true - a release recorded from an APK nobody can read any more. The
+# checker below refuses that flag on a baseline that lost its certificate, so this stays a warning
+# for the one legitimate case and an error everywhere else.
 if not baseline.get("signerSha256", ""):
     message = (
         f"the baseline pins no signing certificate for {base_name} ({base_code}), so a release signed "
