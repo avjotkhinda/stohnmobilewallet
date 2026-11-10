@@ -108,6 +108,13 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-24.04
+    # scripts/verify-baseline-committed.sh reads the previous release's artifact through the API, so
+    # the token needs actions: read; without this it inherits the repository default and the check
+    # fails on scope instead of on a missing commit. Artifact upload uses the runner's own runtime
+    # token, so it does not need actions: write here.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       signed: ${{ steps.signing.outputs.configured }}
     steps:
