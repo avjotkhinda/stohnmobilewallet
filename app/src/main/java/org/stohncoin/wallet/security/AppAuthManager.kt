@@ -13,15 +13,23 @@ import androidx.security.crypto.MasterKey
  *  - biometric unlock cannot be enabled while no PIN exists, so a fallback verifier always exists;
  *  - clearing the PIN disables both the lock and biometric unlock;
  *  - failures and the block expiry are persisted, so killing the app does not reset throttling.
+ *
+ * The public functions take a [Context] because the real store is [prefs], an
+ * [EncryptedSharedPreferences] built on a key the Android keystore holds. Every decision is
+ * actually made by the `store` overloads below, against a plain [SharedPreferences]: the keystore
+ * cannot exist off-device, so this split is what lets the lock policy run in JVM tests instead of
+ * being verifiable only by hand on a phone.
  */
 object AppAuthManager {
-    private const val PREFS_NAME = "stohn_auth_prefs"
-    private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
-    private const val KEY_APP_LOCK_ENABLED = "app_lock_enabled"
-    private const val KEY_UNLOCK_PIN = "unlock_pin_hash"
-    private const val KEY_FAILURES = "unlock_failure_count"
-    private const val KEY_BLOCKED_UNTIL = "unlock_blocked_until"
-    private const val KEY_LOCK_GRACE = "lock_grace_millis"
+    // Internal, not private, so a test can pin them: these names are an on-disk contract, and
+    // renaming one does not fail a build - it silently forgets that a user ever set a PIN.
+    internal const val PREFS_NAME = "stohn_auth_prefs"
+    internal const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
+    internal const val KEY_APP_LOCK_ENABLED = "app_lock_enabled"
+    internal const val KEY_UNLOCK_PIN = "unlock_pin_hash"
+    internal const val KEY_FAILURES = "unlock_failure_count"
+    internal const val KEY_BLOCKED_UNTIL = "unlock_blocked_until"
+    internal const val KEY_LOCK_GRACE = "lock_grace_millis"
 
     const val MIN_PIN_LENGTH = 4
     const val MAX_PIN_LENGTH = 6
@@ -62,16 +70,22 @@ object AppAuthManager {
     }
 
     /** The lock is only meaningful while a PIN verifier exists. */
-    fun isAppLockEnabled(context: Context): Boolean =
-        hasPin(context) && prefs(context).getBoolean(KEY_APP_LOCK_ENABLED, false)
+    fun isAppLockEnabled(context: Context): Boolean = isAppLockEnabled(prefs(context))
 
-    fun isBiometricEnabled(context: Context): Boolean =
-        hasPin(context) && prefs(context).getBoolean(KEY_BIOMETRIC_ENABLED, false)
+    internal fun isAppLockEnabled(store: SharedPreferences): Boolean =
+        hasPin(store) && store.getBoolean(KEY_APP_LOCK_ENABLED, false)
+
+    fun isBiometricEnabled(context: Context): Boolean = isBiometricEnabled(prefs(context))
+
+    internal fun isBiometricEnabled(store: SharedPreferences): Boolean =
+        hasPin(store) && store.getBoolean(KEY_BIOMETRIC_ENABLED, false)
 
     /** Returns false when enabling was refused because no PIN is set. */
-    fun setBiometricEnabled(context: Context, enabled: Boolean): Boolean {
-        val store = prefs(context)
-        if (enabled && !hasPin(context)) {
+    fun setBiometricEnabled(context: Context, enabled: Boolean): Boolean =
+        setBiometricEnabled(prefs(context), enabled)
+
+    internal fun setBiometricEnabled(store: SharedPreferences, enabled: Boolean): Boolean {
+        if (enabled && !hasPin(store)) {
             store.edit().putBoolean(KEY_BIOMETRIC_ENABLED, false).apply()
             return false
         }
@@ -79,12 +93,14 @@ object AppAuthManager {
         return true
     }
 
-    fun setPin(context: Context, pin: String) {
+    fun setPin(context: Context, pin: String) = setPin(prefs(context), pin)
+
+    internal fun setPin(store: SharedPreferences, pin: String) {
         require(pin.length in MIN_PIN_LENGTH..MAX_PIN_LENGTH) {
             "PIN must be $MIN_PIN_LENGTH-$MAX_PIN_LENGTH digits"
         }
         require(pin.all { it.isDigit() }) { "PIN must contain digits only" }
-        prefs(context).edit()
+        store.edit()
             .putString(KEY_UNLOCK_PIN, PinHasher.hash(pin))
             .putBoolean(KEY_APP_LOCK_ENABLED, true)
             .putInt(KEY_FAILURES, 0)
@@ -92,12 +108,16 @@ object AppAuthManager {
             .apply()
     }
 
-    fun hasPin(context: Context): Boolean =
-        !prefs(context).getString(KEY_UNLOCK_PIN, null).isNullOrBlank()
+    fun hasPin(context: Context): Boolean = hasPin(prefs(context))
+
+    internal fun hasPin(store: SharedPreferences): Boolean =
+        !store.getString(KEY_UNLOCK_PIN, null).isNullOrBlank()
 
     /** Verifies a PIN under the throttle policy and records the outcome. */
-    fun submitPin(context: Context, pin: String, now: Long = System.currentTimeMillis()): PinVerdict {
-        val store = prefs(context)
+    fun submitPin(context: Context, pin: String, now: Long = System.currentTimeMillis()): PinVerdict =
+        submitPin(prefs(context), pin, now)
+
+    internal fun submitPin(store: SharedPreferences, pin: String, now: Long): PinVerdict {
         val state = PinThrottle.State(
             failures = store.getInt(KEY_FAILURES, 0),
             blockedUntil = store.getLong(KEY_BLOCKED_UNTIL, 0L)
@@ -128,8 +148,10 @@ object AppAuthManager {
         }
     }
 
-    fun clearPin(context: Context) {
-        prefs(context).edit()
+    fun clearPin(context: Context) = clearPin(prefs(context))
+
+    internal fun clearPin(store: SharedPreferences) {
+        store.edit()
             .remove(KEY_UNLOCK_PIN)
             .putBoolean(KEY_APP_LOCK_ENABLED, false)
             .putBoolean(KEY_BIOMETRIC_ENABLED, false)
@@ -138,12 +160,16 @@ object AppAuthManager {
             .apply()
     }
 
-    fun lockGraceMillis(context: Context): Long =
-        prefs(context).getLong(KEY_LOCK_GRACE, DEFAULT_LOCK_GRACE_MILLIS)
-            .coerceIn(0L, MAX_LOCK_GRACE_MILLIS)
+    fun lockGraceMillis(context: Context): Long = lockGraceMillis(prefs(context))
 
-    fun setLockGraceMillis(context: Context, millis: Long) {
-        prefs(context).edit()
+    internal fun lockGraceMillis(store: SharedPreferences): Long =
+        store.getLong(KEY_LOCK_GRACE, DEFAULT_LOCK_GRACE_MILLIS).coerceIn(0L, MAX_LOCK_GRACE_MILLIS)
+
+    fun setLockGraceMillis(context: Context, millis: Long) =
+        setLockGraceMillis(prefs(context), millis)
+
+    internal fun setLockGraceMillis(store: SharedPreferences, millis: Long) {
+        store.edit()
             .putLong(KEY_LOCK_GRACE, millis.coerceIn(0L, MAX_LOCK_GRACE_MILLIS))
             .apply()
     }

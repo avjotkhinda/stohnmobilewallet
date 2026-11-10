@@ -57,7 +57,11 @@ grep -F 'SecureRandom' "$PIN" >/dev/null || fail "app-lock PIN salt is not rando
 grep -F 'MessageDigest.isEqual' "$PIN" >/dev/null || fail "app-lock PIN comparison is not constant time"
 grep -F 'PinThrottle.afterFailure' "$AUTH" >/dev/null || fail "app-lock PIN throttling is not persisted"
 grep -F 'PinThrottle.isBlocked' "$AUTH" >/dev/null || fail "app-lock PIN throttling is not enforced"
-grep -F 'if (enabled && !hasPin(context))' "$AUTH" >/dev/null || fail "biometric unlock can be enabled without a PIN"
+grep -F 'if (enabled && !hasPin(store))' "$AUTH" >/dev/null || fail "biometric unlock can be enabled without a PIN"
+# The guard lives in the store-based core, so the Context entry point must delegate to it rather
+# than developing a second, unchecked path.
+grep -F 'setBiometricEnabled(prefs(context), enabled)' "$AUTH" >/dev/null \
+  || fail "context entry point bypasses the biometric PIN guard"
 grep -F 'FLAG_SECURE' "$MAIN" >/dev/null || fail "FLAG_SECURE missing: wallet content would appear in recents"
 grep -F 'VISIBILITY_SECRET' "$SERVICE" >/dev/null || fail "node notification is not redacted on the lock screen"
 [[ ! -f "$ROOT/app/src/main/java/org/stohncoin/wallet/security/WalletKeystore.kt" ]] || fail "unused WalletKeystore class reappeared"

@@ -95,6 +95,58 @@ fun LockScreen(onUnlocked: () -> Unit) {
         }
     }
 
+    LockScreenContent(
+        hasPin = hasPin,
+        biometricEnabled = biometricEnabled,
+        pin = pin,
+        onPinChange = {
+            if (it.length <= AppAuthManager.MAX_PIN_LENGTH) {
+                pin = it
+                error = null
+            }
+        },
+        error = error,
+        blockedMillis = blockedMillis,
+        onUnlock = {
+            when (val verdict = AppAuthManager.submitPin(context, pin)) {
+                is AppAuthManager.PinVerdict.Success -> {
+                    pin = ""
+                    error = null
+                    blockedMillis = 0L
+                    onUnlocked()
+                }
+                is AppAuthManager.PinVerdict.Incorrect -> {
+                    pin = ""
+                    error = "Incorrect PIN"
+                }
+                is AppAuthManager.PinVerdict.Blocked -> {
+                    pin = ""
+                    blockedMillis = verdict.retryAfterMillis
+                    error = "Too many attempts"
+                }
+            }
+        },
+        onBiometric = { showBiometric() }
+    )
+}
+
+/**
+ * The lock gate as a pure function of its state.
+ *
+ * Split out of [LockScreen] so it can be rendered and asserted on in a JVM test: [LockScreen]
+ * reads the AppAuthManager store, which needs the Android keystore and therefore a device.
+ */
+@Composable
+internal fun LockScreenContent(
+    hasPin: Boolean,
+    biometricEnabled: Boolean,
+    pin: String,
+    onPinChange: (String) -> Unit,
+    error: String?,
+    blockedMillis: Long,
+    onUnlock: () -> Unit,
+    onBiometric: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -113,12 +165,7 @@ fun LockScreen(onUnlocked: () -> Unit) {
         if (hasPin) {
             OutlinedTextField(
                 value = pin,
-                onValueChange = {
-                    if (it.length <= AppAuthManager.MAX_PIN_LENGTH) {
-                        pin = it
-                        error = null
-                    }
-                },
+                onValueChange = onPinChange,
                 label = { Text("Enter PIN") },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -140,25 +187,7 @@ fun LockScreen(onUnlocked: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = {
-                    when (val verdict = AppAuthManager.submitPin(context, pin)) {
-                        is AppAuthManager.PinVerdict.Success -> {
-                            pin = ""
-                            error = null
-                            blockedMillis = 0L
-                            onUnlocked()
-                        }
-                        is AppAuthManager.PinVerdict.Incorrect -> {
-                            pin = ""
-                            error = "Incorrect PIN"
-                        }
-                        is AppAuthManager.PinVerdict.Blocked -> {
-                            pin = ""
-                            blockedMillis = verdict.retryAfterMillis
-                            error = "Too many attempts"
-                        }
-                    }
-                },
+                onClick = onUnlock,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = pin.length >= AppAuthManager.MIN_PIN_LENGTH && blockedMillis == 0L
             ) {
@@ -169,7 +198,7 @@ fun LockScreen(onUnlocked: () -> Unit) {
         if (biometricEnabled) {
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedButton(
-                onClick = { showBiometric() },
+                onClick = onBiometric,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = blockedMillis == 0L
             ) {

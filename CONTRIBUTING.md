@@ -97,6 +97,18 @@ guard, add the test that watches it say no:
 Property-style tests (`RuntimeInstallerPathFuzzTest`, `BackupContainerFuzzTest`) drive their subjects
 with seeded adversarial input; extend them rather than writing one-off cases for each new attack.
 
+Code that needs an Android `Context` runs under Robolectric in the same unit-test task
+(`AppAuthManagerTest`, `LockScreenTest`), so a lock policy or a screen's state does not have to wait
+for a device. Two limits are worth knowing before reaching for it:
+
+- Robolectric has no Android keystore, so `EncryptedSharedPreferences` cannot be built in a test.
+  `AppAuthManager` therefore makes its decisions in `store`-taking overloads against a plain
+  `SharedPreferences`; test those, and do not add a plaintext fallback to the Context path.
+- Tests are pinned to API 35 in `app/src/test/resources/robolectric.properties` because CI runs
+  JDK 17 and Robolectric needs JDK 21 to simulate API 36. Robolectric downloads its own runtime
+  jars on the first run, which Gradle's dependency verification does not cover — expect that first
+  run to be slow and to need network access.
+
 ## Reporting a vulnerability
 
 Do not open a public issue for an exploitable wallet vulnerability. Contact the maintainers privately

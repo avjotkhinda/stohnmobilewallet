@@ -59,6 +59,12 @@ android {
         compose = true
     }
 
+    testOptions {
+        // Robolectric needs the merged manifest and compiled resources to build a simulated
+        // device; without this it runs against a stub with no theme, no resources and no manifest.
+        unitTests.isIncludeAndroidResources = true
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -131,7 +137,7 @@ tasks.register<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>(
     sourceDirectories.setFrom(files("src/main/java"))
     executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
     // The floors are a ratchet, not a target: they sit just under what the suites measure
-    // today (wallet 84.0%, security 57.7% instruction) so the number can only go up. A new
+    // today (wallet 84.0%, security 82.8% instruction) so the number can only go up. A new
     // untested class in either package trips this; a refactor of covered code does not.
     violationRules {
         isFailOnViolation = true
@@ -150,7 +156,7 @@ tasks.register<org.gradle.testing.jacoco.tasks.JacocoCoverageVerification>(
             limit {
                 counter = "INSTRUCTION"
                 value = "COVEREDRATIO"
-                minimum = "0.55".toBigDecimal()
+                minimum = "0.75".toBigDecimal()
             }
         }
     }
@@ -192,4 +198,15 @@ dependencies {
     // every call. WalletRpc speaks JSON-RPC, so its tests need a real implementation on the
     // test classpath; this is the reference org.json that Android's own copy derives from.
     testImplementation("org.json:json:20240303")
+    // Robolectric runs the app's Android code paths on the JVM against a simulated framework, so
+    // the parts that only make sense with a real Context - the app-lock store, Compose screens -
+    // can be exercised by the same `test` task as everything else. Pinned to API 35 in
+    // src/test/resources/robolectric.properties because CI runs JDK 17 and API 36 needs JDK 21.
+    // It fetches its android-all runtime jars itself at test time, so the first run is slow and
+    // needs network access; Gradle's dependency verification does not cover those downloads.
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("androidx.test:core-ktx:1.6.1")
+    testImplementation(platform("androidx.compose:compose-bom:2025.01.00"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
