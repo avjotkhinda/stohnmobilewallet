@@ -156,6 +156,14 @@ jobs:
       - name: Verify APK runtime payload against RuntimeManifest
         if: steps.signing.outputs.configured == 'true'
         run: bash scripts/verify-apk-artifact.sh app/build/outputs/apk/release/app-release.apk
+      # An update that cannot install is not a release, and nothing earlier in the pipeline can see
+      # that: package, signing certificate and versionCode are only knowable from the built APK.
+      - name: Check the APK installs over the last release
+        if: steps.signing.outputs.configured == 'true'
+        run: |
+          bash scripts/verify-upgrade-compatibility.sh app/build/outputs/apk/release/app-release.apk
+          bash scripts/verify-upgrade-compatibility.sh app/build/outputs/apk/release/app-release.apk \
+            --emit app/build/outputs/apk/release/release-baseline.json
       - name: Generate CycloneDX SBOM and checksum file
         if: steps.signing.outputs.configured == 'true'
         run: |
@@ -203,6 +211,7 @@ jobs:
             app/build/outputs/apk/release/SHA256SUMS
             app/build/outputs/apk/release/SHA256SUMS.sig
             app/build/outputs/apk/release/stohn-release-signing-key.pem
+            app/build/outputs/apk/release/release-baseline.json
           if-no-files-found: error
 
       - name: Remove the release signing key

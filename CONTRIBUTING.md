@@ -191,6 +191,26 @@ openssl pkeyutl -verify -pubin -inkey stohn-release-signing-key.pem -rawin \
 sha256sum -c SHA256SUMS
 ```
 
+## Upgrade compatibility
+
+`runtime/release-baseline.json` records the last release that actually went out —
+`package`, `versionCode`, `versionName` and the SHA-256 of the signing certificate. The release job
+runs `scripts/verify-upgrade-compatibility.sh` against the APK it built and fails on each of the
+three ways an update silently stops installing:
+
+- a different package, which is a different app rather than an update;
+- a `versionCode` that is not higher than the released one — the most common way a release is
+  published and then reaches nobody, because the device and the store both refuse it;
+- a different signing certificate, which Android will not install at all, so every user would have
+  to uninstall and lose their node data. This is the check that catches "the CI secret now holds a
+  different keystore".
+
+The same step writes `release-baseline.json` for the APK being released and uploads it with the
+artifact. After publishing, replace the tracked file with that one, otherwise the next release is
+only checked for its package name. A baseline with `versionCode: 0` and an empty signer means
+nothing signed has been published yet; if a build was distributed before this file existed, set its
+version and fingerprint before the next release.
+
 ## Reproducible releases
 
 Two clean runners build every release: the `release` job publishes the APK, and the
