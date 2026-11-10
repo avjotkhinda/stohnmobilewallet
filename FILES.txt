@@ -110,6 +110,7 @@
 ./runtime/proot/TERMUX-PACKAGE-LOCK.json
 ./runtime/proot/proot-version-runbook.json
 ./runtime/release-baseline.json
+./runtime/release-history.json
 ./scripts/build-android-core.sh
 ./scripts/build-proot-android-bundle.sh
 ./scripts/fetch-stohn-v3.2.sh
@@ -126,6 +127,7 @@
 ./scripts/verify-upgrade-compatibility.sh
 ./scripts/verify-wallet-migration.sh
 ./settings.gradle.kts
+./tools/check-release-history.py
 ./tools/security-audit.sh
 ./tools/verify-files-list.sh
 ./tools/verify-fullmode-repair.sh

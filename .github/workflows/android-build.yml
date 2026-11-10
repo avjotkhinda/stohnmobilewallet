@@ -216,6 +216,7 @@ jobs:
             app/build/outputs/apk/release/SHA256SUMS.sig
             app/build/outputs/apk/release/stohn-release-signing-key.pem
             app/build/outputs/apk/release/release-baseline.json
+            runtime/release-history.json
           if-no-files-found: error
 
       - name: Remove the release signing key

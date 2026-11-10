@@ -18,7 +18,7 @@ import org.stohncoin.wallet.BuildConfig
  *
  * "A version" and not "the current version": a copy left behind by an earlier bump is the more
  * likely mistake, so any string shaped like this project's version name (`x.y.z-fullmode`) counts,
- * as well as the version the last release recorded in `runtime/release-baseline.json`.
+ * as well as every release in `runtime/release-history.json`.
  */
 class AppVersionSingleSourceTest {
     private val version = BuildConfig.VERSION_NAME
@@ -54,17 +54,15 @@ class AppVersionSingleSourceTest {
     }
 
     /**
-     * The current version in full and bare, the version the last release recorded, and any string
-     * that looks like this project's version name whatever its number. Bare historical version
-     * numbers are only forbidden when the baseline names them: a source file comparing against a
-     * compatibility threshold is doing something different from duplicating the version it ships.
+     * The current version in full and bare, every released version the same way, and any string that
+     * looks like this project's version name whatever its number. Bare historical version numbers are
+     * only forbidden once a release recorded them: a source file comparing against a compatibility
+     * threshold is doing something different from duplicating the version it ships.
      */
     private fun forbiddenVersions(): List<Regex> = buildList {
-        add(wholeToken(version))
-        numericCore(version)?.let { add(wholeToken(it)) }
-        releasedVersion()?.let { released ->
-            add(wholeToken(released))
-            numericCore(released)?.let { add(wholeToken(it)) }
+        (listOf(version) + releasedVersions()).forEach { candidate ->
+            add(wholeToken(candidate))
+            numericCore(candidate)?.let { add(wholeToken(it)) }
         }
         add(SUFFIXED_VERSION)
     }
@@ -73,11 +71,16 @@ class AppVersionSingleSourceTest {
 
     private fun wholeToken(value: String): Regex = Regex("(?<![\\w.])${Regex.escape(value)}(?![\\w.])")
 
-    private fun releasedVersion(): String? {
-        val baseline = listOf(File("../runtime/release-baseline.json"), File("runtime/release-baseline.json"))
+    /**
+     * Every version in [HISTORY_FILE], not just the newest one: a copy of a release from three
+     * versions ago is exactly as wrong as a copy of the current one, and it is the one that survives
+     * a bump nobody re-read.
+     */
+    private fun releasedVersions(): List<String> {
+        val history = listOf(File("../runtime/release-history.json"), File("runtime/release-history.json"))
             .firstOrNull { it.isFile }
-            ?: return null
-        return BASELINE_VERSION.find(baseline.readText())?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
+            ?: error("cannot find runtime/release-history.json from ${File(".").absolutePath}")
+        return HISTORY_VERSION.findAll(history.readText()).map { it.groupValues[1] }.distinct().toList()
     }
 
     /** Comments are documentation, not shipped values: only code is scanned. */
@@ -88,7 +91,7 @@ class AppVersionSingleSourceTest {
     private companion object {
         val NUMERIC_VERSION = Regex("""\d+\.\d+\.\d+""")
         val SUFFIXED_VERSION = Regex("""(?<![\w.])[0-9]+\.[0-9]+\.[0-9]+-fullmode(?![\w.])""")
-        val BASELINE_VERSION = Regex(""""versionName"\s*:\s*"([^"]*)"""")
+        val HISTORY_VERSION = Regex(""""versionName"\s*:\s*"([^"]+)"""")
         val BLOCK_COMMENT = Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL)
         val LINE_COMMENT = Regex("""//[^\n]*""")
         val SOURCE_TYPES = setOf("kt", "java", "xml")

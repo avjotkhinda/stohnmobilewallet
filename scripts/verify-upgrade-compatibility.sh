@@ -10,8 +10,10 @@
 # This compares the built APK against `runtime/release-baseline.json`, which records the last
 # release that actually went out.
 #
-# `--emit <file>` writes that record for the APK being released, so the baseline can be committed
-# after publishing. It is a deliberate manual step: the baseline must describe a release that exists.
+# `--emit <file>` writes that record for the APK being released and appends the same release to
+# `runtime/release-history.json`, so the two cannot describe different releases after one command.
+# Both files are meant to be committed after publishing: the emit is a deliberate manual step,
+# because the record must describe a release that exists.
 set -euo pipefail
 
 apk=${1:?usage: verify-upgrade-compatibility.sh <apk> [--emit <file>]}
@@ -34,6 +36,7 @@ done
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 baseline="$root/runtime/release-baseline.json"
+history="$root/runtime/release-history.json"
 
 sdk=${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}
 [ -n "$sdk" ] || { echo "ANDROID_SDK_ROOT or ANDROID_HOME must be set" >&2; exit 1; }
@@ -76,6 +79,28 @@ if [ -n "$emit" ]; then
 }
 JSON
     echo "wrote $emit for $package $version_name ($version_code)"
+    # The history is the other half of the same record: the version guard reads every fragment here,
+    # so a release that only reaches the baseline would leave stale copies of it undetected.
+    python3 - "$history" "$package" "$version_code" "$version_name" "$signer" <<'HISTORYPY'
+import json, sys
+
+path, package, code, name, signer = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4], sys.argv[5]
+try:
+    with open(path, encoding="utf-8") as source:
+        history = json.load(source)
+except FileNotFoundError:
+    sys.exit(f"FAIL: missing {path}; it is tracked, so this is a checkout problem")
+
+# Re-emitting the same APK replaces its entry instead of recording the release twice.
+releases = [release for release in history.get("releases", []) if release.get("versionCode") != code]
+releases.append({"versionCode": code, "versionName": name, "signerSha256": signer})
+releases.sort(key=lambda release: release["versionCode"])
+history["releases"] = releases
+with open(path, "w", encoding="utf-8") as out:
+    json.dump(history, out, indent=2)
+    out.write("\n")
+print(f"recorded {name} ({code}) in {path}; commit it together with the emitted baseline")
+HISTORYPY
     exit 0
 fi
 
@@ -83,6 +108,10 @@ fi
     echo "no baseline at $baseline: record the last published release with --emit before releasing" >&2
     exit 1
 }
+
+# The baseline is only meaningful if it is the newest recorded release; one file describing a
+# different release than the other turns this check into a comparison against the wrong version.
+python3 "$root/tools/check-release-history.py" "$root"
 
 base_package=$(sed -n 's/.*"package": "\([^"]*\)".*/\1/p' "$baseline" | head -1)
 base_code=$(sed -n 's/.*"versionCode": \([0-9]*\).*/\1/p' "$baseline" | head -1)

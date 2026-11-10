@@ -155,5 +155,10 @@ else:
     print(f"versionCode {code} ({name}) is above the released {base_code} ({base_name})")
 VERSIONPY
 
+# --- the baseline must be the newest release in the history, on every pull request too ---
+# The two files describe the same releases, and the version guard reads the history: a baseline that
+# names an older release, or a history entry that was never released, weakens both checks silently.
+python3 "$ROOT/tools/check-release-history.py" "$ROOT"
+
 bash "$ROOT/tools/verify-fullmode-repair.sh"
 echo 'RELEASE PREFLIGHT: PASS'

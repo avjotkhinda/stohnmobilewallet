@@ -205,6 +205,14 @@ three ways an update silently stops installing:
   to uninstall and lose their node data. This is the check that catches "the CI secret now holds a
   different keystore".
 
+`runtime/release-history.json` lists every release that went out, oldest first, and the baseline is
+its newest entry: `--emit` appends both in one run, so the two files cannot describe different
+releases. `tools/check-release-history.py` enforces that agreement, that versionCodes only increase
+and that a version is never reused; the preflight runs it on every pull request and the release job
+before releasing. The history is not bookkeeping — the app-version guard rejects any version literal
+found there, so a copy of a release from three versions ago is caught, not just a copy of the current
+one. A release that only reaches the baseline leaves those copies undetected.
+
 The same rule runs earlier, in `scripts/release-preflight.sh`, which reads `applicationId`,
 `versionCode` and `versionName` straight out of `app/build.gradle.kts` and is part of the `build` job.
 Forgetting to bump `versionCode` therefore fails on the pull request, not after a release build.
