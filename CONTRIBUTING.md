@@ -224,7 +224,11 @@ config file, the user agent and backup manifests all follow a one-line bump. Bot
 copy is exactly what goes stale.
 
 The release step also writes `release-baseline.json` for the APK being released, appends the same
-release to `runtime/release-history.json`, and uploads both with the artifact. After publishing,
+release to `runtime/release-history.json`, and uploads both with the artifact. Forgetting to commit
+them is caught: before building anything, `scripts/verify-baseline-committed.sh` compares the
+committed baseline with the one inside the previous release's artifact, and fails when the tree still
+records an older release. That comparison is why the baseline must be committed after publishing —
+the artifact expires, and the record of the version goes with it. After publishing,
 replace the tracked files with those, otherwise the next release is only checked for its package
 name. The history already records the first release, `0.1` (`versionCode` 1), with an empty signer:
 fill it from the key that APK was signed with — `--emit` on the published APK does it — because until

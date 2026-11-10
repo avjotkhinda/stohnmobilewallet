@@ -131,6 +131,13 @@ jobs:
         run: bash scripts/integrate-proot-bundle.sh "$RUNNER_TEMP/proot-bundle"
       - name: Release preflight (versions, pins, native artifacts)
         run: bash scripts/release-preflight.sh
+      # A committed baseline is the only record of the last release. If it is never committed, the
+      # next release compares against an older one and the gap cannot be reconstructed once the
+      # artifact expires, so this fails before the build rather than after it.
+      - name: Check the previous release's baseline was committed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-baseline-committed.sh
 
       - name: Decode release keystore
         id: signing
