@@ -85,9 +85,11 @@
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupManifestTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupReminderTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupRestoreRoundTripTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/BackupVerificationTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/BackupVerifierTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/ScryptTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/WalletBackupManagerTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/WalletBackupVerifierTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/WalletRpcTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/WalletToolArgsTest.kt
 ./app/src/test/resources/robolectric.properties
