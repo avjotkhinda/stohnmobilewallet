@@ -296,4 +296,24 @@ class BackupCryptoGuardsTest {
             CipherOutputStream(out, cipher).use { it.write(plaintext) }
         }
     }
+
+    @Test
+    fun `a bare file name still round trips instead of failing on a missing parent`() {
+        // File.parentFile is null for a bare name. The app always passes app-private paths, but the
+        // container must fall back to the working directory rather than throw where it writes its
+        // temporary file, because that would leave a backup that can never be opened.
+        val plaintext = temporaryFolder.newFile("relative-plain.dat").apply { writeText("wallet bytes") }
+        val encrypted = File("relative-${System.nanoTime()}.backup")
+        val restored = File("relative-restored-${System.nanoTime()}.dat")
+        try {
+            BackupCrypto.encrypt(plaintext, encrypted, password.toCharArray())
+            assertTrue("the container was not written", encrypted.isFile)
+
+            BackupCrypto.decrypt(encrypted, restored, password.toCharArray())
+            assertEquals("wallet bytes", restored.readText())
+        } finally {
+            encrypted.delete()
+            restored.delete()
+        }
+    }
 }

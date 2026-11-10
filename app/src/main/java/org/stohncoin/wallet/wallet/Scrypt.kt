@@ -30,14 +30,14 @@ object Scrypt {
         val passwordBytes = String(password).toByteArray(Charsets.UTF_8)
         val blockLength = 128 * r
         try {
-            val blocks = pbkdf2(passwordBytes, salt, 1, p * blockLength)
+            val blocks = pbkdf2(passwordBytes, salt, p * blockLength)
             for (i in 0 until p) {
                 val offset = i * blockLength
                 val mixed = romix(blocks.copyOfRange(offset, offset + blockLength), n, r)
                 System.arraycopy(mixed, 0, blocks, offset, blockLength)
                 mixed.fill(0)
             }
-            return pbkdf2(passwordBytes, blocks, 1, length).also { blocks.fill(0) }
+            return pbkdf2(passwordBytes, blocks, length).also { blocks.fill(0) }
         } finally {
             passwordBytes.fill(0)
         }
@@ -121,7 +121,12 @@ object Scrypt {
         for (i in 0 until 16) writeIntLe(block, i * 4, x[i] + original[i])
     }
 
-    private fun pbkdf2(password: ByteArray, salt: ByteArray, iterations: Int, length: Int): ByteArray {
+    /**
+     * PBKDF2-HMAC-SHA256 at the single iteration scrypt is defined with (RFC 7914 fixes c = 1).
+     * One HMAC per counter block is the whole derivation, so the XOR-and-rehash loop a general
+     * PBKDF2 needs for a higher cost factor does not exist here.
+     */
+    private fun pbkdf2(password: ByteArray, salt: ByteArray, length: Int): ByteArray {
         require(password.isNotEmpty()) { "scrypt password must not be empty" }
         val mac = Mac.getInstance(HMAC)
         mac.init(SecretKeySpec(password, HMAC))
@@ -131,15 +136,9 @@ object Scrypt {
         while (offset < length) {
             mac.update(salt)
             mac.update(byteArrayOf((counter ushr 24).toByte(), (counter ushr 16).toByte(), (counter ushr 8).toByte(), counter.toByte()))
-            var u = mac.doFinal()
-            val accumulator = u.copyOf()
-            repeat(iterations - 1) {
-                mac.update(u)
-                u = mac.doFinal()
-                for (i in accumulator.indices) accumulator[i] = (accumulator[i].toInt() xor u[i].toInt()).toByte()
-            }
-            val take = minOf(accumulator.size, length - offset)
-            System.arraycopy(accumulator, 0, output, offset, take)
+            val block = mac.doFinal()
+            val take = minOf(block.size, length - offset)
+            System.arraycopy(block, 0, output, offset, take)
             offset += take
             counter++
         }

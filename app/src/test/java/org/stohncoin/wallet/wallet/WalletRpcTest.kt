@@ -458,4 +458,63 @@ class WalletRpcTest {
             failure.message.orEmpty().contains(expected)
         )
     }
+
+    @Test
+    fun `send refuses an amount it cannot represent`() {
+        expectFailure("Amount must be a positive number of satoshis") {
+            runBlocking { WalletRpc(runtime).send(address, 0L, subtractFeeFromAmount = false) }
+        }
+        expectFailure("Amount must be a positive number of satoshis") {
+            runBlocking { WalletRpc(runtime).send(address, Amounts.MAX_SATOSHIS + 1, subtractFeeFromAmount = false) }
+        }
+        assertTrue("a rejected send must not reach Core", runtime.calls.isEmpty())
+    }
+
+    @Test
+    fun `transactions skips entries Core did not send as objects`() {
+        // A listtransactions answer can carry a non-object entry; that entry is not a transaction and
+        // must not become an empty row.
+        runtime.arrayReply = JSONArray()
+            .put(JSONObject().put("txid", "tx1").put("amount", 1.5))
+            .put("not-a-transaction")
+            .put(JSONObject.NULL)
+
+        val transactions = runBlocking { WalletRpc(runtime).transactions() }
+
+        assertEquals(1, transactions.size)
+        assertEquals("tx1", transactions.single().txid)
+        assertEquals(150_000_000L, transactions.single().amountSatoshis)
+    }
+
+    @Test
+    fun `changePassphrase requires both passphrases`() {
+        expectFailure("Passphrase is required") {
+            runBlocking { WalletRpc(runtime).changePassphrase(CharArray(0), "new".toCharArray()) }
+        }
+        expectFailure("Passphrase is required") {
+            runBlocking { WalletRpc(runtime).changePassphrase("old".toCharArray(), CharArray(0)) }
+        }
+        assertTrue(runtime.calls.isEmpty())
+    }
+
+    @Test
+    fun `unlock asks Core for a timed unlock and wipes the passphrase`() {
+        val passphrase = "secret".toCharArray()
+
+        runBlocking { WalletRpc(runtime, "stohn-wallet").unlock(passphrase, seconds = 600) }
+
+        assertEquals("walletpassphrase", runtime.method())
+        assertEquals("secret", runtime.params().getString(0))
+        assertEquals(600, runtime.params().getInt(1))
+        assertEquals("stohn-wallet", runtime.calls.last().walletName)
+        assertTrue("the passphrase must not stay in memory", passphrase.all { it == '\u0000' })
+    }
+
+    @Test
+    fun `unlock refuses an empty passphrase`() {
+        expectFailure("Passphrase is required") {
+            runBlocking { WalletRpc(runtime).unlock(CharArray(0)) }
+        }
+        assertTrue(runtime.calls.isEmpty())
+    }
 }

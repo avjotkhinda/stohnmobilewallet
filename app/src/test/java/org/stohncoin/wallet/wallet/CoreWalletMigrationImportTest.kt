@@ -226,4 +226,31 @@ class CoreWalletMigrationImportTest {
 
         expectRefused("wallet info failed: wallet tool: cannot open file", runtime, source(), destination())
     }
+
+    @Test
+    fun `a destination with no directory of its own is refused`() {
+        // A bare relative name has no parent to create, so the import cannot know where it would
+        // land and must stop before touching the source.
+        expectRefused("Migration destination parent is unavailable", runtime(), source(), File("bare-restore.dat"))
+    }
+
+    @Test
+    fun `a destination the filesystem cannot accept is reported`() {
+        // The rename is what installs the wallet; if the filesystem rejects the name the user has to
+        // be told instead of being left with a cleared workspace and no wallet.
+        val tooLong = File(temporaryFolder.newFolder("long-name"), "w".repeat(300) + ".dat")
+
+        expectRefused("Unable to move migrated wallet into destination", runtime(), source(), tooLong)
+    }
+
+    @Test
+    fun `an hd seed only wallet is reported as hd`() {
+        val runtime = runtime()
+        runtime.info = RuntimeBackend.ToolResult(0, "Format: sqlite, hdseed present", "")
+
+        val info = runBlocking { CoreWalletMigration(runtime).inspect(source()) }
+
+        assertTrue("an hdseed wallet must be reported as hd", info.hd)
+        assertEquals("sqlite", info.format)
+    }
 }

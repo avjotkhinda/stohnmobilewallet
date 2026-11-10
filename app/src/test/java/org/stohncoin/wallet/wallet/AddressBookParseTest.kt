@@ -122,4 +122,57 @@ class AddressBookParseTest {
         assertTrue(failure is IllegalArgumentException)
         assertTrue(failure!!.message!!.contains("Invalid address-book labels"))
     }
+
+    @Test
+    fun `raw values keep every escape the writer can emit`() {
+        // Labels were covered already; the address itself is written by the same escaper, so a raw
+        // value with a quote, a backslash, a newline, a carriage return and a tab must survive too.
+        val text = "{\"labels\":[{\"raw\":\"a\\\"b\\\\c\\nd\\re\\tf\",\"label\":\"x\"}]}"
+        val entry = AddressBook.parse(text).labels.single()
+
+        assertEquals("a\"b\\c\nd\re\tf", entry.raw)
+        assertEquals("x", entry.label)
+    }
+
+    @Test
+    fun `a raw value cut off mid-escape is refused`() {
+        // The backslash is the last character in the file: reading the escaped letter needs one more
+        // byte than the file has.
+        val failure = runCatching {
+            AddressBook.parse("{\"labels\":[{\"raw\":\"ab\\")
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertTrue(failure!!.message.orEmpty().contains("corrupted"))
+    }
+
+    @Test
+    fun `an item whose raw key is misspelled is refused`() {
+        val failure = runCatching {
+            AddressBook.parse("{\"labels\":[{\"rawx\":\"a\",\"label\":\"b\"}]}")
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertTrue(failure!!.message.orEmpty().contains("corrupted"))
+    }
+
+    @Test
+    fun `an item that stops before its closing brace is refused`() {
+        val failure = runCatching {
+            AddressBook.parse("{\"labels\":[{\"raw\":\"a\",\"label\":\"b\"}")
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertTrue(failure!!.message.orEmpty().contains("corrupted"))
+    }
+
+    @Test
+    fun `a label with an unknown escape is refused`() {
+        val failure = runCatching {
+            AddressBook.parse("{\"labels\":[{\"raw\":\"a\",\"label\":\"b\\x\"}]}")
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalStateException)
+        assertTrue(failure!!.message.orEmpty().contains("corrupted"))
+    }
 }

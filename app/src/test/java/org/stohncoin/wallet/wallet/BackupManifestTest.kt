@@ -169,4 +169,65 @@ class BackupManifestTest {
         runCatching { BackupManifest.render("0.28.2", "w", 1L, "not-a-hash") }
             .onSuccess { error("A non-SHA-256 checksum was accepted") }
     }
+
+    @Test
+    fun `a blank line inside a manifest is ignored`() {
+        // Manifests are written by hand sometimes, and a trailing blank line before the checksum is
+        // not a different manifest.
+        val text = "app_version=0.28.2\nwallet_name=stohn-wallet\n\ncreation_height=7\nsha256=$sha"
+        val manifest = BackupManifest.parse(text)
+
+        assertEquals("stohn-wallet", manifest.walletName)
+        assertEquals(7L, manifest.creationHeight)
+        assertEquals(sha, manifest.walletSha256)
+    }
+
+    @Test
+    fun `a wallet name that cannot be shown is refused`() {
+        for (name in listOf("x".repeat(65), "tab\there", "bell\u0007")) {
+            val failure = runCatching {
+                BackupManifest.parse("app_version=0.28.2\nwallet_name=$name\ncreation_height=1\nsha256=$sha")
+            }.exceptionOrNull()
+
+            assertTrue(
+                "'$name' was accepted as a wallet name",
+                failure is IllegalArgumentException && failure.message.orEmpty().contains("wallet name is not usable")
+            )
+        }
+    }
+
+    @Test
+    fun `a creation height that is not a number is refused with that reason`() {
+        val failure = runCatching {
+            BackupManifest.parse("app_version=0.28.2\nwallet_name=w\ncreation_height=12x\nsha256=$sha")
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(failure!!.message.orEmpty().contains("creation height is not a number"))
+    }
+
+    @Test
+    fun `a creation height too large for a block number is refused`() {
+        // Digits only, so it passes the number check, but no chain will ever be this tall.
+        val failure = runCatching {
+            BackupManifest.parse("app_version=0.28.2\nwallet_name=w\ncreation_height=99999999999999999999\nsha256=$sha")
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(failure!!.message.orEmpty().contains("creation height is out of range"))
+    }
+
+    @Test
+    fun `a current version that is not a version number only costs the version note`() {
+        // The note is informational: an unparseable install version must not stop a restore or be
+        // guessed at.
+        val notes = BackupManifest.notes(
+            manifest = manifest(appVersion = "0.29.0"),
+            currentAppVersion = "dev-build",
+            chainHeight = 123456L,
+            activeWalletName = "stohn-wallet"
+        )
+
+        assertEquals(emptyList<String>(), notes)
+    }
 }

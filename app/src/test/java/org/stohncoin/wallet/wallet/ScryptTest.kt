@@ -1,6 +1,7 @@
 package org.stohncoin.wallet.wallet
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ScryptTest {
@@ -59,5 +60,29 @@ class ScryptTest {
             .onSuccess { error("An oversized r was accepted") }
         runCatching { Scrypt.derive(CharArray(0), ByteArray(8), n = 16, r = 1, p = 1, length = 32) }
             .onSuccess { error("An empty password was accepted") }
+    }
+
+    @Test
+    fun `every parameter outside the accepted range is refused with a reason`() {
+        fun refusal(n: Int = 16, r: Int = 1, p: Int = 1, length: Int = 32): String? =
+            runCatching { Scrypt.derive("passphrase".toCharArray(), ByteArray(8), n, r, p, length) }
+                .exceptionOrNull()?.message
+
+        // N below 4 or not a power of two multiplies the memory the derivation needs.
+        assertTrue(refusal(n = 2)!!.contains("power of two"))
+        assertTrue(refusal(n = 17)!!.contains("power of two"))
+        assertTrue(refusal(r = 0)!!.contains("r is out of range"))
+        assertTrue(refusal(r = 33)!!.contains("r is out of range"))
+        assertTrue(refusal(p = 0)!!.contains("p is out of range"))
+        assertTrue(refusal(p = 17)!!.contains("p is out of range"))
+        assertTrue(refusal(length = 0)!!.contains("output length is out of range"))
+        assertTrue(refusal(length = 1025)!!.contains("output length is out of range"))
+    }
+
+    @Test
+    fun `the accepted edges of every parameter still derive a key`() {
+        assertEquals(1, Scrypt.derive("passphrase".toCharArray(), ByteArray(8), n = 4, r = 1, p = 1, length = 1).size)
+        assertEquals(32, Scrypt.derive("passphrase".toCharArray(), ByteArray(8), n = 16, r = 32, p = 16, length = 32).size)
+        assertEquals(1024, Scrypt.derive("passphrase".toCharArray(), ByteArray(8), n = 16, r = 1, p = 1, length = 1024).size)
     }
 }
