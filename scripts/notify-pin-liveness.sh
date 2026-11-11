@@ -48,6 +48,25 @@ case "$OUTCOME" in
     exit 2
     ;;
 esac
+# Whoever opens the run reads the summary, not the log, so the delivery result is written there too:
+# "did the alert arrive?" is the question this step exists to answer, and a notice buried in a log is
+# not an answer anybody reads.
+summarize() {
+  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    printf '%s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+  fi
+}
+
+case "$OUTCOME" in
+  failure) KIND="failure alert" ;;
+  success) KIND="recovery notice" ;;
+  test) KIND="test message" ;;
+  schedule) KIND="schedule warning" ;;
+  schedule-ok) KIND="schedule all-clear" ;;
+  *) KIND="alert" ;;
+
+esac
+
 # A test is run by hand against no check at all, so it is the one outcome without a log behind it.
 if [[ "$OUTCOME" != "test" ]]; then
   [[ -s "$LOG" ]] || {
@@ -65,6 +84,7 @@ if [[ "$OUTCOME" == "success" && -z "$ISSUE_URL" ]]; then
 fi
 
 if [[ -z "$WEBHOOK" ]]; then
+  summarize "- Alert channel: **not configured** (\`PIN_ALERT_WEBHOOK_URL\` is empty), so the ${KIND} could not be sent."
   if [[ "$STRICT" == "1" ]]; then
     echo "::error title=No alert channel configured::PIN_ALERT_WEBHOOK_URL is not set for this repository, so no alert could be delivered. Add it under Settings - Secrets and variables - Actions - New repository secret."
     exit 1
@@ -178,6 +198,7 @@ code="${response##*$'\n'}"
 body="${response%$'\n'*}"
 
 if [[ "$code" != 2* ]]; then
+  summarize "- Alert channel: **delivery failed** (HTTP ${code:-000}); the ${KIND} was rejected by the webhook."
   if [[ "$STRICT" == "1" ]]; then
     echo "::error title=Alert not delivered::The webhook answered HTTP ${code:-000}, so the channel did not receive the message. Response: ${body}"
     exit 1
@@ -186,4 +207,5 @@ if [[ "$code" != 2* ]]; then
   exit 0
 fi
 
+summarize "- Alert channel: ${KIND} delivered (HTTP $code)."
 echo "notify: alert delivered to the configured webhook (HTTP $code)"

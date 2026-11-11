@@ -118,6 +118,24 @@ jobs:
           ISSUE_URL: ${{ steps.report.outputs.issue_number && format('{0}/{1}/issues/{2}', github.server_url, github.repository, steps.report.outputs.issue_number) || '' }}
         run: bash scripts/notify-pin-liveness.sh success pin-liveness.log "$RUN_URL" "$ISSUE_URL"
 
+      # The summary is what the Actions page shows without opening a log, and "is a channel configured
+      # at all?" is answerable on every run - including the weeks nothing needed sending, which is
+      # exactly when a silently unconfigured channel would otherwise go unnoticed. The value is never
+      # printed: only whether one exists.
+      - name: Record the alert channel in the job summary
+        if: always()
+        env:
+          PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+        run: |
+          {
+            echo '### Alert channel'
+            if [[ -n "$PIN_ALERT_WEBHOOK_URL" ]]; then
+              echo '- `PIN_ALERT_WEBHOOK_URL`: configured - alerts are delivered to the chat channel'
+            else
+              echo '- `PIN_ALERT_WEBHOOK_URL`: **not configured** - a dead pin is reported only in the tracking issue and the Actions tab'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Fail the run when a pin or the schedule is broken
         if: steps.check.outputs.outcome != 'success'
         run: exit 1
