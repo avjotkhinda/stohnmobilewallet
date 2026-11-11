@@ -405,7 +405,7 @@ object RuntimeInstaller {
         }
     }
 
-    private fun extractTarXz(
+    internal fun extractTarXz(
         archive: File,
         out: File
     ) {

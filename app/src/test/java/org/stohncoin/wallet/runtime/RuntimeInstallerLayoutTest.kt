@@ -1,0 +1,133 @@
+package org.stohncoin.wallet.runtime
+
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.Files
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
+import org.apache.commons.compress.archivers.tar.TarConstants
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import org.tukaani.xz.XZOutputStream
+
+/**
+ * The layout decision in [RuntimeInstaller.extractTarXz]: is this archive a plain root tree or a
+ * single top-level wrapper?
+ *
+ * It used to be answered by asking the half-extracted tree for bin/sh. A Debian bookworm rootfs is
+ * merged-/usr - ./bin is a symlink to usr/bin - and symlinks are created only after that decision,
+ * so bin/sh could never resolve, no wrapper candidate matched either, and every install of the
+ * pinned archive failed with "Invalid Debian rootfs archive layout". The decision had no test,
+ * which is why the fixtures below are the shapes it has to accept and to refuse.
+ */
+class RuntimeInstallerLayoutTest {
+    @get:Rule
+    val temporaryFolder = TemporaryFolder()
+
+    /** One archive member: a directory, a regular file, or a symbolic link. */
+    private sealed class Member(val name: String) {
+        class Dir(name: String) : Member(name)
+        class Regular(name: String, val bytes: ByteArray) : Member(name)
+        class Link(name: String, val target: String) : Member(name)
+    }
+
+    private fun archive(entries: List<Member>): File {
+        val file = temporaryFolder.newFile("rootfs.tar.xz")
+        XZOutputStream(FileOutputStream(file)).use { xz ->
+            TarArchiveOutputStream(xz).use { tar ->
+                tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX)
+                entries.forEach { member ->
+                    val entry = when (member) {
+                        is Member.Dir -> TarArchiveEntry(member.name)
+                        is Member.Regular -> TarArchiveEntry(member.name).also {
+                            it.size = member.bytes.size.toLong()
+                        }
+                        is Member.Link -> TarArchiveEntry(member.name, TarConstants.LF_SYMLINK).also {
+                            it.linkName = member.target
+                        }
+                    }
+                    tar.putArchiveEntry(entry)
+                    if (member is Member.Regular) {
+                        tar.write(member.bytes)
+                    }
+                    tar.closeArchiveEntry()
+                }
+                tar.finish()
+            }
+        }
+        return file
+    }
+
+    @Test
+    fun aMergedUsrRootfsIsReadAsAPlainRootTree() {
+        val archive = archive(
+            listOf(
+                Member.Dir("./"),
+                Member.Link("./bin", "usr/bin"),
+                Member.Dir("./etc/"),
+                Member.Dir("./usr/"),
+                Member.Dir("./usr/bin/"),
+                Member.Link("./usr/bin/sh", "dash"),
+                Member.Regular("./usr/bin/dash", byteArrayOf(0x7f, 0x45, 0x4c, 0x46))
+            )
+        )
+        val out = temporaryFolder.newFolder("merged-usr")
+
+        RuntimeInstaller.extractTarXz(archive, out)
+
+        assertTrue(
+            "/bin/sh must resolve through bin -> usr/bin and sh -> dash",
+            File(out, "bin/sh").isFile
+        )
+        assertTrue(
+            "bin must stay the archive's own symlink",
+            Files.isSymbolicLink(File(out, "bin").toPath())
+        )
+        assertEquals(
+            "usr/bin",
+            Files.readSymbolicLink(File(out, "bin").toPath()).toString()
+        )
+        assertTrue("the rest of the tree must come with it", File(out, "etc").isDirectory)
+    }
+
+    @Test
+    fun aSingleTopLevelWrapperIsStillUnwrapped() {
+        val archive = archive(
+            listOf(
+                Member.Dir("rootfs/"),
+                Member.Dir("rootfs/bin/"),
+                Member.Regular("rootfs/bin/sh", byteArrayOf(0x01)),
+                Member.Dir("rootfs/etc/")
+            )
+        )
+        val out = temporaryFolder.newFolder("wrapped")
+
+        RuntimeInstaller.extractTarXz(archive, out)
+
+        assertTrue(File(out, "bin/sh").isFile)
+        assertTrue(File(out, "etc").isDirectory)
+        assertTrue("the wrapper itself must not survive", !File(out, "rootfs").exists())
+    }
+
+    @Test
+    fun aTreeWithoutAUsableShellIsStillRefused() {
+        val archive = archive(
+            listOf(
+                Member.Dir("./"),
+                Member.Dir("./bin/"),
+                Member.Dir("./etc/")
+            )
+        )
+        val out = temporaryFolder.newFolder("no-shell")
+
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            RuntimeInstaller.extractTarXz(archive, out)
+        }
+
+        assertEquals("Invalid Debian rootfs: /bin/sh missing", failure.message)
+    }
+}
