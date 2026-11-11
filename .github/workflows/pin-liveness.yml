@@ -95,6 +95,18 @@ jobs:
           ISSUE_URL: ${{ steps.report.outputs.issue_number && format('{0}/{1}/issues/{2}', github.server_url, github.repository, steps.report.outputs.issue_number) || '' }}
         run: bash scripts/notify-pin-liveness.sh failure pin-liveness.log "$RUN_URL" "$ISSUE_URL"
 
+      # The alert is only half of it: a channel that sees a dead pin and never hears back stays red,
+      # so people keep chasing a failure that was fixed. This is sent only when the report step above
+      # actually closed the tracking issue, which keeps a routine weekly pass silent. A dry run never
+      # closes an incident, so it stays silent here too.
+      - name: Tell the chat channel the pins are healthy again
+        if: steps.check.outputs.outcome == 'success' && steps.report.outputs.recovered == 'true'
+        env:
+          PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ISSUE_URL: ${{ steps.report.outputs.issue_number && format('{0}/{1}/issues/{2}', github.server_url, github.repository, steps.report.outputs.issue_number) || '' }}
+        run: bash scripts/notify-pin-liveness.sh success pin-liveness.log "$RUN_URL" "$ISSUE_URL"
+
       - name: Fail the run when a pin or the schedule is broken
         if: steps.check.outputs.outcome != 'success'
         run: exit 1

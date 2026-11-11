@@ -69,6 +69,14 @@ emit_number() {
   fi
 }
 
+# Whether this run closed an incident. Only then does the chat channel need an all-clear: a routine
+# pass has nothing to close out, and announcing every Monday would train people to ignore the bot.
+emit_recovered() {
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    echo "recovered=$1" >> "$GITHUB_OUTPUT"
+  fi
+}
+
 if [[ "$DRY_RUN" == "1" ]]; then
   render "Dry run: the check reported $OUTCOME." > "$BODY"
   echo "report: dry run, no GitHub call made"
@@ -103,6 +111,7 @@ if [[ "$OUTCOME" == "failure" ]]; then
     echo "report: opened an issue for the dead pin: $created"
     emit_number "${created##*/}"
   fi
+  emit_recovered false
 else
   if [[ -z "$number" ]]; then
     echo "report: the check passes and no issue is open, nothing to do"
@@ -113,4 +122,5 @@ else
   gh issue close "$number" --reason completed
   echo "report: closed issue #$number"
   emit_number "$number"
+  emit_recovered true
 fi

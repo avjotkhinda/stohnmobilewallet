@@ -7,6 +7,9 @@ set -euo pipefail
 #
 #   scripts/notify-pin-liveness.sh <failure|success> <log-file> [run-url] [issue-url]
 #
+# A success is the all-clear for an alert that already went out, so it is sent only when that run
+# also closed the tracking issue: a routine weekly pass says nothing rather than pinging every Monday.
+#
 # PIN_ALERT_WEBHOOK_URL is the secret. With it unset the step says so and exits 0: a repository that
 # has not configured an alert channel should not fail a run for it.
 #
@@ -31,10 +34,11 @@ esac
   exit 2
 }
 
-# Only a failure is worth a ping: a passing run is not news, and the report step already closes the
-# issue on recovery.
-if [[ "$OUTCOME" != "failure" ]]; then
-  echo "notify: outcome is '$OUTCOME', nothing to alert on"
+# A passing run is only news when it closed an incident. The workflow passes the issue it closed,
+# so an empty issue URL here means the channel was never told about a failure and has nothing to
+# recover from.
+if [[ "$OUTCOME" == "success" && -z "$ISSUE_URL" ]]; then
+  echo "notify: the check passes and no incident was closed, nothing to announce"
   exit 0
 fi
 
@@ -55,31 +59,46 @@ trap 'rm -f "$PAYLOAD"' EXIT
 # The payload is assembled by python3 so the check's own output cannot break the JSON: a quote or a
 # backslash in a URL is normal, and hand-rolled quoting here would corrupt the message exactly when
 # it matters.
-python3 - "$LOG" "$RUN_URL" "$ISSUE_URL" "$MAX_LINES" > "$PAYLOAD" <<'PY'
+python3 - "$OUTCOME" "$LOG" "$RUN_URL" "$ISSUE_URL" "$MAX_LINES" > "$PAYLOAD" <<'PY'
 import json
 import re
 import sys
 
-log_path, run_url, issue_url, max_lines = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+outcome, log_path, run_url, issue_url = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+max_lines = int(sys.argv[5])
 
 with open(log_path, encoding="utf-8", errors="replace") as handle:
     lines = [re.sub(r"\x1b\[[0-9;]*m", "", line.rstrip("\n")) for line in handle]
 
-# The specific failure lines, which name the URL and the digest that disagreed. Falling back to the
-# tail of the log keeps the message useful even when the failure looks like a network error.
-detail_lines = [line for line in lines if "FAIL" in line] or lines[-(max_lines + 4):]
-detail = "\n".join(detail_lines[-max_lines:])
-
-text = [
-    ":rotating_light: *stohnmobilewallet: a pinned runtime URL is dead*",
-    "The weekly pin-liveness check could not download a runtime artifact, or got different bytes than the pin. Users hit this as \"Download failed: HTTP 404\" when they start the node.",
-    "```" + detail + "```" if detail else "",
-]
-if run_url:
-    text.append(f"<{run_url}|Failing run>")
-if issue_url:
-    text.append(f"<{issue_url}|Tracking issue>")
-text.append("Repair: mirror the snapshot with `mirror-runtime-rootfs.yml`, repin `DEBIAN_URL`/`DEBIAN_SHA256` (or `CORE_URL`/`CORE_SHA256`), and let the check pass again.")
+if outcome == "failure":
+    # The specific failure lines, which name the URL and the digest that disagreed. Falling back to
+    # the tail of the log keeps the message useful even when the failure looks like a network error.
+    detail_lines = [line for line in lines if "FAIL" in line] or lines[-(max_lines + 4):]
+    detail = "\n".join(detail_lines[-max_lines:])
+    text = [
+        ":rotating_light: *stohnmobilewallet: a pinned runtime URL is dead*",
+        "The weekly pin-liveness check could not download a runtime artifact, or got different bytes than the pin. Users hit this as \"Download failed: HTTP 404\" when they start the node.",
+        "```" + detail + "```" if detail else "",
+    ]
+    if run_url:
+        text.append(f"<{run_url}|Failing run>")
+    if issue_url:
+        text.append(f"<{issue_url}|Tracking issue>")
+    text.append("Repair: mirror the snapshot with `mirror-runtime-rootfs.yml`, repin `DEBIAN_URL`/`DEBIAN_SHA256` (or `CORE_URL`/`CORE_SHA256`), and let the check pass again.")
+else:
+    # The one or two per-artifact "ok" lines and the PASS line: an all-clear is read at a glance to
+    # confirm which artifacts came back, not inspected line by line.
+    detail = "\n".join([line for line in lines if "PIN LIVENESS:" in line][-max_lines:])
+    text = [
+        ":white_check_mark: *stohnmobilewallet: the pinned runtime URLs serve their bytes again*",
+        "The weekly pin-liveness check downloads both runtime artifacts and matches their pins again, so Full Mode downloads work for users.",
+        "```" + detail + "```" if detail else "",
+    ]
+    if run_url:
+        text.append(f"<{run_url}|Passing run>")
+    if issue_url:
+        text.append(f"<{issue_url}|Closed issue>")
+    text.append("Nothing to do - this closes out the earlier alert.")
 
 print(json.dumps({"text": "\n".join(part for part in text if part)}))
 PY
