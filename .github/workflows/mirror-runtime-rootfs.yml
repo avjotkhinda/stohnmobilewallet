@@ -1,0 +1,77 @@
+name: mirror-runtime-rootfs
+
+# The Full Mode runtime installs a pinned Debian bookworm arm64 rootfs. The upstream publisher
+# (images.linuxcontainers.org) only keeps the most recent daily snapshots - roughly a week - so a
+# pin pointing there starts returning HTTP 404 within days and the node can no longer install its
+# runtime. This workflow copies one snapshot into this repository's own release assets, which the
+# project controls and which do not rotate, so the pin in RuntimeManifest.kt stays valid.
+#
+# It is deliberately manual: mirroring is a release-time step, and the snapshot it copies is named
+# explicitly rather than resolved from "latest", so the bytes behind a pin never change silently.
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: Linux Containers snapshot to mirror (for example 20261110_05:24)
+        required: true
+      tag:
+        description: Release tag that receives rootfs.tar.xz and SHA256SUMS
+        required: true
+        default: runtime-bookworm-arm64-20261110
+      source_path:
+        description: Linux Containers path for the snapshot's architecture
+        required: true
+        default: debian/bookworm/arm64/default
+
+permissions:
+  # Uploading release assets is a write to this repository's contents.
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-24.04
+    env:
+      TAG: ${{ inputs.tag }}
+      SOURCE: https://images.linuxcontainers.org/images/${{ inputs.source_path }}/${{ inputs.snapshot }}
+    steps:
+      # The publisher's own SHA256SUMS is mirrored beside the archive, unchanged, so
+      # scripts/pin-debian-rootfs.sh verifies this mirror exactly the way it verified the snapshot.
+      - name: Download the snapshot and its published digests
+        run: |
+          set -euo pipefail
+          mkdir -p mirror
+          cd mirror
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-delay 2 --retry-all-errors \
+            -o SHA256SUMS "$SOURCE/SHA256SUMS"
+          curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-delay 2 --retry-all-errors \
+            -o rootfs.tar.xz "$SOURCE/rootfs.tar.xz"
+
+      # Nothing is uploaded until it matches the digest the publisher signed off on, and the archive
+      # still looks like a rootfs: an asset that fails either check would turn a 404 into a digest
+      # mismatch on every user's phone.
+      - name: Verify the archive against the published digest
+        run: |
+          set -euo pipefail
+          cd mirror
+          grep -E ' rootfs\.tar\.xz$' SHA256SUMS > rootfs.sha256
+          sha256sum -c rootfs.sha256
+          tar -tJf rootfs.tar.xz | grep -Eq '(^|/)bin/sh$'
+          {
+            echo "source: $SOURCE"
+            echo "rootfs.tar.xz sha256: $(sha256sum rootfs.tar.xz | awk '{print $1}')"
+            echo "uploaded to: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/rootfs.tar.xz"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Confirm the target release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release view "$TAG" >/dev/null
+
+      # --clobber makes a rerun safe: the same snapshot produces the same bytes, and re-uploading an
+      # interrupted attempt must not fail on an asset that already arrived.
+      - name: Upload both assets to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$TAG" mirror/rootfs.tar.xz mirror/SHA256SUMS --clobber
