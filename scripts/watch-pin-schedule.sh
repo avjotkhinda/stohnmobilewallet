@@ -63,9 +63,12 @@ last_run, created, max_days = sys.argv[1], sys.argv[2], int(sys.argv[3])
 
 
 def parse(value):
+    # GitHub answers with RFC 3339 including milliseconds ("2026-11-11T06:25:13.000Z"), which a fixed
+    # strptime format rejects. fromisoformat takes the fractional part and the offset, so a timestamp
+    # shape this check has not seen yet cannot crash the watchdog instead of reporting on it.
     if not value:
         return None
-    return dt.datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+    return dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 now = dt.datetime.now(dt.timezone.utc)
