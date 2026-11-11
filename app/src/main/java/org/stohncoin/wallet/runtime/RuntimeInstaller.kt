@@ -14,6 +14,8 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import android.util.Log
+import org.stohncoin.wallet.ui.CrashLogCapture
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.security.MessageDigest
@@ -22,6 +24,8 @@ import java.util.zip.GZIPInputStream
 /** Installs the verified ARM64 Debian and Stohn Core runtime into app-private storage. */
 object RuntimeInstaller {
     private val mutex = Mutex()
+
+    private const val TAG = "RuntimeInstaller"
 
     suspend fun installIfNeeded(context: Context) = withContext(Dispatchers.IO) {
         mutex.withLock {
@@ -436,10 +440,18 @@ object RuntimeInstaller {
         // remove leading ./ or /, strip empty/components and ., reject ..
         fun normalizeLinkTarget(t: String): String {
             val n = t.replace('\\', '/')
-            require(!n.startsWith('/')) {"Unsafe link target"
+            if (n.startsWith('/')) {
+                val ex = IllegalArgumentException("Unsafe link target: absolute linkName=$t in archive=${archive.name}, entryName=${safeArchivePath(e.name)}, temp=$temp")
+                Log.e(TAG, ex.message, ex)
+                CrashLogCapture.appendException(ex)
+                throw ex
             }
             val cleaned = n.split('/').filter { it.isNotEmpty() && it != "." }
-            require(cleaned.none { it == ".." }) {"Unsafe link target"
+            if (cleaned.any { it == ".." }) {
+                val ex = IllegalArgumentException("Unsafe link target: parent-traversal linkName=$t in archive=${archive.name}, entryName=${safeArchivePath(e.name)}, temp=$temp")
+                Log.e(TAG, ex.message, ex)
+                CrashLogCapture.appendException(ex)
+                throw ex
             }
             return if (cleaned.isEmpty()) "." else cleaned.joinToString("/")
         }

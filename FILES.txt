@@ -74,6 +74,7 @@
 ./app/src/test/java/org/stohncoin/wallet/runtime/AppVersionSingleSourceTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/KeyExportGuardTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/NativeLaunchTest.kt
+./app/src/test/java/org/stohncoin/wallet/runtime/RuntimeInstallerLayoutTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/RuntimeInstallerPathFuzzTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/RuntimeManifestTransportTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/RuntimeTempTest.kt

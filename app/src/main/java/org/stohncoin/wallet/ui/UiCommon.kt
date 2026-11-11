@@ -7,6 +7,10 @@ import android.os.Handler
 import android.os.Looper
 import android.content.Intent
 import android.widget.Toast
+import java.io.CharSequence
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
@@ -173,10 +177,80 @@ fun qr(text: String, size: Int): android.graphics.Bitmap? = runCatching {
 /** Writes the QR into the cache directory exposed by FileProvider so it can be shared as an image. */
 fun shareableQrImage(context: Context, bitmap: android.graphics.Bitmap): File? = runCatching {
     val dir = File(context.cacheDir, "qr-share").apply { mkdirs() }
-    val file = File(dir, "stohn-address-${System.currentTimeMillis()}.png")
+    val file = File(dir, "stohn-address-${System.currentTimeInMillis()}.png")
     file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
     file
 }.getOrNull()
+
+
+/** Writes a plain-text file into the cache share folder and launches a chooser to send it as text/plain. */
+fun shareTextFile(
+    context: Context,
+    text: String,
+    title: String,
+    filename: String = "stohn-crash-log.txt"
+) {
+    val dir = File(context.cacheDir, "qr-share").apply { mkdirs() }
+    val file = File(dir, filename)
+    file.outputStream().use { it.write(text.toByteArray(Charsets.UTF_8)) }
+    val uri = androidx.core.content.FileProvider.getUriForFile(
+        context,
+        context.packageName + ".fileprovider",
+        file
+    )
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_TEXT, text)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, title))
+}
+
+
+/**
+ * Shares a crash log built from the app-private ring buffer via the system share chooser. */
+fun shareCrashLog(context: Context, chooserTitle: String) {
+    shareTextFile(context, CrashLogCapture.buildLog(), chooserTitle, filename = "stohn-crash-log.txt")
+}
+
+
+/** App-private ring buffer that captures recent app log lines plus the last captured exception. */
+object CrashLogCapture {
+    private val ring = ArrayDeque<String>(2000)
+    private var lastException: String? = null
+
+    @JvmName("appendLogLine")
+    fun append(line: String) {
+        ring.addLast(line)
+        while (ring.size > 2000) ring.removeFirst()
+    }
+
+    @JvmName("appendLogLines")
+    fun append(lines: Iterable<String>) {
+        for (line in lines) append(line)
+    }
+
+    fun appendException(t: Throwable) {
+        lastException = Log.getStackTraceString(t)
+            .replace(Regex("\n+"), "\n")
+            .trim()
+    }
+
+    fun buildLog(): String = buildString {
+        appendLine("Stohn Wallet crash log")
+        appendLine("Captured ${java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(java.util.Date())}")
+        if (!lastException.isNullOrBlank()) {
+            appendLine()
+            appendLine("=== Last exception ===")
+            appendLine(lastException)
+        }
+        appendLine()
+        appendLine("=== Recent app log lines ===")
+        appendLine()
+        for (line in ring) appendLine(line)
+    }
+}
 
 
 const val MAX_IMPORT_BYTES = 256L * 1024 * 1024

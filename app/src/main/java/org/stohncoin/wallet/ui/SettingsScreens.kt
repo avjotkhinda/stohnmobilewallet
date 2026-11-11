@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -253,6 +254,14 @@ fun SettingsPage(
         item { SettingCard("Import wallet.dat", "Migrate with official Core tooling", Icons.Default.FileOpen, onImport) }
         item { SettingCard("Lock Wallet", "Remove the decryption key from memory", Icons.Default.Lock, onLock) }
         item { SettingCard("About Stohn", "Full node · Local RPC", Icons.Default.Info, {}) }
+        item {
+            SettingCard(
+                "Share crash log",
+                "Copy or send the latest runtime log",
+                Icons.Default.BugReport,
+                onClick = { UiCommon.shareCrashLog(context, "Stohn Wallet crash log") }
+            )
+        }
     }
 }
 
