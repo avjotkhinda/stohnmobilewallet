@@ -13,12 +13,22 @@ name: pin-liveness
 # A red scheduled run is seen by nobody, so the outcome is also written to an issue: opened or
 # updated when a pin is dead, closed again when the check passes. The run still fails either way,
 # which is what keeps it visible in the repository's status.
+#
+# "Run workflow" with dry_run enabled answers the one question a weekly job cannot answer for itself:
+# is the schedule still going to fire? That mode checks the schedule wiring - cron present, workflow
+# enabled, default branch, next due time - without downloading the artifacts or touching any issue,
+# so it is safe to press at any time and finishes in seconds.
 on:
   schedule:
     # Weekly, Monday morning UTC. GitHub disables schedules on a repository with no activity for
-    # 60 days, so a silent disable is possible; workflow_dispatch exists for an on-demand run.
+    # 60 days, so a silent disable is possible; this file's dry run is how that is noticed.
     - cron: '23 6 * * 1'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only verify the schedule wiring - no downloads, no issue changes
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -33,25 +43,38 @@ jobs:
 
       # The outcome is recorded instead of failing the step, so the report step always gets a
       # chance to run; the last step fails the job afterwards.
-      - name: Check every pinned runtime URL still serves the pinned bytes
+      - name: Check the pins, or only the schedule in a dry run
         id: check
         run: |
           set -o pipefail
-          if bash scripts/verify-pinned-runtime-urls.sh 2>&1 | tee pin-liveness.log; then
-            echo "outcome=success" >> "$GITHUB_OUTPUT"
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            echo "::notice title=Dry run::Verifying the weekly schedule only; no artifacts are downloaded and no issue is touched."
+            if bash scripts/verify-pin-schedule.sh 2>&1 | tee pin-liveness.log; then
+              echo "outcome=success" >> "$GITHUB_OUTPUT"
+            else
+              echo "outcome=failure" >> "$GITHUB_OUTPUT"
+              echo "::error title=The weekly schedule cannot fire::See the log above."
+            fi
           else
-            echo "outcome=failure" >> "$GITHUB_OUTPUT"
-            echo "::error title=A pinned runtime URL is dead::See the issue this run reports to, or the log above."
+            if bash scripts/verify-pinned-runtime-urls.sh 2>&1 | tee pin-liveness.log; then
+              echo "outcome=success" >> "$GITHUB_OUTPUT"
+            else
+              echo "outcome=failure" >> "$GITHUB_OUTPUT"
+              echo "::error title=A pinned runtime URL is dead::See the issue this run reports to, or the log above."
+            fi
           fi
 
+      # A dry run must never close a real incident: pressing the button while an issue is open would
+      # otherwise mark it resolved without the pins ever having been rechecked.
       - name: Report the outcome on an issue
         if: always() && steps.check.outputs.outcome != ''
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPORT_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: bash scripts/report-pin-liveness.sh "${{ steps.check.outputs.outcome }}" pin-liveness.log "$RUN_URL"
 
-      - name: Fail the run when a pin is dead
+      - name: Fail the run when a pin or the schedule is broken
         if: steps.check.outputs.outcome != 'success'
         run: exit 1
