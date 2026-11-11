@@ -17,6 +17,12 @@ set -euo pipefail
 # unset channel or a refused delivery fail the step instead of warning: a deliberate test that passes
 # without sending anything would only hide the problem.
 #
+#   scripts/notify-pin-liveness.sh <schedule|schedule-ok> <log-file> [run-url] [issue-url]
+#
+# The schedule outcomes belong to the watchdog: `schedule` says the weekly check has stopped running,
+# which is a different failure from a dead pin and must not read like one, and `schedule-ok` closes
+# it out. scripts/watch-pin-schedule.sh sends each of them at most once per outage.
+#
 # PIN_ALERT_WEBHOOK_URL is the secret. With it unset the step says so and exits 0: a repository that
 # has not configured an alert channel should not fail a run for it.
 #
@@ -31,9 +37,9 @@ MAX_LINES="${PIN_ALERT_MAX_LINES:-6}"
 STRICT="${PIN_ALERT_STRICT:-0}"
 
 case "$OUTCOME" in
-  failure | success | test) ;;
+  failure | success | test | schedule | schedule-ok) ;;
   *)
-    echo "usage: $0 <failure|success|test> <log-file> [run-url] [issue-url]" >&2
+    echo "usage: $0 <failure|success|test|schedule|schedule-ok> <log-file> [run-url] [issue-url]" >&2
     exit 2
     ;;
 esac
@@ -117,6 +123,32 @@ elif outcome == "success":
     if issue_url:
         text.append(f"<{issue_url}|Closed issue>")
     text.append("Nothing to do - this closes out the earlier alert.")
+elif outcome in ("schedule", "schedule-ok"):
+    # The schedule check writes its own lines under its own prefix: a stopped schedule is not a dead
+    # pin, and both land in the same channel, so they have to be distinguishable at a glance.
+    detail = "\n".join([line for line in lines if "PIN SCHEDULE:" in line][-max_lines:])
+    if outcome == "schedule":
+        text = [
+            ":warning: *stohnmobilewallet: the weekly pin check has stopped running*",
+            "GitHub only runs a schedule from the default branch, and disables it after 60 days without repository activity. Until this is fixed nobody is watching the runtime pins, so a dead URL would be found by a user instead of here.",
+            "```" + detail + "```" if detail else "",
+        ]
+        if run_url:
+            text.append(f"<{run_url}|Watchdog run>")
+        if issue_url:
+            text.append(f"<{issue_url}|Tracking issue>")
+        text.append("Repair: re-enable the workflow from the Actions tab, or push any commit to restore a schedule GitHub disabled for inactivity.")
+    else:
+        text = [
+            ":white_check_mark: *stohnmobilewallet: the weekly pin check is running on schedule again*",
+            "The `pin-liveness` schedule is enabled and its last scheduled run is recent, so the runtime pins are being watched weekly again.",
+            "```" + detail + "```" if detail else "",
+        ]
+        if run_url:
+            text.append(f"<{run_url}|Watchdog run>")
+        if issue_url:
+            text.append(f"<{issue_url}|Closed issue>")
+        text.append("Nothing to do - this closes out the earlier warning.")
 else:
     # A test message has to be unmistakable: somebody glancing at the channel must not read it as a
     # real dead pin, and must not go looking for a failing run that does not exist.

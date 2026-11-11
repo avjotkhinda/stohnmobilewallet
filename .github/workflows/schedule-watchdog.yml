@@ -1,0 +1,36 @@
+name: schedule-watchdog
+
+# pin-liveness can stop without anything going red: GitHub only schedules a workflow from the default
+# branch, and disables that schedule after 60 days without repository activity. A workflow that never
+# fires has no run in which to report that it never fired, so it is watched from the outside here.
+#
+# Daily, not weekly: a weekly watchdog would share the failure it is looking for. A stopped schedule
+# is tracked in one issue and announced to the channel once, so a long outage costs one message
+# rather than one per morning; the run still fails while it lasts, so the repository shows it.
+on:
+  schedule:
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Reading the workflow's state and its scheduled runs is what detects a disabled or stale schedule.
+  actions: read
+  # The outage is tracked in an issue that keeps the channel from repeating itself every day.
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The script posts the chat message itself, because it is the only thing that knows whether this
+      # is a first detection or a repeat. Exit 1 there fails this step and the run with it.
+      - name: Check the weekly schedule still fires
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/watch-pin-schedule.sh

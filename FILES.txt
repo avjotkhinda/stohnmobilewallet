@@ -7,6 +7,7 @@
 ./.github/workflows/mirror-runtime-rootfs.yml
 ./.github/workflows/pin-liveness.yml
 ./.github/workflows/proot-android-bundle.yml
+./.github/workflows/schedule-watchdog.yml
 ./.gitignore
 ./CONTRIBUTING.md
 ./FILES.txt
@@ -141,6 +142,7 @@
 ./scripts/verify-restore-path.sh
 ./scripts/verify-upgrade-compatibility.sh
 ./scripts/verify-wallet-migration.sh
+./scripts/watch-pin-schedule.sh
 ./settings.gradle.kts
 ./tools/check-release-history.py
 ./tools/security-audit.sh
