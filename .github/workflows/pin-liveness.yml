@@ -75,6 +75,7 @@ jobs:
       # A dry run must never close a real incident: pressing the button while an issue is open would
       # otherwise mark it resolved without the pins ever having been rechecked.
       - name: Report the outcome on an issue
+        id: report
         if: always() && steps.check.outputs.outcome != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -82,6 +83,17 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           REPORT_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: bash scripts/report-pin-liveness.sh "${{ steps.check.outputs.outcome }}" pin-liveness.log "$RUN_URL"
+
+      # The issue is only seen by somebody who reads GitHub notifications. This puts the failure where
+      # people are, using a Slack incoming webhook held in the PIN_ALERT_WEBHOOK_URL secret; with the
+      # secret unset the step says so and does nothing. A dry run is not a real check, so it is silent.
+      - name: Alert the chat channel when a pin is dead
+        if: steps.check.outputs.outcome == 'failure' && inputs.dry_run != true
+        env:
+          PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ISSUE_URL: ${{ steps.report.outputs.issue_number && format('{0}/{1}/issues/{2}', github.server_url, github.repository, steps.report.outputs.issue_number) || '' }}
+        run: bash scripts/notify-pin-liveness.sh failure pin-liveness.log "$RUN_URL" "$ISSUE_URL"
 
       - name: Fail the run when a pin or the schedule is broken
         if: steps.check.outputs.outcome != 'success'

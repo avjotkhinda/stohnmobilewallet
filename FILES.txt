@@ -126,6 +126,7 @@
 ./scripts/generate-sbom.sh
 ./scripts/integrate-proot-bundle.sh
 ./scripts/integrate-runtime-manifest.sh
+./scripts/notify-pin-liveness.sh
 ./scripts/pin-debian-rootfs.sh
 ./scripts/release-preflight.sh
 ./scripts/report-pin-liveness.sh

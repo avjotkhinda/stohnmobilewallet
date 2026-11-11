@@ -62,6 +62,13 @@ open_issue_number() {
     --jq '[.[] | select(.title | startswith("[pin-liveness]"))][0].number // ""'
 }
 
+# The issue number is handed to later steps so an alert can link to it without searching again.
+emit_number() {
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+    echo "issue_number=$1" >> "$GITHUB_OUTPUT"
+  fi
+}
+
 if [[ "$DRY_RUN" == "1" ]]; then
   render "Dry run: the check reported $OUTCOME." > "$BODY"
   echo "report: dry run, no GitHub call made"
@@ -89,10 +96,12 @@ if [[ "$OUTCOME" == "failure" ]]; then
     render 'The check failed again: a pinned runtime URL still does not serve its bytes.' > "$BODY"
     gh issue comment "$number" --body-file "$BODY"
     echo "report: updated issue #$number"
+    emit_number "$number"
   else
     render 'A runtime artifact pinned in `RuntimeManifest.kt` no longer serves its bytes.' > "$BODY"
-    gh issue create --title "$TITLE" --body-file "$BODY"
-    echo "report: opened an issue for the dead pin"
+    created="$(gh issue create --title "$TITLE" --body-file "$BODY")"
+    echo "report: opened an issue for the dead pin: $created"
+    emit_number "${created##*/}"
   fi
 else
   if [[ -z "$number" ]]; then
@@ -103,4 +112,5 @@ else
   gh issue comment "$number" --body-file "$BODY"
   gh issue close "$number" --reason completed
   echo "report: closed issue #$number"
+  emit_number "$number"
 fi
