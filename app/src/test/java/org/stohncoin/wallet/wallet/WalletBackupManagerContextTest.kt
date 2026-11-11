@@ -12,6 +12,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.stohncoin.wallet.runtime.RuntimeBackend
+import org.stohncoin.wallet.runtime.RuntimeManifest
 
 /**
  * The constructor the app actually uses.
@@ -95,7 +96,9 @@ class WalletBackupManagerContextTest {
         assertTrue("the restored wallet is not where it was asked to go", destination.isFile)
         assertEquals("stohn-wallet", restored.manifest.walletName)
         assertEquals(4_242L, restored.manifest.creationHeight)
-        assertEquals("0.28.2", restored.manifest.appVersion)
+        // The backup records the version of the app that made it, so the expectation follows the one
+        // version source (BuildConfig.VERSION_NAME) instead of a literal that a bump leaves behind.
+        assertEquals(BackupManifest.normalizeVersion(RuntimeManifest.APP_VERSION), restored.manifest.appVersion)
     }
 
     @Test
