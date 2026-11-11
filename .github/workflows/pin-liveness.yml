@@ -93,6 +93,7 @@ jobs:
         if: steps.check.outputs.outcome == 'failure' && inputs.dry_run != true
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
           # Delivery is part of the check, not a courtesy: a channel that cannot receive is a broken
           # alarm, so this fails the step instead of warning about it.
           PIN_ALERT_STRICT: '1'
@@ -111,6 +112,7 @@ jobs:
         if: steps.check.outputs.outcome == 'success' && steps.report.outputs.recovered == 'true'
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
           # Delivery is part of the check, not a courtesy: a channel that cannot receive is a broken
           # alarm, so this fails the step instead of warning about it.
           PIN_ALERT_STRICT: '1'
@@ -126,13 +128,21 @@ jobs:
         if: always()
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
         run: |
           {
             echo '### Alert channel'
             if [[ -n "$PIN_ALERT_WEBHOOK_URL" ]]; then
               echo '- `PIN_ALERT_WEBHOOK_URL`: configured - alerts are delivered to the chat channel'
+            elif [[ -n "$PIN_ALERT_WEBHOOK_URL_FALLBACK" ]]; then
+              echo '- `PIN_ALERT_WEBHOOK_URL`: **not configured** - alerts can only reach the fallback route'
             else
               echo '- `PIN_ALERT_WEBHOOK_URL`: **not configured** - a dead pin is reported only in the tracking issue and the Actions tab'
+            fi
+            if [[ -n "$PIN_ALERT_WEBHOOK_URL_FALLBACK" ]]; then
+              echo '- `PIN_ALERT_WEBHOOK_URL_FALLBACK`: configured - used when the primary is missing or refuses a message'
+            else
+              echo '- `PIN_ALERT_WEBHOOK_URL_FALLBACK`: not configured - a refused primary alert has no second route'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 

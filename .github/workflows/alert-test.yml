@@ -23,6 +23,7 @@ jobs:
       - name: Post a test message to the alert channel
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
           # Delivery is the whole point here, so anything short of a 2xx fails the run.
           PIN_ALERT_STRICT: '1'
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

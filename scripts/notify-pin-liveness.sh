@@ -27,6 +27,10 @@ set -euo pipefail
 # which is a different failure from a dead pin and must not read like one, and `schedule-ok` closes
 # it out. scripts/watch-pin-schedule.sh sends each of them at most once per outage.
 #
+# PIN_ALERT_WEBHOOK_URL_FALLBACK is the second route: any webhook that accepts {"text": ...} - another
+# Slack channel or workspace, Discord, Teams, Google Chat. It is tried only when the primary is missing
+# or refuses the message, so one broken channel cannot silence the alarm on its own.
+#
 # PIN_ALERT_WEBHOOK_URL is the secret. Unset, the script reports the missing channel and exits 0,
 # which is the lenient default; strict callers get an error and exit 1 instead.
 #
@@ -38,6 +42,7 @@ LOG="${2:-}"
 RUN_URL="${3:-}"
 ISSUE_URL="${4:-}"
 WEBHOOK="${PIN_ALERT_WEBHOOK_URL:-}"
+FALLBACK="${PIN_ALERT_WEBHOOK_URL_FALLBACK:-}"
 MAX_LINES="${PIN_ALERT_MAX_LINES:-6}"
 STRICT="${PIN_ALERT_STRICT:-0}"
 
@@ -83,21 +88,39 @@ if [[ "$OUTCOME" == "success" && -z "$ISSUE_URL" ]]; then
   exit 0
 fi
 
-if [[ -z "$WEBHOOK" ]]; then
-  summarize "- Alert channel: **not configured** (\`PIN_ALERT_WEBHOOK_URL\` is empty), so the ${KIND} could not be sent."
+# Every route that could carry this message, primary first. A missing route is not an error on its
+# own: the fallback exists precisely so one unconfigured channel does not silence the alarm.
+ROUTE_NAMES=()
+ROUTE_URLS=()
+if [[ -n "$WEBHOOK" ]]; then
+  ROUTE_NAMES+=("primary")
+  ROUTE_URLS+=("$WEBHOOK")
+fi
+if [[ -n "$FALLBACK" ]]; then
+  ROUTE_NAMES+=("fallback")
+  ROUTE_URLS+=("$FALLBACK")
+fi
+
+if [[ ${#ROUTE_NAMES[@]} -eq 0 ]]; then
+  summarize "- Alert channel: **not configured** (\`PIN_ALERT_WEBHOOK_URL\` and \`PIN_ALERT_WEBHOOK_URL_FALLBACK\` are both empty), so the ${KIND} could not be sent."
   if [[ "$STRICT" == "1" ]]; then
-    echo "::error title=No alert channel configured::PIN_ALERT_WEBHOOK_URL is not set for this repository, so no alert could be delivered. Add it under Settings - Secrets and variables - Actions - New repository secret."
+    echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set for this repository, so no alert could be delivered. Add either under Settings - Secrets and variables - Actions - New repository secret."
     exit 1
   fi
-  echo "::notice title=No alert channel configured::Set the PIN_ALERT_WEBHOOK_URL secret to a Slack incoming webhook to be told here instead of only in the Actions tab."
+  echo "::notice title=No alert channel configured::Set the PIN_ALERT_WEBHOOK_URL secret, and optionally PIN_ALERT_WEBHOOK_URL_FALLBACK as a second route, to be told here instead of only in the Actions tab."
   exit 0
 fi
 
-# Plain HTTPS, or loopback so the payload can be verified locally against a capture server.
-if [[ "$WEBHOOK" != https://* && ! "$WEBHOOK" =~ ^http://(127\.0\.0\.1|localhost)(:|/) ]]; then
-  echo "notify: refusing to send a runtime pin alert to a non-HTTPS webhook" >&2
-  exit 1
-fi
+# Plain HTTPS, or loopback so the payload can be verified locally against a capture server. Every route
+# is validated up front: discovering an unusable fallback only after the primary refused would waste the
+# single chance the alert had.
+for i in "${!ROUTE_NAMES[@]}"; do
+  url="${ROUTE_URLS[$i]}"
+  if [[ "$url" != https://* && ! "$url" =~ ^http://(127\.0\.0\.1|localhost)(:|/) ]]; then
+    echo "notify: refusing to send a runtime pin alert to a non-HTTPS ${ROUTE_NAMES[$i]} webhook" >&2
+    exit 1
+  fi
+done
 
 PAYLOAD="$(mktemp)"
 trap 'rm -f "$PAYLOAD"' EXIT
@@ -189,23 +212,49 @@ else:
 print(json.dumps({"text": "\n".join(part for part in text if part)}))
 PY
 
-response="$(curl --silent --show-error --max-time 30 --request POST \
-  --header 'Content-Type: application/json' \
-  --data @"$PAYLOAD" \
-  --write-out '\n%{http_code}' \
-  "$WEBHOOK" 2>&1 || true)"
-code="${response##*$'\n'}"
-body="${response%$'\n'*}"
-
-if [[ "$code" != 2* ]]; then
-  summarize "- Alert channel: **delivery failed** (HTTP ${code:-000}); the ${KIND} was rejected by the webhook."
-  if [[ "$STRICT" == "1" ]]; then
-    echo "::error title=Alert not delivered::The webhook answered HTTP ${code:-000}, so the channel did not receive the message. Response: ${body}"
-    exit 1
+# Routes are tried in order and the first 2xx wins. A refusal is recorded per route: "the fallback saved
+# it" is worth knowing, because it means the primary is broken and needs looking at.
+delivered_route=""
+delivered_code=""
+attempts=""
+primary_note=""
+for i in "${!ROUTE_NAMES[@]}"; do
+  route="${ROUTE_NAMES[$i]}"
+  url="${ROUTE_URLS[$i]}"
+  response="$(curl --silent --show-error --max-time 30 --request POST \
+    --header 'Content-Type: application/json' \
+    --data @"$PAYLOAD" \
+    --write-out '\n%{http_code}' \
+    "$url" 2>&1 || true)"
+  code="${response##*$'\n'}"
+  body="${response%$'\n'*}"
+  if [[ "$code" == 2* ]]; then
+    delivered_route="$route"
+    delivered_code="$code"
+    break
   fi
-  echo "::warning title=Alert not delivered::The webhook answered HTTP ${code:-000}. The run still fails for the pin itself; this only means the chat message did not arrive. Response: ${body}"
+  echo "notify: the ${route} webhook answered HTTP ${code:-000}: ${body}" >&2
+  attempts="${attempts:+$attempts; }${route} HTTP ${code:-000}"
+  if [[ "$route" == "primary" ]]; then
+    primary_note="HTTP ${code:-000}"
+  fi
+done
+
+if [[ -n "$delivered_route" ]]; then
+  if [[ "$delivered_route" == "fallback" ]]; then
+    summarize "- Alert channel: ${KIND} delivered via the **fallback** webhook (HTTP ${delivered_code}); the primary did not take it (${primary_note:-not configured})."
+    echo "notify: the primary route did not deliver it; the fallback did"
+  else
+    summarize "- Alert channel: ${KIND} delivered (HTTP ${delivered_code})."
+  fi
+  echo "notify: alert delivered to the configured webhook (HTTP $delivered_code)"
   exit 0
 fi
 
-summarize "- Alert channel: ${KIND} delivered (HTTP $code)."
-echo "notify: alert delivered to the configured webhook (HTTP $code)"
+summarize "- Alert channel: **delivery failed** (${attempts:-no route answered}); the ${KIND} was rejected by every configured webhook."
+if [[ "$STRICT" == "1" ]]; then
+  echo "::error title=Alert not delivered::No configured webhook accepted the message (${attempts:-no response}), so the channel did not receive it."
+  exit 1
+fi
+echo "::warning title=Alert not delivered::No configured webhook accepted the message (${attempts:-no response}). This only means the chat message did not arrive; the run's result is decided by the check itself."
+exit 0
