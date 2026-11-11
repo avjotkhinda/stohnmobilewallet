@@ -9,6 +9,10 @@ name: pin-liveness
 # It downloads the artifacts rather than asking for headers: a 200 with a different body is exactly
 # the failure being guarded against (a retagged release, a rewritten asset), so the digest and the
 # archive layout are both checked.
+#
+# A red scheduled run is seen by nobody, so the outcome is also written to an issue: opened or
+# updated when a pin is dead, closed again when the check passes. The run still fails either way,
+# which is what keeps it visible in the repository's status.
 on:
   schedule:
     # Weekly, Monday morning UTC. GitHub disables schedules on a repository with no activity for
@@ -17,13 +21,37 @@ on:
   workflow_dispatch:
 
 permissions:
-  # Reading the pins, the release assets and the pinned upstream artifacts needs nothing more.
   contents: read
+  # The report step opens, comments on and closes the issue that tracks a dead pin.
+  issues: write
 
 jobs:
   pinned-urls:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The outcome is recorded instead of failing the step, so the report step always gets a
+      # chance to run; the last step fails the job afterwards.
       - name: Check every pinned runtime URL still serves the pinned bytes
-        run: bash scripts/verify-pinned-runtime-urls.sh
+        id: check
+        run: |
+          set -o pipefail
+          if bash scripts/verify-pinned-runtime-urls.sh 2>&1 | tee pin-liveness.log; then
+            echo "outcome=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "outcome=failure" >> "$GITHUB_OUTPUT"
+            echo "::error title=A pinned runtime URL is dead::See the issue this run reports to, or the log above."
+          fi
+
+      - name: Report the outcome on an issue
+        if: always() && steps.check.outputs.outcome != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/report-pin-liveness.sh "${{ steps.check.outputs.outcome }}" pin-liveness.log "$RUN_URL"
+
+      - name: Fail the run when a pin is dead
+        if: steps.check.outputs.outcome != 'success'
+        run: exit 1

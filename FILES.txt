@@ -128,6 +128,7 @@
 ./scripts/integrate-runtime-manifest.sh
 ./scripts/pin-debian-rootfs.sh
 ./scripts/release-preflight.sh
+./scripts/report-pin-liveness.sh
 ./scripts/sign-release-checksums.sh
 ./scripts/verify-apk-artifact.sh
 ./scripts/verify-baseline-committed.sh
