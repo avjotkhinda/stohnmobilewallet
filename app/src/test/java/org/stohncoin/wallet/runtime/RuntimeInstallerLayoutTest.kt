@@ -12,6 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.tukaani.xz.LZMA2Options
 import org.tukaani.xz.XZOutputStream
 
 /**
@@ -37,7 +38,7 @@ class RuntimeInstallerLayoutTest {
 
     private fun archive(entries: List<Member>): File {
         val file = temporaryFolder.newFile("rootfs.tar.xz")
-        XZOutputStream(FileOutputStream(file)).use { xz ->
+        XZOutputStream(FileOutputStream(file), LZMA2Options()).use { xz ->
             TarArchiveOutputStream(xz).use { tar ->
                 tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX)
                 entries.forEach { member ->
