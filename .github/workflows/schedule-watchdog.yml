@@ -12,6 +12,9 @@ name: schedule-watchdog
 # because a watchdog whose schedule stopped guards nothing and cannot report on itself: the run that
 # would have said so never starts. Two schedules each checking the other is what keeps one silent
 # schedule from being mistaken for a quiet repository.
+#
+# Like the weekly run, this one refuses to report into nothing: with no alert channel configured it
+# fails rather than passing quietly, so neither half of the pair can look healthy while blind.
 on:
   schedule:
     - cron: '41 5 * * *'
@@ -56,3 +59,21 @@ jobs:
           PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash scripts/watch-pin-schedule.sh
+
+      # A channel that is not configured cannot warn about anything, and a green watchdog run is the
+      # only sign - which is invisible. This makes the silence itself the failure, the same way the
+      # weekly run does: every workflow here refuses to pass while it has nowhere to report.
+      #
+      # It runs even when a check above already failed, so the missing channel is named on the same red
+      # run rather than being hidden behind the outage that red run was about.
+      - name: Fail the run when no alert channel is configured
+        if: always()
+        env:
+          PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+        run: |
+          if [[ -z "$PIN_ALERT_WEBHOOK_URL" && -z "$PIN_ALERT_WEBHOOK_URL_FALLBACK" ]]; then
+            echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set, so a stopped schedule could not reach anyone. Add one under Settings - Secrets and variables - Actions - New repository secret."
+            exit 1
+          fi
+          echo "alert channel: configured"
