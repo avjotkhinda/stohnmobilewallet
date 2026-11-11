@@ -111,10 +111,13 @@ alert_name_hint() {
     echo "a near-miss secret name could not be ruled out (GH_TOKEN or GH_REPO is not set for this step)"
     return 0
   fi
-  local names first_line
+  local names reason
   if ! names="$(gh api "repos/$GH_REPO/actions/secrets?per_page=100" --jq '.secrets[].name' 2>&1)"; then
-    first_line="${names%%$'\n'*}"
-    echo "a near-miss secret name could not be ruled out (the secrets API answered: ${first_line})"
+    # gh prints the API's JSON body and then its own one-line message; the status is all that is useful
+    # here, and a wall of JSON in a log line is what makes people stop reading alerts.
+    reason="$(printf '%s\n' "$names" | grep -o 'HTTP [0-9]\{3\}' | head -n1 || true)"
+    [[ -n "$reason" ]] || reason="$(printf '%s' "${names%%$'\n'*}" | cut -c1-120)"
+    echo "a near-miss secret name could not be ruled out (the secrets API answered ${reason:-no status}) - check the exact name with \`gh secret list --repo ${GH_REPO}\`"
     return 0
   fi
   printf '%s\n' "$names" | python3 -c '
