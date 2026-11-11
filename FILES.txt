@@ -102,6 +102,11 @@
 ./app/src/test/resources/robolectric.properties
 ./build.gradle.kts
 ./config/detekt/detekt.yml
+./docs/ARCHITECTURE.md
+./docs/BUILD.md
+./docs/RECOVERY.md
+./docs/ROADMAP.md
+./docs/THREAT_MODEL.md
 ./gradle.properties
 ./gradle/verification-metadata.xml
 ./gradle/wrapper/gradle-wrapper.jar
