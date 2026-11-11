@@ -71,9 +71,13 @@ jobs:
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+          # A variable delivers too, so it counts here for the same reason the weekly gate counts it.
+          PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
         run: |
-          if [[ -z "$PIN_ALERT_WEBHOOK_URL" && -z "$PIN_ALERT_WEBHOOK_URL_FALLBACK" ]]; then
-            echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set, so a stopped schedule could not reach anyone. Add one under Settings - Secrets and variables - Actions - New repository secret."
+          if [[ -z "$PIN_ALERT_WEBHOOK_URL" && -z "$PIN_ALERT_WEBHOOK_URL_FALLBACK" && \
+                -z "$PIN_ALERT_WEBHOOK_URL_VAR" && -z "$PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR" ]]; then
+            echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set, as a secret or as a repository variable, so a stopped schedule could not reach anyone. Add one under Settings - Secrets and variables - Actions."
             exit 1
           fi
           echo "alert channel: configured"

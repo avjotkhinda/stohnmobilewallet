@@ -37,8 +37,12 @@ set -euo pipefail
 # Slack channel or workspace, Discord, Teams, Google Chat. It is tried only when the primary is missing
 # or refuses the message, so one broken channel cannot silence the alarm on its own.
 #
-# PIN_ALERT_WEBHOOK_URL is the secret. Unset, the script reports the missing channel and exits 0,
-# which is the lenient default; strict callers get an error and exit 1 instead.
+# The URL may be kept in a repository variable instead of a secret, and that is read as a route rather
+# than only diagnosed: someone who saves the name in the wrong tab should get delivered alerts, not a
+# silent week. Variables are not private - anyone who can read the repository's Actions settings can
+# read one - so the delivery summary says when a variable was the route, and a secret is preferred when
+# both are present. Unset everywhere, the script reports the missing channel and exits 0, which is the
+# lenient default; strict callers get an error and exit 1 instead.
 #
 # Delivery problems follow the same split: a warning and exit 0 by default, an error and exit 1 under
 # PIN_ALERT_STRICT=1. Neither changes what the step already reported about the pins themselves - it
@@ -49,6 +53,9 @@ RUN_URL="${3:-}"
 ISSUE_URL="${4:-}"
 WEBHOOK="${PIN_ALERT_WEBHOOK_URL:-}"
 FALLBACK="${PIN_ALERT_WEBHOOK_URL_FALLBACK:-}"
+# The same two names as they arrive from `vars.*` instead of `secrets.*`.
+WEBHOOK_VAR="${PIN_ALERT_WEBHOOK_URL_VAR:-}"
+FALLBACK_VAR="${PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR:-}"
 MAX_LINES="${PIN_ALERT_MAX_LINES:-6}"
 STRICT="${PIN_ALERT_STRICT:-0}"
 
@@ -96,21 +103,11 @@ if [[ "$OUTCOME" == "success" && -z "$ISSUE_URL" ]]; then
   exit 0
 fi
 
-# Every route that could carry this message, primary first. A missing route is not an error on its
-# own: the fallback exists precisely so one unconfigured channel does not silence the alarm.
-# A missing channel is most often a name that is nearly right, and "not set" cannot tell those apart.
-# Two cheap probes, both best effort: the same name saved as a repository variable (readable, but never
-# delivered to `secrets.*`), and the repository's own secret list for something one character off. A
-# token that cannot read the list must not turn a clear "no channel" message into a confusing one.
+# Reached only when all four names are empty, which is most often a name that is nearly right rather
+# than a missing channel. One best-effort probe: the repository's own secret list, for something one
+# character off. A token that cannot read the list must not turn a clear "no channel" message into a
+# confusing one.
 alert_name_hint() {
-  if [[ -n "${PIN_ALERT_WEBHOOK_URL_VAR:-}" ]]; then
-    echo "PIN_ALERT_WEBHOOK_URL exists as a repository variable, not a secret, and variables are never delivered to \`secrets.*\` - move it to the Secrets tab"
-    return 0
-  fi
-  if [[ -n "${PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR:-}" ]]; then
-    echo "PIN_ALERT_WEBHOOK_URL_FALLBACK exists as a repository variable, not a secret, and variables are never delivered to \`secrets.*\` - move it to the Secrets tab"
-    return 0
-  fi
   if ! command -v gh >/dev/null 2>&1; then
     echo "a near-miss secret name could not be ruled out (no gh CLI in this environment)"
     return 0
@@ -165,25 +162,30 @@ else:
 '
 }
 
+# Every route that could carry this message, best first: the secret for each channel before the
+# variable holding the same name, so a proper secret wins when both exist and a variable in the wrong
+# tab still delivers. A missing route is not an error on its own: the fallback exists precisely so one
+# unconfigured channel does not silence the alarm.
 ROUTE_NAMES=()
 ROUTE_URLS=()
-if [[ -n "$WEBHOOK" ]]; then
-  ROUTE_NAMES+=("primary")
-  ROUTE_URLS+=("$WEBHOOK")
-fi
-if [[ -n "$FALLBACK" ]]; then
-  ROUTE_NAMES+=("fallback")
-  ROUTE_URLS+=("$FALLBACK")
-fi
+add_route() {
+  [[ -n "$2" ]] || return 0
+  ROUTE_NAMES+=("$1")
+  ROUTE_URLS+=("$2")
+}
+add_route "primary" "$WEBHOOK"
+add_route "primary (repository variable)" "$WEBHOOK_VAR"
+add_route "fallback" "$FALLBACK"
+add_route "fallback (repository variable)" "$FALLBACK_VAR"
 
 if [[ ${#ROUTE_NAMES[@]} -eq 0 ]]; then
   HINT="$(alert_name_hint)"
-  summarize "- Alert channel: **not configured** (\`PIN_ALERT_WEBHOOK_URL\` and \`PIN_ALERT_WEBHOOK_URL_FALLBACK\` are both empty), so the ${KIND} could not be sent. ${HINT}."
+  summarize "- Alert channel: **not configured** (\`PIN_ALERT_WEBHOOK_URL\` and \`PIN_ALERT_WEBHOOK_URL_FALLBACK\` are empty as both a secret and a repository variable), so the ${KIND} could not be sent. ${HINT}."
   if [[ "$STRICT" == "1" ]]; then
-    echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set for this repository, so no alert could be delivered. ${HINT}. Add either under Settings - Secrets and variables - Actions - New repository secret."
+    echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set, as a secret or a repository variable, so no alert could be delivered. ${HINT}. Add either under Settings - Secrets and variables - Actions."
     exit 1
   fi
-  echo "::notice title=No alert channel configured::Set the PIN_ALERT_WEBHOOK_URL secret, and optionally PIN_ALERT_WEBHOOK_URL_FALLBACK as a second route, to be told here instead of only in the Actions tab. ${HINT}."
+  echo "::notice title=No alert channel configured::Set PIN_ALERT_WEBHOOK_URL - as a secret, or as a repository variable if that is easier - and optionally PIN_ALERT_WEBHOOK_URL_FALLBACK as a second route, to be told here instead of only in the Actions tab. ${HINT}."
   exit 0
 fi
 
@@ -300,7 +302,6 @@ PY
 delivered_route=""
 delivered_code=""
 attempts=""
-primary_note=""
 for i in "${!ROUTE_NAMES[@]}"; do
   route="${ROUTE_NAMES[$i]}"
   url="${ROUTE_URLS[$i]}"
@@ -318,17 +319,22 @@ for i in "${!ROUTE_NAMES[@]}"; do
   fi
   echo "notify: the ${route} webhook answered HTTP ${code:-000}: ${body}" >&2
   attempts="${attempts:+$attempts; }${route} HTTP ${code:-000}"
-  if [[ "$route" == "primary" ]]; then
-    primary_note="HTTP ${code:-000}"
-  fi
 done
 
+# A variable is readable by anyone who can see the repository's Actions settings, which is the only
+# real difference between the two tabs - worth naming on the delivery that used one, without turning a
+# working alert into a warning.
+variable_note=""
+if [[ "$delivered_route" == *"(repository variable)"* ]]; then
+  variable_note=" It came from a repository variable, which anyone with read access to this repository can see - a secret would keep the URL private."
+fi
+
 if [[ -n "$delivered_route" ]]; then
-  if [[ "$delivered_route" == "fallback" ]]; then
-    summarize "- Alert channel: ${KIND} delivered via the **fallback** webhook (HTTP ${delivered_code}); the primary did not take it (${primary_note:-not configured})."
-    echo "notify: the primary route did not deliver it; the fallback did"
+  if [[ -n "$attempts" ]]; then
+    summarize "- Alert channel: ${KIND} delivered via the **${delivered_route}** webhook (HTTP ${delivered_code}); earlier route(s) refused it (${attempts}).${variable_note}"
+    echo "notify: an earlier route did not deliver it; the ${delivered_route} route did"
   else
-    summarize "- Alert channel: ${KIND} delivered (HTTP ${delivered_code})."
+    summarize "- Alert channel: ${KIND} delivered (HTTP ${delivered_code}) via the ${delivered_route} route.${variable_note}"
   fi
   echo "notify: alert delivered to the configured webhook (HTTP $delivered_code)"
   exit 0
