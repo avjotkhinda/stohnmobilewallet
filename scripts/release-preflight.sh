@@ -22,7 +22,15 @@ grep -F 'android.permission.ACCESS_NETWORK_STATE' "$ANDROID_MANIFEST" >/dev/null
 ! grep -F 'android.permission.WAKE_LOCK' "$ANDROID_MANIFEST" >/dev/null
 
 grep -E '^    const val DEBIAN_VERSION = "[^"]+"' "$MANIFEST" >/dev/null
-grep -E '^    const val DEBIAN_URL = "https://images\.linuxcontainers\.org/images/debian/bookworm/arm64/default/.+/rootfs\.tar\.xz"' "$MANIFEST" >/dev/null
+# The rootfs comes from the upstream snapshot mirror or from this project's own release mirror
+# (.github/workflows/mirror-runtime-rootfs.yml). Either is accepted, and nothing else: the upstream
+# publisher keeps only a few days of snapshots, so pointing the pin anywhere else is how the app ends
+# up with a runtime it cannot download.
+DEBIAN_URL="$(sed -n 's/^    const val DEBIAN_URL = "\([^"]*\)"$/\1/p' "$MANIFEST")"
+[[ "$DEBIAN_URL" =~ ^https://(images\.linuxcontainers\.org/images/debian/bookworm/arm64/default|github\.com/avjotkhinda/stohnmobilewallet/releases/download)/[^/]+/rootfs\.tar\.xz$ ]] || {
+  echo "FAIL: DEBIAN_URL is not the Debian bookworm arm64 snapshot or this project's release mirror: ${DEBIAN_URL:-<missing>}" >&2
+  exit 1
+}
 for key in DEBIAN_SHA256 PROOT_SHA256 PROOT_LOADER_SHA256 LIBTALLOC_SHA256 LIBANDROID_SHMEM_SHA256; do
   value="$(sed -n "s/.*const val $key = \"\([0-9a-f]*\)\".*/\1/p" "$MANIFEST")"
   [[ "$value" =~ ^[0-9a-f]{64}$ ]] || { echo "FAIL: $key is not pinned" >&2; exit 1; }

@@ -16,8 +16,9 @@ object RuntimeManifest {
     const val CORE_URL = "https://github.com/StohnCoin-Projects/StohnCoin/releases/download/v3.2/stohn-3.2-aarch64-linux-gnu.tar.gz"
     const val CORE_SHA256 = "1c7fed5e4e5ef9e753146f9ada932abb20994134caaec33d1933d7f5c65531bf"
     const val DEBIAN_VERSION = "bookworm-arm64-default-20261110_05:24"
-    const val DEBIAN_URL = "https://images.linuxcontainers.org/images/debian/bookworm/arm64/default/20261110_05:24/rootfs.tar.xz"
-    // SHA-256 published by the Linux Containers image server for this exact immutable snapshot.
+    const val DEBIAN_URL = "https://github.com/avjotkhinda/stohnmobilewallet/releases/download/runtime-bookworm-arm64-20261110/rootfs.tar.xz"
+    // SHA-256 published by the Linux Containers image server for this exact immutable snapshot; the
+    // project-owned mirror release republishes that digest file unchanged.
     const val DEBIAN_SHA256 = "68ce225782c47e500c42ef90cf4c8a4d19ed2dc1b77004010405cc7c643820ee"
     const val PROOT_SHA256 = "fc632a66a262498517080e14930740910b7beb186e1ca613d371b3cb189f17d1"
     const val PROOT_LOADER_SHA256 = "1da54355333cca3fb6ee10e3b82a24df24fb230c99241ce83809bf9e240609b5"

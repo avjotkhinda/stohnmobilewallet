@@ -3,6 +3,7 @@
 ./.github/ISSUE_TEMPLATE/feature_request.yml
 ./.github/dependabot.yml
 ./.github/workflows/android-build.yml
+./.github/workflows/mirror-runtime-rootfs.yml
 ./.github/workflows/proot-android-bundle.yml
 ./.gitignore
 ./CONTRIBUTING.md
