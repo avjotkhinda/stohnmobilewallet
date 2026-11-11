@@ -1,0 +1,29 @@
+name: alert-test
+
+# The pin-liveness alert is only worth having if it actually arrives, but the thing that exercises it
+# is a dead runtime pin: too slow to download, and too destructive to stage merely to check a webhook.
+# This posts one labelled test message instead, through the same script and the same secret.
+#
+# It is hand-run only - no schedule, no checkout of artifacts, no issue, no report step - so running
+# it can never disturb the real incident tracking. It fails the run when the channel is unconfigured
+# or the webhook refuses the message: a test that goes green without delivering anything would hide
+# exactly the problem it exists to find.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  send-test-alert:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Post a test message to the alert channel
+        env:
+          PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          # Delivery is the whole point here, so anything short of a 2xx fails the run.
+          PIN_ALERT_STRICT: '1'
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/notify-pin-liveness.sh test "" "$RUN_URL" ""

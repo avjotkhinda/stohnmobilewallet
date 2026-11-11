@@ -10,6 +10,13 @@ set -euo pipefail
 # A success is the all-clear for an alert that already went out, so it is sent only when that run
 # also closed the tracking issue: a routine weekly pass says nothing rather than pinging every Monday.
 #
+#   scripts/notify-pin-liveness.sh test "" [run-url]
+#
+# `test` goes through exactly this delivery path with a payload that says it was run by hand, so the
+# channel can be confirmed without waiting for, or faking, a dead pin. PIN_ALERT_STRICT=1 makes an
+# unset channel or a refused delivery fail the step instead of warning: a deliberate test that passes
+# without sending anything would only hide the problem.
+#
 # PIN_ALERT_WEBHOOK_URL is the secret. With it unset the step says so and exits 0: a repository that
 # has not configured an alert channel should not fail a run for it.
 #
@@ -21,18 +28,22 @@ RUN_URL="${3:-}"
 ISSUE_URL="${4:-}"
 WEBHOOK="${PIN_ALERT_WEBHOOK_URL:-}"
 MAX_LINES="${PIN_ALERT_MAX_LINES:-6}"
+STRICT="${PIN_ALERT_STRICT:-0}"
 
 case "$OUTCOME" in
-  failure | success) ;;
+  failure | success | test) ;;
   *)
-    echo "usage: $0 <failure|success> <log-file> [run-url] [issue-url]" >&2
+    echo "usage: $0 <failure|success|test> <log-file> [run-url] [issue-url]" >&2
     exit 2
     ;;
 esac
-[[ -s "$LOG" ]] || {
-  echo "notify: no check log at '${LOG}' to alert about" >&2
-  exit 2
-}
+# A test is run by hand against no check at all, so it is the one outcome without a log behind it.
+if [[ "$OUTCOME" != "test" ]]; then
+  [[ -s "$LOG" ]] || {
+    echo "notify: no check log at '${LOG}' to alert about" >&2
+    exit 2
+  }
+fi
 
 # A passing run is only news when it closed an incident. The workflow passes the issue it closed,
 # so an empty issue URL here means the channel was never told about a failure and has nothing to
@@ -43,6 +54,10 @@ if [[ "$OUTCOME" == "success" && -z "$ISSUE_URL" ]]; then
 fi
 
 if [[ -z "$WEBHOOK" ]]; then
+  if [[ "$STRICT" == "1" ]]; then
+    echo "::error title=No alert channel configured::PIN_ALERT_WEBHOOK_URL is not set for this repository, so no alert could be delivered. Add it under Settings - Secrets and variables - Actions - New repository secret."
+    exit 1
+  fi
   echo "::notice title=No alert channel configured::Set the PIN_ALERT_WEBHOOK_URL secret to a Slack incoming webhook to be told here instead of only in the Actions tab."
   exit 0
 fi
@@ -67,8 +82,11 @@ import sys
 outcome, log_path, run_url, issue_url = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 max_lines = int(sys.argv[5])
 
-with open(log_path, encoding="utf-8", errors="replace") as handle:
-    lines = [re.sub(r"\x1b\[[0-9;]*m", "", line.rstrip("\n")) for line in handle]
+# A hand-run test has no check output behind it; every other outcome does.
+lines = []
+if outcome != "test":
+    with open(log_path, encoding="utf-8", errors="replace") as handle:
+        lines = [re.sub(r"\x1b\[[0-9;]*m", "", line.rstrip("\n")) for line in handle]
 
 if outcome == "failure":
     # The specific failure lines, which name the URL and the digest that disagreed. Falling back to
@@ -85,7 +103,7 @@ if outcome == "failure":
     if issue_url:
         text.append(f"<{issue_url}|Tracking issue>")
     text.append("Repair: mirror the snapshot with `mirror-runtime-rootfs.yml`, repin `DEBIAN_URL`/`DEBIAN_SHA256` (or `CORE_URL`/`CORE_SHA256`), and let the check pass again.")
-else:
+elif outcome == "success":
     # The one or two per-artifact "ok" lines and the PASS line: an all-clear is read at a glance to
     # confirm which artifacts came back, not inspected line by line.
     detail = "\n".join([line for line in lines if "PIN LIVENESS:" in line][-max_lines:])
@@ -99,6 +117,17 @@ else:
     if issue_url:
         text.append(f"<{issue_url}|Closed issue>")
     text.append("Nothing to do - this closes out the earlier alert.")
+else:
+    # A test message has to be unmistakable: somebody glancing at the channel must not read it as a
+    # real dead pin, and must not go looking for a failing run that does not exist.
+    text = [
+        ":test_tube: *stohnmobilewallet: pin-liveness alert test*",
+        "This message was requested by hand to confirm the alert channel works. It is not a pin failure - a real alert here has a red headline and names the URL that stopped serving its bytes.",
+        "If you can read this, a dead pin will reach this channel too.",
+    ]
+    if run_url:
+        text.append(f"<{run_url}|Triggering run>")
+    text.append("No action needed.")
 
 print(json.dumps({"text": "\n".join(part for part in text if part)}))
 PY
@@ -112,6 +141,10 @@ code="${response##*$'\n'}"
 body="${response%$'\n'*}"
 
 if [[ "$code" != 2* ]]; then
+  if [[ "$STRICT" == "1" ]]; then
+    echo "::error title=Alert not delivered::The webhook answered HTTP ${code:-000}, so the channel did not receive the message. Response: ${body}"
+    exit 1
+  fi
   echo "::warning title=Alert not delivered::The webhook answered HTTP ${code:-000}. The run still fails for the pin itself; this only means the chat message did not arrive. Response: ${body}"
   exit 0
 fi

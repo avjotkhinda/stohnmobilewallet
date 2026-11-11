@@ -2,6 +2,7 @@
 ./.github/ISSUE_TEMPLATE/config.yml
 ./.github/ISSUE_TEMPLATE/feature_request.yml
 ./.github/dependabot.yml
+./.github/workflows/alert-test.yml
 ./.github/workflows/android-build.yml
 ./.github/workflows/mirror-runtime-rootfs.yml
 ./.github/workflows/pin-liveness.yml
