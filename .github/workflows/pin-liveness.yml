@@ -85,12 +85,17 @@ jobs:
         run: bash scripts/report-pin-liveness.sh "${{ steps.check.outputs.outcome }}" pin-liveness.log "$RUN_URL"
 
       # The issue is only seen by somebody who reads GitHub notifications. This puts the failure where
-      # people are, using a Slack incoming webhook held in the PIN_ALERT_WEBHOOK_URL secret; with the
-      # secret unset the step says so and does nothing. A dry run is not a real check, so it is silent.
+      # people are, using a Slack incoming webhook held in the PIN_ALERT_WEBHOOK_URL secret. The step is
+      # strict: a missing secret or a webhook that refuses the message fails it, because an alert nobody
+      # receives is worth no more than no alert at all, and only a red run makes that visible. A dry
+      # run is not a real check, so it is silent.
       - name: Alert the chat channel when a pin is dead
         if: steps.check.outputs.outcome == 'failure' && inputs.dry_run != true
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          # Delivery is part of the check, not a courtesy: a channel that cannot receive is a broken
+          # alarm, so this fails the step instead of warning about it.
+          PIN_ALERT_STRICT: '1'
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ISSUE_URL: ${{ steps.report.outputs.issue_number && format('{0}/{1}/issues/{2}', github.server_url, github.repository, steps.report.outputs.issue_number) || '' }}
         run: bash scripts/notify-pin-liveness.sh failure pin-liveness.log "$RUN_URL" "$ISSUE_URL"
@@ -99,10 +104,16 @@ jobs:
       # so people keep chasing a failure that was fixed. This is sent only when the report step above
       # actually closed the tracking issue, which keeps a routine weekly pass silent. A dry run never
       # closes an incident, so it stays silent here too.
+      #
+      # It is strict as well, and that is the case strictness exists for: this step runs on an otherwise
+      # green run, so a warning here would leave a broken channel indistinguishable from a healthy week.
       - name: Tell the chat channel the pins are healthy again
         if: steps.check.outputs.outcome == 'success' && steps.report.outputs.recovered == 'true'
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          # Delivery is part of the check, not a courtesy: a channel that cannot receive is a broken
+          # alarm, so this fails the step instead of warning about it.
+          PIN_ALERT_STRICT: '1'
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ISSUE_URL: ${{ steps.report.outputs.issue_number && format('{0}/{1}/issues/{2}', github.server_url, github.repository, steps.report.outputs.issue_number) || '' }}
         run: bash scripts/notify-pin-liveness.sh success pin-liveness.log "$RUN_URL" "$ISSUE_URL"

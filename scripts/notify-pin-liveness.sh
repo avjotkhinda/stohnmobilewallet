@@ -17,17 +17,22 @@ set -euo pipefail
 # unset channel or a refused delivery fail the step instead of warning: a deliberate test that passes
 # without sending anything would only hide the problem.
 #
+# The pin check and the alert test both run strict, so a channel that cannot receive is a red run. The
+# default stays lenient for a script run by hand, where a chat problem should not look like a code
+# problem; scripts/watch-pin-schedule.sh relies on that while it tracks its own outage in an issue.
+#
 #   scripts/notify-pin-liveness.sh <schedule|schedule-ok> <log-file> [run-url] [issue-url]
 #
 # The schedule outcomes belong to the watchdog: `schedule` says the weekly check has stopped running,
 # which is a different failure from a dead pin and must not read like one, and `schedule-ok` closes
 # it out. scripts/watch-pin-schedule.sh sends each of them at most once per outage.
 #
-# PIN_ALERT_WEBHOOK_URL is the secret. With it unset the step says so and exits 0: a repository that
-# has not configured an alert channel should not fail a run for it.
+# PIN_ALERT_WEBHOOK_URL is the secret. Unset, the script reports the missing channel and exits 0,
+# which is the lenient default; strict callers get an error and exit 1 instead.
 #
-# Delivery problems are reported as a warning and do not change the job's result - the run is
-# already failing because a pin is dead, and a chat outage must not disguise that as something else.
+# Delivery problems follow the same split: a warning and exit 0 by default, an error and exit 1 under
+# PIN_ALERT_STRICT=1. Neither changes what the step already reported about the pins themselves - it
+# only decides whether a chat outage is allowed to pass as a healthy run.
 OUTCOME="${1:-}"
 LOG="${2:-}"
 RUN_URL="${3:-}"
