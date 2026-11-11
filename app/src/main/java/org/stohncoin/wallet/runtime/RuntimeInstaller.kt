@@ -472,7 +472,7 @@ object RuntimeInstaller {
                             e.isSymbolicLink -> {
                                 links += Link(
                                     path,
-                                    e.linkName,
+                                    normalizeLinkTarget(e.linkName),
                                     false
                                 )
                             }
@@ -480,7 +480,7 @@ object RuntimeInstaller {
                             e.isLink -> {
                                 links += Link(
                                     path,
-                                    e.linkName,
+                                    normalizeLinkTarget(e.linkName),
                                     true
                                 )
                             }
@@ -592,17 +592,16 @@ object RuntimeInstaller {
                     destination.delete()
                 }
 
-                val normalizedTarget = normalizeLinkTarget(link.target)
                 val target =
                     safeLinkTarget(
                         out,
                         destination.parentFile ?: out,
-                        normalizedTarget
+                        link.target
                     )
 
                 if (link.hard) {
                     require(target.isFile) {
-                        "Hardlink target missing: ${normalizedTarget}"
+                        "Hardlink target missing: ${link.target}"
                     }
 
                     Files.createLink(
