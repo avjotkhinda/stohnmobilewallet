@@ -32,6 +32,9 @@ on:
 
 permissions:
   contents: read
+  # The dry run reads the workflow's state to tell an active schedule from one GitHub disabled after
+  # 60 days of inactivity; declaring any permission here sets the rest to none, so this one is needed.
+  actions: read
   # The report step opens, comments on and closes the issue that tracks a dead pin.
   issues: write
 
@@ -45,6 +48,11 @@ jobs:
       # chance to run; the last step fails the job afterwards.
       - name: Check the pins, or only the schedule in a dry run
         id: check
+        env:
+          # The dry run reads the default branch and the workflow's state from the API, and a step
+          # only sees these if they are handed to it here.
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -o pipefail
           if [[ "${{ inputs.dry_run }}" == "true" ]]; then
