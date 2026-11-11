@@ -432,6 +432,18 @@ object RuntimeInstaller {
         // bin entry answers the same question without needing the link to exist yet.
         var topLevelBin = false
 
+        // Normalize a link target path the same way safeArchivePath normalizes archive paths:
+        // remove leading ./ or /, strip empty/components and ., reject ..
+        fun normalizeLinkTarget(t: String): String {
+            val n = t.replace('\\', '/')
+            require(!n.startsWith('/')) {"Unsafe link target"
+            }
+            val cleaned = n.split('/').filter { it.isNotEmpty() && it != "." }
+            require(cleaned.none { it == ".." }) {"Unsafe link target"
+            }
+            return if (cleaned.isEmpty()) "." else cleaned.joinToString("/")
+        }
+
         var entries = 0
         var bytes = 0L
 
@@ -580,16 +592,17 @@ object RuntimeInstaller {
                     destination.delete()
                 }
 
+                val normalizedTarget = normalizeLinkTarget(link.target)
                 val target =
                     safeLinkTarget(
                         out,
                         destination.parentFile ?: out,
-                        link.target
+                        normalizedTarget
                     )
 
                 if (link.hard) {
                     require(target.isFile) {
-                        "Hardlink target missing: ${link.target}"
+                        "Hardlink target missing: ${normalizedTarget}"
                     }
 
                     Files.createLink(
