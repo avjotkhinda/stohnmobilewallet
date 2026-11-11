@@ -13,7 +13,10 @@ curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-delay 2 --re
 EXPECTED="$(awk '$2 == "rootfs.tar.xz" {print $1; exit}' "$SUMS")"
 [[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]] || { echo 'FAIL: official SHA256SUMS has no valid rootfs.tar.xz digest' >&2; exit 1; }
 curl --fail --location --proto '=https' --tlsv1.2 --retry 4 --retry-delay 2 --retry-all-errors "$URL" -o "$ARCHIVE"
-tar -tJf "$ARCHIVE" | grep -Eq '(^|/)bin/sh$' || { echo 'FAIL: rootfs archive lacks bin/sh' >&2; exit 1; }
+# Written out before it is searched: grep -q exits at the first match, and under pipefail tar's
+# SIGPIPE on the closed pipe would fail this check on an archive that is actually fine.
+tar -tJf "$ARCHIVE" > "$WORK/rootfs-entries.txt"
+grep -Eq '(^|/)bin/sh$' "$WORK/rootfs-entries.txt" || { echo 'FAIL: rootfs archive lacks bin/sh' >&2; exit 1; }
 SHA="$(sha256sum "$ARCHIVE" | awk '{print $1}')"
 [[ "${SHA,,}" == "${EXPECTED,,}" ]] || { echo "FAIL: downloaded rootfs does not match official SHA256SUMS: expected=$EXPECTED actual=$SHA" >&2; exit 1; }
 echo "Debian rootfs SHA-256 verified against official SHA256SUMS: ${EXPECTED,,}"

@@ -55,7 +55,11 @@ jobs:
           cd mirror
           grep -E ' rootfs\.tar\.xz$' SHA256SUMS > rootfs.sha256
           sha256sum -c rootfs.sha256
-          tar -tJf rootfs.tar.xz | grep -Eq '(^|/)bin/sh$'
+          # The listing is written to a file before it is searched. Piping tar straight into grep -q
+          # kills tar with SIGPIPE as soon as the first match is found, and pipefail then fails the
+          # step even though bin/sh is present.
+          tar -tJf rootfs.tar.xz > entries.txt
+          grep -Eq '(^|/)bin/sh$' entries.txt
           {
             echo "source: $SOURCE"
             echo "rootfs.tar.xz sha256: $(sha256sum rootfs.tar.xz | awk '{print $1}')"
