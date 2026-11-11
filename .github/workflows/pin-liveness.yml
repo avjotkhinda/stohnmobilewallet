@@ -1,0 +1,29 @@
+name: pin-liveness
+
+# The app downloads its Full Mode runtime from two pinned URLs, and both live on infrastructure
+# this project does not fully control: a GitHub release asset and a mirror the project owns. A pin
+# whose URL stops serving the pinned bytes does not fail a build - it fails on a user's phone, as
+# "Download failed: HTTP 404", after they have waited for a node to start. This checks the pins on a
+# schedule so a dead URL is found here first.
+#
+# It downloads the artifacts rather than asking for headers: a 200 with a different body is exactly
+# the failure being guarded against (a retagged release, a rewritten asset), so the digest and the
+# archive layout are both checked.
+on:
+  schedule:
+    # Weekly, Monday morning UTC. GitHub disables schedules on a repository with no activity for
+    # 60 days, so a silent disable is possible; workflow_dispatch exists for an on-demand run.
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  # Reading the pins, the release assets and the pinned upstream artifacts needs nothing more.
+  contents: read
+
+jobs:
+  pinned-urls:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Check every pinned runtime URL still serves the pinned bytes
+        run: bash scripts/verify-pinned-runtime-urls.sh

@@ -4,6 +4,7 @@
 ./.github/dependabot.yml
 ./.github/workflows/android-build.yml
 ./.github/workflows/mirror-runtime-rootfs.yml
+./.github/workflows/pin-liveness.yml
 ./.github/workflows/proot-android-bundle.yml
 ./.gitignore
 ./CONTRIBUTING.md
@@ -130,6 +131,7 @@
 ./scripts/sign-release-checksums.sh
 ./scripts/verify-apk-artifact.sh
 ./scripts/verify-baseline-committed.sh
+./scripts/verify-pinned-runtime-urls.sh
 ./scripts/verify-proot-bundle.sh
 ./scripts/verify-reproducible-build.sh
 ./scripts/verify-restore-path.sh
