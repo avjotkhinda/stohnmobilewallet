@@ -425,6 +425,13 @@ object RuntimeInstaller {
 
         val links = mutableListOf<Link>()
 
+        // A Debian bookworm rootfs is merged-/usr: its /bin is a symlink to usr/bin, and the real
+        // /usr/bin/sh is the only sh in the archive. Symlinks are deliberately created after this
+        // extraction, so asking the half-built tree for bin/sh cannot see it - which is what made a
+        // valid archive fail as "Invalid Debian rootfs archive layout". The archive's own top-level
+        // bin entry answers the same question without needing the link to exist yet.
+        var topLevelBin = false
+
         var entries = 0
         var bytes = 0L
 
@@ -443,6 +450,11 @@ object RuntimeInstaller {
 
                         val path = safeArchivePath(e.name)
                         val destination = safeDestination(temp, path)
+
+                        if (path == "bin" || path.startsWith("bin/")) {
+                            topLevelBin = true
+                        }
+
 
                         when {
                             e.isSymbolicLink -> {
@@ -500,8 +512,12 @@ object RuntimeInstaller {
 
             // Normalize a plain root tree or a single top-level wrapper
             // BEFORE creating links. Absolute symlink targets are guest-root-relative.
+            //
+            // topLevelBin is checked first for the merged-/usr case above: a top-level bin entry is
+            // the plain-root-tree signal, and it stays true whether that entry is a directory or the
+            // symlink to usr/bin that the archive actually carries.
             val root =
-                if (File(temp, "bin/sh").isFile) {
+                if (topLevelBin || File(temp, "bin/sh").isFile) {
                     temp
                 } else {
                     val candidates =

@@ -57,6 +57,16 @@ jobs:
       - name: Build debug APK (release builds need signing secrets; see release job)
         run: ./gradlew assembleDebug
 
+      # A debug APK is what gets installed on a phone to try a change, and until now it never left
+      # the runner: the release artifact below needs a keystore, which is why the only build a
+      # tester could get was one built by hand. Publishing it here is what makes "build it and
+      # try it" repeatable.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: stohn-wallet-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
   # The release path is invisible to the rest of CI: R8, the signing configuration and the packaged
   # APK payload are exercised only by assembleRelease, which the release job runs only when the real
   # keystore secrets exist. A pull request gets the same build with a throwaway key, so a shrinker
