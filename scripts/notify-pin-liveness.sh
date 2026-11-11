@@ -90,6 +90,70 @@ fi
 
 # Every route that could carry this message, primary first. A missing route is not an error on its
 # own: the fallback exists precisely so one unconfigured channel does not silence the alarm.
+# A missing channel is most often a name that is nearly right, and "not set" cannot tell those apart.
+# Two cheap probes, both best effort: the same name saved as a repository variable (readable, but never
+# delivered to `secrets.*`), and the repository's own secret list for something one character off. A
+# token that cannot read the list must not turn a clear "no channel" message into a confusing one.
+alert_name_hint() {
+  if [[ -n "${PIN_ALERT_WEBHOOK_URL_VAR:-}" ]]; then
+    echo "PIN_ALERT_WEBHOOK_URL exists as a repository variable, not a secret, and variables are never delivered to \`secrets.*\` - move it to the Secrets tab"
+    return 0
+  fi
+  if [[ -n "${PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR:-}" ]]; then
+    echo "PIN_ALERT_WEBHOOK_URL_FALLBACK exists as a repository variable, not a secret, and variables are never delivered to \`secrets.*\` - move it to the Secrets tab"
+    return 0
+  fi
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "a near-miss secret name could not be ruled out (no gh CLI in this environment)"
+    return 0
+  fi
+  if [[ -z "${GH_TOKEN:-}" || -z "${GH_REPO:-}" ]]; then
+    echo "a near-miss secret name could not be ruled out (GH_TOKEN or GH_REPO is not set for this step)"
+    return 0
+  fi
+  local names first_line
+  if ! names="$(gh api "repos/$GH_REPO/actions/secrets?per_page=100" --jq '.secrets[].name' 2>&1)"; then
+    first_line="${names%%$'\n'*}"
+    echo "a near-miss secret name could not be ruled out (the secrets API answered: ${first_line})"
+    return 0
+  fi
+  printf '%s\n' "$names" | python3 -c '
+import difflib
+import sys
+
+WANTED = ["PIN_ALERT_WEBHOOK_URL", "PIN_ALERT_WEBHOOK_URL_FALLBACK"]
+
+
+def normalise(value):
+    return "".join(ch for ch in value.upper() if ch.isalnum())
+
+
+names = [line.strip() for line in sys.stdin if line.strip() and line.strip() != "null"]
+near = []
+for name in names:
+    if name.upper() in WANTED:
+        continue
+    flat = normalise(name)
+    best = 0.0
+    for wanted in WANTED:
+        flat_wanted = normalise(wanted)
+        best = max(best, difflib.SequenceMatcher(None, flat, flat_wanted).ratio())
+        if flat.startswith(flat_wanted) or flat_wanted.startswith(flat):
+            best = max(best, 0.95)
+        if "ALERT" in flat and ("WEBHOOK" in flat or "HOOK" in flat):
+            best = max(best, 0.8)
+    if best >= 0.75:
+        near.append(name)
+
+if near:
+    print("a similar secret name exists: " + ", ".join(sorted(set(near))) + " - the name has to match exactly")
+elif names:
+    print(str(len(names)) + " other Actions secret(s) exist here, none of them resembling the alert names")
+else:
+    print("no Actions secrets exist in this repository at all")
+'
+}
+
 ROUTE_NAMES=()
 ROUTE_URLS=()
 if [[ -n "$WEBHOOK" ]]; then
@@ -102,12 +166,13 @@ if [[ -n "$FALLBACK" ]]; then
 fi
 
 if [[ ${#ROUTE_NAMES[@]} -eq 0 ]]; then
-  summarize "- Alert channel: **not configured** (\`PIN_ALERT_WEBHOOK_URL\` and \`PIN_ALERT_WEBHOOK_URL_FALLBACK\` are both empty), so the ${KIND} could not be sent."
+  HINT="$(alert_name_hint)"
+  summarize "- Alert channel: **not configured** (\`PIN_ALERT_WEBHOOK_URL\` and \`PIN_ALERT_WEBHOOK_URL_FALLBACK\` are both empty), so the ${KIND} could not be sent. ${HINT}."
   if [[ "$STRICT" == "1" ]]; then
-    echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set for this repository, so no alert could be delivered. Add either under Settings - Secrets and variables - Actions - New repository secret."
+    echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set for this repository, so no alert could be delivered. ${HINT}. Add either under Settings - Secrets and variables - Actions - New repository secret."
     exit 1
   fi
-  echo "::notice title=No alert channel configured::Set the PIN_ALERT_WEBHOOK_URL secret, and optionally PIN_ALERT_WEBHOOK_URL_FALLBACK as a second route, to be told here instead of only in the Actions tab."
+  echo "::notice title=No alert channel configured::Set the PIN_ALERT_WEBHOOK_URL secret, and optionally PIN_ALERT_WEBHOOK_URL_FALLBACK as a second route, to be told here instead of only in the Actions tab. ${HINT}."
   exit 0
 fi
 

@@ -94,10 +94,14 @@ jobs:
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+          PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
           # Delivery is part of the check, not a courtesy: a channel that cannot receive is a broken
           # alarm, so this fails the step instead of warning about it.
           PIN_ALERT_STRICT: '1'
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           ISSUE_URL: ${{ steps.report.outputs.issue_number && format('{0}/{1}/issues/{2}', github.server_url, github.repository, steps.report.outputs.issue_number) || '' }}
         run: bash scripts/notify-pin-liveness.sh failure pin-liveness.log "$RUN_URL" "$ISSUE_URL"
 
@@ -113,10 +117,14 @@ jobs:
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+          PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
           # Delivery is part of the check, not a courtesy: a channel that cannot receive is a broken
           # alarm, so this fails the step instead of warning about it.
           PIN_ALERT_STRICT: '1'
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           ISSUE_URL: ${{ steps.report.outputs.issue_number && format('{0}/{1}/issues/{2}', github.server_url, github.repository, steps.report.outputs.issue_number) || '' }}
         run: bash scripts/notify-pin-liveness.sh success pin-liveness.log "$RUN_URL" "$ISSUE_URL"
 
@@ -129,11 +137,15 @@ jobs:
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+          PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
         run: |
           {
             echo '### Alert channel'
             if [[ -n "$PIN_ALERT_WEBHOOK_URL" ]]; then
               echo '- `PIN_ALERT_WEBHOOK_URL`: configured - alerts are delivered to the chat channel'
+            elif [[ -n "$PIN_ALERT_WEBHOOK_URL_VAR" ]]; then
+              echo '- `PIN_ALERT_WEBHOOK_URL`: **saved as a repository variable, not a secret** - variables never reach `secrets.*`, so move it to the Secrets tab'
             elif [[ -n "$PIN_ALERT_WEBHOOK_URL_FALLBACK" ]]; then
               echo '- `PIN_ALERT_WEBHOOK_URL`: **not configured** - alerts can only reach the fallback route'
             else
@@ -141,6 +153,8 @@ jobs:
             fi
             if [[ -n "$PIN_ALERT_WEBHOOK_URL_FALLBACK" ]]; then
               echo '- `PIN_ALERT_WEBHOOK_URL_FALLBACK`: configured - used when the primary is missing or refuses a message'
+            elif [[ -n "$PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR" ]]; then
+              echo '- `PIN_ALERT_WEBHOOK_URL_FALLBACK`: **saved as a repository variable, not a secret** - variables never reach `secrets.*`'
             else
               echo '- `PIN_ALERT_WEBHOOK_URL_FALLBACK`: not configured - a refused primary alert has no second route'
             fi

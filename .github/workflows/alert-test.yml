@@ -24,7 +24,11 @@ jobs:
         env:
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+          PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
           # Delivery is the whole point here, so anything short of a 2xx fails the run.
           PIN_ALERT_STRICT: '1'
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash scripts/notify-pin-liveness.sh test "" "$RUN_URL" ""

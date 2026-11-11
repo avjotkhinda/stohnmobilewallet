@@ -33,5 +33,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+          PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash scripts/watch-pin-schedule.sh
