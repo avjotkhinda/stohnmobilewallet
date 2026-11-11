@@ -160,6 +160,25 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # A channel that is not configured cannot warn about anything, and the run that would have used it
+      # is already red for its own reason - so on a healthy week the silence was the only sign, and it
+      # was invisible. This makes the silence itself the failure: every real run fails while no alert
+      # route exists, which is what stops a missing channel drifting through a run of green weeks.
+      #
+      # A dry run is exempt: it exists to answer "will the schedule fire", it never reports anything,
+      # and failing it for a channel it was never going to use would only muddy that answer.
+      - name: Fail the run when no alert channel is configured
+        if: always() && inputs.dry_run != true
+        env:
+          PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+        run: |
+          if [[ -z "$PIN_ALERT_WEBHOOK_URL" && -z "$PIN_ALERT_WEBHOOK_URL_FALLBACK" ]]; then
+            echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set, so a dead pin could not reach anyone. Add one under Settings - Secrets and variables - Actions - New repository secret."
+            exit 1
+          fi
+          echo "alert channel: configured"
+
       - name: Fail the run when a pin or the schedule is broken
         if: steps.check.outputs.outcome != 'success'
         run: exit 1
