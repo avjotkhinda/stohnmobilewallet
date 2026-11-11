@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# The weekly pin-liveness run has one failure mode that leaves no run to look at: the schedule
-# itself stops firing. GitHub only schedules workflows from the default branch, and disables the
-# schedule on a repository with no activity for 60 days, so "nothing ran on Monday" is a real and
-# silent outage of the check. This is the dry-run half of it: it proves the schedule is still wired
-# up, without downloading 190 MB of runtime artifacts and without touching any issue.
+# A scheduled workflow has one failure mode that leaves no run to look at: the schedule itself stops
+# firing. GitHub only schedules workflows from the default branch, and disables the schedule on a
+# repository with no activity for 60 days, so "nothing ran on Monday" is a real and silent outage of
+# the check. This is the dry-run half of it: it proves the schedule is still wired up, without
+# downloading 190 MB of runtime artifacts and without touching any issue.
 #
-#   scripts/verify-pin-schedule.sh
+#   scripts/verify-pin-schedule.sh [workflow-file] [workflow-name] [subject]
+#
+# Defaults are the weekly pin-liveness check. The arguments exist because more than one schedule has
+# to be provable now: schedule-watchdog.yml guards the weekly check, so the same questions are asked
+# of its own daily cron, with "daily" rather than "weekly" in the verdict.
 #
 # Needs GH_TOKEN and GH_REPO in the environment for the default-branch and Actions-state checks;
 # PIN_LIVENESS_WORKFLOW / PIN_LIVENESS_WORKFLOW_NAME exist so the checks themselves can be exercised.
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-WORKFLOW="${PIN_LIVENESS_WORKFLOW:-$ROOT/.github/workflows/pin-liveness.yml}"
-WORKFLOW_NAME="${PIN_LIVENESS_WORKFLOW_NAME:-pin-liveness.yml}"
+WORKFLOW="${1:-${PIN_LIVENESS_WORKFLOW:-$ROOT/.github/workflows/pin-liveness.yml}}"
+WORKFLOW_NAME="${2:-${PIN_LIVENESS_WORKFLOW_NAME:-pin-liveness.yml}}"
+SUBJECT="${3:-weekly}"
 
 fail() { echo "PIN SCHEDULE: FAIL: $*" >&2; exit 1; }
 note() { echo "PIN SCHEDULE: $*"; }
@@ -100,4 +105,4 @@ else
   note "cron '$cron' next fires: $next_run"
 fi
 
-echo "PIN SCHEDULE: PASS: the weekly schedule is intact ($cron, state $state, default branch $default_branch)"
+echo "PIN SCHEDULE: PASS: the ${SUBJECT} schedule is intact ($cron, state $state, default branch $default_branch)"

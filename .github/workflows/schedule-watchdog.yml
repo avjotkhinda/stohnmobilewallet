@@ -7,6 +7,11 @@ name: schedule-watchdog
 # Daily, not weekly: a weekly watchdog would share the failure it is looking for. A stopped schedule
 # is tracked in one issue and announced to the channel once, so a long outage costs one message
 # rather than one per morning; the run still fails while it lasts, so the repository shows it.
+#
+# The same question is asked of this workflow's own daily cron, and separately by the weekly pin check,
+# because a watchdog whose schedule stopped guards nothing and cannot report on itself: the run that
+# would have said so never starts. Two schedules each checking the other is what keeps one silent
+# schedule from being mistaken for a quiet repository.
 on:
   schedule:
     - cron: '41 5 * * *'
@@ -24,6 +29,20 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # First, because a broken self-schedule must not be hidden behind a failing pin check below: a
+      # watchdog that will not run tomorrow cannot be relied on to report anything today either.
+      - name: Check the watchdog's own schedule still fires
+        env:
+          WATCH_TARGET: watchdog
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+          PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/watch-pin-schedule.sh
 
       # The script posts the chat message itself, because it is the only thing that knows whether this
       # is a first detection or a repeat. Exit 1 there fails this step and the run with it.

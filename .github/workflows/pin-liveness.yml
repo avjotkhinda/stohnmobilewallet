@@ -179,6 +179,22 @@ jobs:
           fi
           echo "alert channel: configured"
 
+      # The watchdog guards this schedule, so this run guards the watchdog's: a daily watchdog whose
+      # own schedule stopped would otherwise be silent in exactly the way it exists to prevent. Any
+      # week this runs is a week something noticed, which is what makes two schedules enough.
+      - name: Check the schedule watchdog is still running
+        if: always()
+        env:
+          WATCH_TARGET: watchdog
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+          PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
+          PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/watch-pin-schedule.sh
+
       - name: Fail the run when a pin or the schedule is broken
         if: steps.check.outputs.outcome != 'success'
         run: exit 1

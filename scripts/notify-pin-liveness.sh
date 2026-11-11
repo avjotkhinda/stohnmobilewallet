@@ -27,6 +27,12 @@ set -euo pipefail
 # which is a different failure from a dead pin and must not read like one, and `schedule-ok` closes
 # it out. scripts/watch-pin-schedule.sh sends each of them at most once per outage.
 #
+#   scripts/notify-pin-liveness.sh <watchdog-schedule|watchdog-schedule-ok> <log-file> [run-url] [issue-url]
+#
+# The watchdog has a schedule of its own, and that one is guarded from both sides: it checks itself on
+# every run, and the weekly pin check checks it back. `watchdog-schedule` says that daily schedule has
+# stopped, which no pin failure should be mistaken for; `watchdog-schedule-ok` closes it out.
+#
 # PIN_ALERT_WEBHOOK_URL_FALLBACK is the second route: any webhook that accepts {"text": ...} - another
 # Slack channel or workspace, Discord, Teams, Google Chat. It is tried only when the primary is missing
 # or refuses the message, so one broken channel cannot silence the alarm on its own.
@@ -47,9 +53,9 @@ MAX_LINES="${PIN_ALERT_MAX_LINES:-6}"
 STRICT="${PIN_ALERT_STRICT:-0}"
 
 case "$OUTCOME" in
-  failure | success | test | schedule | schedule-ok) ;;
+  failure | success | test | schedule | schedule-ok | watchdog-schedule | watchdog-schedule-ok) ;;
   *)
-    echo "usage: $0 <failure|success|test|schedule|schedule-ok> <log-file> [run-url] [issue-url]" >&2
+    echo "usage: $0 <failure|success|test|schedule|schedule-ok|watchdog-schedule|watchdog-schedule-ok> <log-file> [run-url] [issue-url]" >&2
     exit 2
     ;;
 esac
@@ -68,6 +74,8 @@ case "$OUTCOME" in
   test) KIND="test message" ;;
   schedule) KIND="schedule warning" ;;
   schedule-ok) KIND="schedule all-clear" ;;
+  watchdog-schedule) KIND="watchdog schedule warning" ;;
+  watchdog-schedule-ok) KIND="watchdog schedule all-clear" ;;
   *) KIND="alert" ;;
 
 esac
@@ -239,32 +247,39 @@ elif outcome == "success":
     if issue_url:
         text.append(f"<{issue_url}|Closed issue>")
     text.append("Nothing to do - this closes out the earlier alert.")
-elif outcome in ("schedule", "schedule-ok"):
-    # The schedule check writes its own lines under its own prefix: a stopped schedule is not a dead
-    # pin, and both land in the same channel, so they have to be distinguishable at a glance.
+elif outcome in ("schedule", "schedule-ok", "watchdog-schedule", "watchdog-schedule-ok"):
+    # The schedule checks write their own lines under their own prefix: a stopped schedule is not a
+    # dead pin, and both land in the same channel, so they have to be distinguishable at a glance.
     detail = "\n".join([line for line in lines if "PIN SCHEDULE:" in line][-max_lines:])
     if outcome == "schedule":
-        text = [
-            ":warning: *stohnmobilewallet: the weekly pin check has stopped running*",
-            "GitHub only runs a schedule from the default branch, and disables it after 60 days without repository activity. Until this is fixed nobody is watching the runtime pins, so a dead URL would be found by a user instead of here.",
-            "```" + detail + "```" if detail else "",
-        ]
-        if run_url:
-            text.append(f"<{run_url}|Watchdog run>")
-        if issue_url:
-            text.append(f"<{issue_url}|Tracking issue>")
-        text.append("Repair: re-enable the workflow from the Actions tab, or push any commit to restore a schedule GitHub disabled for inactivity.")
+        headline = ":warning: *stohnmobilewallet: the weekly pin check has stopped running*"
+        reason = "GitHub only runs a schedule from the default branch, and disables it after 60 days without repository activity. Until this is fixed nobody is watching the runtime pins, so a dead URL would be found by a user instead of here."
+        repair = "Repair: re-enable the workflow from the Actions tab, or push any commit to restore a schedule GitHub disabled for inactivity."
+    elif outcome == "schedule-ok":
+        headline = ":white_check_mark: *stohnmobilewallet: the weekly pin check is running on schedule again*"
+        reason = "The `pin-liveness` schedule is enabled and its last scheduled run is recent, so the runtime pins are being watched weekly again."
+        repair = "Nothing to do - this closes out the earlier warning."
+    elif outcome == "watchdog-schedule":
+        # Not fatal on its own: the weekly run checks the watchdog back, so the pair still covers a
+        # stopped weekly schedule. It is the daily half that is missing, and that is worth a warning
+        # rather than an outage notice.
+        headline = ":warning: *stohnmobilewallet: the schedule watchdog has stopped running*"
+        reason = "`schedule-watchdog` is what turns a weekly pin check that silently stopped into a red run and a message here. Its own daily schedule has stopped, so a stopped weekly check is no longer noticed within a day - only when the next weekly run checks the watchdog back."
+        repair = "Repair: re-enable `schedule-watchdog` from the Actions tab, or push any commit to restore a schedule GitHub disabled for inactivity."
     else:
-        text = [
-            ":white_check_mark: *stohnmobilewallet: the weekly pin check is running on schedule again*",
-            "The `pin-liveness` schedule is enabled and its last scheduled run is recent, so the runtime pins are being watched weekly again.",
-            "```" + detail + "```" if detail else "",
-        ]
-        if run_url:
-            text.append(f"<{run_url}|Watchdog run>")
-        if issue_url:
-            text.append(f"<{issue_url}|Closed issue>")
-        text.append("Nothing to do - this closes out the earlier warning.")
+        headline = ":white_check_mark: *stohnmobilewallet: the schedule watchdog is running on schedule again*"
+        reason = "The `schedule-watchdog` daily schedule is enabled and its last scheduled run is recent, so a weekly pin check that stops is noticed again within a day."
+        repair = "Nothing to do - this closes out the earlier warning."
+    text = [
+        headline,
+        reason,
+        "```" + detail + "```" if detail else "",
+    ]
+    if run_url:
+        text.append(f"<{run_url}|Watchdog run>")
+    if issue_url:
+        text.append(f"<{issue_url}|{'Closed issue' if outcome.endswith('-ok') else 'Tracking issue'}>")
+    text.append(repair)
 else:
     # A test message has to be unmistakable: somebody glancing at the channel must not read it as a
     # real dead pin, and must not go looking for a failing run that does not exist.
