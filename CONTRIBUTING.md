@@ -87,6 +87,13 @@ git ls-files | sed 's|^|./|' | LC_ALL=C sort > FILES.txt
   floating point at any boundary.
 - **Commit to `main`, do not force-push.** Keep one concern per commit and write the reason in the
   message, not just the change.
+- **`artifacts/` stays untracked.** Debug APKs and the `.json` sidecar beside each one live there and
+  never enter git — not the repository, not `FILES.txt`. Because git does not track them, a sidecar
+  written next to an APK stays with it across checkouts and branch switches. Each sidecar records the
+  APK's sha256, the commit it was built from and the build time, which is the only attribution a
+  build gets: the APK embeds no git revision, and `versionName` alone does not change between
+  commits. Write the sidecar when you place an APK there, treat an APK without one as unattributable,
+  and delete a stale APK and its sidecar together.
 
 ## Fetching and pushing
 
