@@ -604,11 +604,22 @@ object RuntimeInstaller {
                     destination.delete()
                 }
 
+                // A tar hardlink's linkname names another archive member, so it is resolved from
+                // the extraction root; a symlink's target is resolved from the link's own directory.
+                // Debian's usr/bin/perl5.36.0 -> ./usr/bin/perl is the first kind: resolving it
+                // from usr/bin gave usr/bin/usr/bin/perl, i.e. "Hardlink target missing".
+                val linkParent =
+                    if (link.hard) {
+                        out
+                    } else {
+                        destination.parentFile ?: out
+                    }
+
                 val target =
                     try {
                         safeLinkTarget(
                             out,
-                            destination.parentFile ?: out,
+                            linkParent,
                             link.target
                         )
                     } catch (ex: IllegalArgumentException) {

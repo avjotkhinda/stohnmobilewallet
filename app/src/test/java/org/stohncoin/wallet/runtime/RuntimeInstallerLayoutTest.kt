@@ -6,6 +6,7 @@ import java.nio.file.Files
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream
 import org.apache.commons.compress.archivers.tar.TarConstants
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -34,6 +35,7 @@ class RuntimeInstallerLayoutTest {
         class Dir(name: String) : Member(name)
         class Regular(name: String, val bytes: ByteArray) : Member(name)
         class Link(name: String, val target: String) : Member(name)
+        class HardLink(name: String, val target: String) : Member(name)
     }
 
     private fun archive(entries: List<Member>): File {
@@ -48,6 +50,9 @@ class RuntimeInstallerLayoutTest {
                             it.size = member.bytes.size.toLong()
                         }
                         is Member.Link -> TarArchiveEntry(member.name, TarConstants.LF_SYMLINK).also {
+                            it.linkName = member.target
+                        }
+                        is Member.HardLink -> TarArchiveEntry(member.name, TarConstants.LF_LINK).also {
                             it.linkName = member.target
                         }
                     }
@@ -201,6 +206,47 @@ class RuntimeInstallerLayoutTest {
                 failure.message.orEmpty().contains("archive=")
         )
         assertTrue("a refused link must not be created", !Files.isSymbolicLink(File(out, "etc/escape").toPath()))
+    }
+
+    /**
+     * A tar hardlink's linkname names another archive member and is therefore archive-root
+     * relative. The pinned Debian rootfs has exactly two, `usr/bin/perl5.36.0 -> ./usr/bin/perl`
+     * and `usr/bin/uncompress -> ./usr/bin/gunzip`; resolving those from the link's own directory
+     * produced usr/bin/usr/bin/perl and failed the install with "Hardlink target missing".
+     */
+    @Test
+    fun aHardlinkTargetIsArchiveRootRelative() {
+        val elf = byteArrayOf(0x7f, 0x45, 0x4c, 0x46)
+        val archive = archive(
+            listOf(
+                Member.Dir("./"),
+                Member.Link("./bin", "usr/bin"),
+                Member.Dir("./usr/"),
+                Member.Dir("./usr/bin/"),
+                Member.Link("./usr/bin/sh", "dash"),
+                Member.Regular("./usr/bin/dash", elf),
+                Member.Regular("./usr/bin/perl", elf),
+                Member.HardLink("./usr/bin/perl5.36.0", "./usr/bin/perl")
+            )
+        )
+        val out = temporaryFolder.newFolder("hardlink-root-relative")
+
+        RuntimeInstaller.extractTarXz(archive, out)
+
+        val hardlink = File(out, "usr/bin/perl5.36.0")
+        val target = File(out, "usr/bin/perl")
+        assertTrue("the hardlink must be extracted", hardlink.isFile)
+        // A hard link is not a symlink: canonicalPath stays its own name, so identity is the only
+        // thing that shows it landed on ./usr/bin/perl rather than on a copy of it.
+        assertTrue(
+            "it must be a hard link to the member its linkname names, not a copy",
+            Files.isSameFile(hardlink.toPath(), target.toPath())
+        )
+        assertArrayEquals(
+            "the two names must expose the same bytes",
+            target.readBytes(),
+            hardlink.readBytes()
+        )
     }
 
     @Test
