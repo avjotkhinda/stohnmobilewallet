@@ -244,6 +244,7 @@ fun SettingsPage(
     onWallets: () -> Unit,
     onAddressBook: () -> Unit
 ) {
+    val context = LocalContext.current
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
         item { Text("Settings", fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Wallet and node preferences", color = DarkMuted, fontSize = 12.sp) }
         item { Text("PREFERENCES", color = Electric, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp, modifier = Modifier.padding(top = 8.dp)) }
@@ -259,7 +260,7 @@ fun SettingsPage(
                 "Share crash log",
                 "Copy or send the latest runtime log",
                 Icons.Default.BugReport,
-                onClick = { UiCommon.shareCrashLog(context, "Stohn Wallet crash log") }
+                onClick = { shareCrashLog(context, "Stohn Wallet crash log") }
             )
         }
     }

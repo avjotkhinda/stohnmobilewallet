@@ -438,17 +438,17 @@ object RuntimeInstaller {
 
         // Normalize a link target path the same way safeArchivePath normalizes archive paths:
         // remove leading ./ or /, strip empty/components and ., reject ..
-        fun normalizeLinkTarget(t: String): String {
+        fun normalizeLinkTarget(t: String, entryName: String): String {
             val n = t.replace('\\', '/')
             if (n.startsWith('/')) {
-                val ex = IllegalArgumentException("Unsafe link target: absolute linkName=$t in archive=${archive.name}, entryName=${safeArchivePath(e.name)}, temp=$temp")
+                val ex = IllegalArgumentException("Unsafe link target: absolute linkName=$t in archive=${archive.name}, entryName=${safeArchivePath(entryName)}, temp=$temp")
                 Log.e(TAG, ex.message, ex)
                 CrashLogCapture.appendException(ex)
                 throw ex
             }
             val cleaned = n.split('/').filter { it.isNotEmpty() && it != "." }
             if (cleaned.any { it == ".." }) {
-                val ex = IllegalArgumentException("Unsafe link target: parent-traversal linkName=$t in archive=${archive.name}, entryName=${safeArchivePath(e.name)}, temp=$temp")
+                val ex = IllegalArgumentException("Unsafe link target: parent-traversal linkName=$t in archive=${archive.name}, entryName=${safeArchivePath(entryName)}, temp=$temp")
                 Log.e(TAG, ex.message, ex)
                 CrashLogCapture.appendException(ex)
                 throw ex
@@ -484,7 +484,7 @@ object RuntimeInstaller {
                             e.isSymbolicLink -> {
                                 links += Link(
                                     path,
-                                    normalizeLinkTarget(e.linkName),
+                                    normalizeLinkTarget(e.linkName, e.name),
                                     false
                                 )
                             }
@@ -492,7 +492,7 @@ object RuntimeInstaller {
                             e.isLink -> {
                                 links += Link(
                                     path,
-                                    normalizeLinkTarget(e.linkName),
+                                    normalizeLinkTarget(e.linkName, e.name),
                                     true
                                 )
                             }

@@ -6,8 +6,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.content.Intent
+import android.util.Log
 import android.widget.Toast
-import java.io.CharSequence
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -177,7 +177,7 @@ fun qr(text: String, size: Int): android.graphics.Bitmap? = runCatching {
 /** Writes the QR into the cache directory exposed by FileProvider so it can be shared as an image. */
 fun shareableQrImage(context: Context, bitmap: android.graphics.Bitmap): File? = runCatching {
     val dir = File(context.cacheDir, "qr-share").apply { mkdirs() }
-    val file = File(dir, "stohn-address-${System.currentTimeInMillis()}.png")
+    val file = File(dir, "stohn-address-${System.currentTimeMillis()}.png")
     file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
     file
 }.getOrNull()
