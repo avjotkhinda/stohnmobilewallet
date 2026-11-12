@@ -88,6 +88,28 @@ git ls-files | sed 's|^|./|' | LC_ALL=C sort > FILES.txt
 - **Commit to `main`, do not force-push.** Keep one concern per commit and write the reason in the
   message, not just the change.
 
+## Fetching and pushing
+
+`git fetch` only updates `origin/main` when the clone has a fetch refspec. Without one it downloads
+objects but never writes `refs/remotes/origin/*`, so `git status`, `git log origin/main` and the
+fast-forward hint from `git remote show origin` keep describing an older commit while GitHub has
+moved on. That is a local configuration gap, not a stale remote, and it is repaired once per clone:
+
+```bash
+git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+git fetch origin
+git rev-parse --verify origin/main
+```
+
+`git ls-remote origin refs/heads/main` asks GitHub directly and is the authority whenever the
+remote-tracking ref disagrees with it. Linked worktrees share one `.git`, so the refspec is set once
+for the whole checkout rather than per worktree.
+
+Plain `git push` has no credentials in an agent or CI workspace and fails with `fatal: could not read
+Username for 'https://github.com'`. Push through the authenticated git path — the workspace's git
+integration, or a credential helper locally — and confirm the result against
+`git ls-remote origin refs/heads/main` rather than a tracking ref that may never have been updated.
+
 ## Where new code goes
 
 | Change | Place |
