@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.tukaani.xz.XZInputStream
@@ -28,7 +29,28 @@ object RuntimeInstaller {
     private const val TAG = "RuntimeInstaller"
 
     suspend fun installIfNeeded(context: Context) = withContext(Dispatchers.IO) {
+        try {
+            installLocked(context)
+        } catch (t: Throwable) {
+            // An install can fail outside the link path, which left the shared crash log empty and
+            // unactionable once already. Record whatever stopped it, then rethrow so the caller
+            // still sees the failure. Cancellation is not a failure and stays out of the log.
+            if (t !is CancellationException) {
+                runCatching { CrashLogCapture.appendException(t) }
+            }
+            throw t
+        }
+    }
+
+    /** One progress line per install step; a log sink must never break an install. */
+    private fun stage(line: String) {
+        runCatching { CrashLogCapture.append(line) }
+    }
+
+    /** The install itself, so [installIfNeeded] can record a failure from any step of it. */
+    private suspend fun installLocked(context: Context) {
         mutex.withLock {
+            stage("install: start")
             val pins = SignedRuntimeManifest.effective(context)
             val root = File(context.filesDir, "fullmode/runtime")
             val bin = File(root, "bin")
@@ -45,7 +67,11 @@ object RuntimeInstaller {
                 corePin = pins.nativeCoreSha256,
                 walletToolPin = pins.nativeWalletToolSha256
             ) is NativeLaunch.Ready
-            if (nativeReady) return@withLock
+            if (nativeReady) {
+                stage("install: native backend ready, rootfs not needed")
+
+                return@withLock
+            }
 
             root.mkdirs()
             bin.mkdirs()
@@ -71,13 +97,18 @@ object RuntimeInstaller {
                 RuntimeManifest.LIBANDROID_SHMEM_SHA256
             )
 
+            stage("install: native artifacts verified")
+
             val rootfsMarker = File(root, ".debian-rootfs.complete")
             val rootfsValid =
                 rootfsMarker.isFile &&
                     File(rootfs, "bin/sh").isFile &&
                     rootfsMarker.readText().trim() == pins.debianSha256
 
-            if (!rootfsValid) {
+            if (rootfsValid) {
+                stage("install: debian rootfs present")
+            } else {
+                stage("install: debian rootfs missing, extracting")
                 rootfs.deleteRecursively()
                 rootfs.mkdirs()
 
@@ -87,10 +118,14 @@ object RuntimeInstaller {
                     archive,
                     pins.debianSha256
                 )
+                stage("install: debian rootfs downloaded")
                 extractTarXz(archive, rootfs)
+                stage("install: debian rootfs extracted")
                 prepareRootfs(rootfs)
+                stage("install: debian rootfs prepared")
                 archive.delete()
                 rootfsMarker.writeText(pins.debianSha256 + "\n")
+                stage("install: debian rootfs ready")
             }
 
             val core = File(bin, "stohncoind")
@@ -110,7 +145,10 @@ object RuntimeInstaller {
                     walletHashFile.readText().trim().matches(HEX64) &&
                     sha256(walletTool) == walletHashFile.readText().trim()
 
-            if (!coreValid || !walletValid) {
+            if (coreValid && walletValid) {
+                stage("install: core present")
+            } else {
+                stage("install: core missing, extracting")
                 bin.deleteRecursively()
                 bin.mkdirs()
 
@@ -120,7 +158,9 @@ object RuntimeInstaller {
                     archive,
                     pins.coreSha256
                 )
+                stage("install: core downloaded")
                 extractCore(archive, bin)
+                stage("install: core extracted")
                 archive.delete()
             }
 
@@ -145,6 +185,8 @@ object RuntimeInstaller {
                     "stohncoind-sha256=$coreHash\n" +
                     "stohncoin-wallet-sha256=$walletHash\n"
             )
+
+            stage("install: complete")
         }
     }
 
