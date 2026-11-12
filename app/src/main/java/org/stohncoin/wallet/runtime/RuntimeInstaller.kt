@@ -754,34 +754,34 @@ object RuntimeInstaller {
         return resolved
     }
 
-   internal fun safeArchivePath(
-    name: String
-): String {
-    require(name.isNotBlank()) {
-        "Unsafe archive path"
+    internal fun safeArchivePath(
+        name: String
+    ): String {
+        require(name.isNotBlank()) {
+            "Unsafe archive path"
+        }
+
+        val normalized = name.replace('\\', '/')
+
+        require(!normalized.startsWith('/')) {
+            "Unsafe archive path"
+        }
+
+        val cleaned = normalized
+            .split('/')
+            .filter { it.isNotEmpty() && it != "." }
+
+        require(cleaned.none { it == ".." }) {
+            "Unsafe archive path"
+        }
+
+        // "." or "./" represents the archive root and is safe.
+        return if (cleaned.isEmpty()) {
+            "."
+        } else {
+            cleaned.joinToString("/")
+        }
     }
-
-    val normalized = name.replace('\\', '/')
-
-    require(!normalized.startsWith('/')) {
-        "Unsafe archive path"
-    }
-
-    val cleaned = normalized
-        .split('/')
-        .filter { it.isNotEmpty() && it != "." }
-
-    require(cleaned.none { it == ".." }) {
-        "Unsafe archive path"
-    }
-
-    // "." or "./" represents the archive root and is safe.
-    return if (cleaned.isEmpty()) {
-        "."
-    } else {
-        cleaned.joinToString("/")
-    }
-}
 
     internal fun safeDestination(
         root: File,
