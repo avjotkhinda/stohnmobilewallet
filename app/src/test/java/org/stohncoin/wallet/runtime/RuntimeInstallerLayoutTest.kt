@@ -133,6 +133,76 @@ class RuntimeInstallerLayoutTest {
         )
     }
 
+    /**
+     * `etc/dhcp/dhclient-enter-hooks.d/debug` is a relative link to `../debug`, which lands on
+     * `etc/dhcp/debug` inside the rootfs. Refusing every ".." component refused this archive.
+     */
+    @Test
+    fun aParentStepThatStaysInsideTheRootIsAccepted() {
+        val archive = archive(
+            listOf(
+                Member.Dir("./"),
+                Member.Link("./bin", "usr/bin"),
+                Member.Dir("./etc/"),
+                Member.Dir("./etc/dhcp/"),
+                Member.Dir("./etc/dhcp/dhclient-enter-hooks.d/"),
+                Member.Regular("./etc/dhcp/debug", byteArrayOf(0x01)),
+                Member.Dir("./usr/"),
+                Member.Dir("./usr/bin/"),
+                Member.Link("./usr/bin/sh", "dash"),
+                Member.Regular("./usr/bin/dash", byteArrayOf(0x7f, 0x45, 0x4c, 0x46)),
+                Member.Link("./etc/dhcp/dhclient-enter-hooks.d/debug", "../debug")
+            )
+        )
+        val out = temporaryFolder.newFolder("relative-parent")
+
+        RuntimeInstaller.extractTarXz(archive, out)
+
+        val link = File(out, "etc/dhcp/dhclient-enter-hooks.d/debug")
+        assertTrue(
+            "a contained ../ target must become a symlink",
+            Files.isSymbolicLink(link.toPath())
+        )
+        assertEquals(
+            "../debug must land on the rootfs's own etc/dhcp/debug",
+            File(out, "etc/dhcp/debug").canonicalPath,
+            link.canonicalFile.path
+        )
+    }
+
+    /** Resolution, not the presence of "..", decides: a target that climbs out is still refused. */
+    @Test
+    fun aLinkThatClimbsOutOfTheRootfsIsStillRefused() {
+        val archive = archive(
+            listOf(
+                Member.Dir("./"),
+                Member.Link("./bin", "usr/bin"),
+                Member.Dir("./etc/"),
+                Member.Dir("./usr/"),
+                Member.Dir("./usr/bin/"),
+                Member.Link("./usr/bin/sh", "dash"),
+                Member.Regular("./usr/bin/dash", byteArrayOf(0x7f, 0x45, 0x4c, 0x46)),
+                Member.Link("./etc/escape", "../../../../../../etc/passwd")
+            )
+        )
+        val out = temporaryFolder.newFolder("escaping-relative")
+
+        val failure = assertThrows(IllegalArgumentException::class.java) {
+            RuntimeInstaller.extractTarXz(archive, out)
+        }
+
+        assertTrue(
+            "the refusal must name the escaping resolution, not a bare '..': ${failure.message}",
+            failure.message.orEmpty().contains("Link target escapes rootfs")
+        )
+        assertTrue(
+            "the refusal must carry the link and archive: ${failure.message}",
+            failure.message.orEmpty().contains("link=etc/escape") &&
+                failure.message.orEmpty().contains("archive=")
+        )
+        assertTrue("a refused link must not be created", !Files.isSymbolicLink(File(out, "etc/escape").toPath()))
+    }
+
     @Test
     fun aSingleTopLevelWrapperIsStillUnwrapped() {
         val archive = archive(

@@ -436,23 +436,19 @@ object RuntimeInstaller {
         // bin entry answers the same question without needing the link to exist yet.
         var topLevelBin = false
 
-        // Normalize a link target path the way safeArchivePath normalizes archive paths - strip
-        // empty components and ".", reject ".." - but keep a leading "/": absolute targets are
-        // guest-root-relative, and safeLinkTarget needs the slash to resolve them against the root.
-        fun normalizeLinkTarget(t: String, entryName: String): String {
+        // Textual cleanup of a link target: drop empty and "." components, keep a leading "/" (an
+        // absolute target is guest-root-relative) and keep "..", because ".." is only unsafe once
+        // it has been resolved. etc/dhcp/dhclient-enter-hooks.d/debug -> ../debug and
+        // etc/alternatives/awk -> /usr/bin/mawk are both ordinary Debian links, and whether either
+        // leaves the rootfs is a question only resolution answers: safeLinkTarget resolves the
+        // target against the extraction root and refuses whatever escapes it. Rejecting ".." here
+        // refused good archives before resolution could tell them apart.
+        fun normalizeLinkTarget(t: String): String {
             val n = t.replace('\\', '/')
-            // A Debian rootfs links etc/alternatives/awk -> /usr/bin/mawk. That target is inside
-            // the guest root, not an escape from it, so it is normalized and kept absolute rather
-            // than refused; safeLinkTarget then confines the resolved path to the rootfs.
             val absolute = n.startsWith("/")
-            val cleaned = n.split('/').filter { it.isNotEmpty() && it != "." }
-            if (cleaned.any { it == ".." }) {
-                val ex = IllegalArgumentException("Unsafe link target: parent-traversal linkName=$t in archive=${archive.name}, entryName=${safeArchivePath(entryName)}, temp=$temp")
-                Log.e(TAG, ex.message, ex)
-                CrashLogCapture.appendException(ex)
-                throw ex
-            }
-            val joined = cleaned.joinToString("/")
+            val joined = n.split('/')
+                .filter { it.isNotEmpty() && it != "." }
+                .joinToString("/")
             return when {
                 joined.isEmpty() -> if (absolute) "/" else "."
                 absolute -> "/$joined"
@@ -488,7 +484,7 @@ object RuntimeInstaller {
                             e.isSymbolicLink -> {
                                 links += Link(
                                     path,
-                                    normalizeLinkTarget(e.linkName, e.name),
+                                    normalizeLinkTarget(e.linkName),
                                     false
                                 )
                             }
@@ -496,7 +492,7 @@ object RuntimeInstaller {
                             e.isLink -> {
                                 links += Link(
                                     path,
-                                    normalizeLinkTarget(e.linkName, e.name),
+                                    normalizeLinkTarget(e.linkName),
                                     true
                                 )
                             }
@@ -609,11 +605,27 @@ object RuntimeInstaller {
                 }
 
                 val target =
-                    safeLinkTarget(
-                        out,
-                        destination.parentFile ?: out,
-                        link.target
-                    )
+                    try {
+                        safeLinkTarget(
+                            out,
+                            destination.parentFile ?: out,
+                            link.target
+                        )
+                    } catch (ex: IllegalArgumentException) {
+                        // Carry the archive, link and temp directory into the log. The textual check
+                        // this replaced could not tell a contained ".." from an escaping one, so the
+                        // resolution failure needs the same context to be diagnosable from a phone.
+                        val detailed = IllegalArgumentException(
+                            "Unsafe link target: ${ex.message} linkName=${link.target} link=${link.path} in archive=${archive.name}, temp=$temp",
+                            ex
+                        )
+                        // Diagnostics must never change the outcome: a log sink that cannot be
+                        // reached (a unit-test JVM has no android.util.Log) must not replace this
+                        // refusal with its own error.
+                        runCatching { Log.e(TAG, detailed.message, detailed) }
+                        runCatching { CrashLogCapture.appendException(detailed) }
+                        throw detailed
+                    }
 
                 if (link.hard) {
                     require(target.isFile) {
