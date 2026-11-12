@@ -436,16 +436,15 @@ object RuntimeInstaller {
         // bin entry answers the same question without needing the link to exist yet.
         var topLevelBin = false
 
-        // Normalize a link target path the same way safeArchivePath normalizes archive paths:
-        // remove leading ./ or /, strip empty/components and ., reject ..
+        // Normalize a link target path the way safeArchivePath normalizes archive paths - strip
+        // empty components and ".", reject ".." - but keep a leading "/": absolute targets are
+        // guest-root-relative, and safeLinkTarget needs the slash to resolve them against the root.
         fun normalizeLinkTarget(t: String, entryName: String): String {
             val n = t.replace('\\', '/')
-            if (n.startsWith('/')) {
-                val ex = IllegalArgumentException("Unsafe link target: absolute linkName=$t in archive=${archive.name}, entryName=${safeArchivePath(entryName)}, temp=$temp")
-                Log.e(TAG, ex.message, ex)
-                CrashLogCapture.appendException(ex)
-                throw ex
-            }
+            // A Debian rootfs links etc/alternatives/awk -> /usr/bin/mawk. That target is inside
+            // the guest root, not an escape from it, so it is normalized and kept absolute rather
+            // than refused; safeLinkTarget then confines the resolved path to the rootfs.
+            val absolute = n.startsWith("/")
             val cleaned = n.split('/').filter { it.isNotEmpty() && it != "." }
             if (cleaned.any { it == ".." }) {
                 val ex = IllegalArgumentException("Unsafe link target: parent-traversal linkName=$t in archive=${archive.name}, entryName=${safeArchivePath(entryName)}, temp=$temp")
@@ -453,7 +452,12 @@ object RuntimeInstaller {
                 CrashLogCapture.appendException(ex)
                 throw ex
             }
-            return if (cleaned.isEmpty()) "." else cleaned.joinToString("/")
+            val joined = cleaned.joinToString("/")
+            return when {
+                joined.isEmpty() -> if (absolute) "/" else "."
+                absolute -> "/$joined"
+                else -> joined
+            }
         }
 
         var entries = 0

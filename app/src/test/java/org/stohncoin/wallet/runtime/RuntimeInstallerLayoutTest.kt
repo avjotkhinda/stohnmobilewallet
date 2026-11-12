@@ -95,6 +95,44 @@ class RuntimeInstallerLayoutTest {
         assertTrue("the rest of the tree must come with it", File(out, "etc").isDirectory)
     }
 
+    /**
+     * A Debian rootfs links `etc/alternatives/awk` to `/usr/bin/mawk`. An absolute target is
+     * guest-root-relative, so it must be resolved inside the extraction root instead of being
+     * refused as an escape - which is what made every install fail with "Unsafe link target:
+     * absolute linkName=/usr/bin/mawk".
+     */
+    @Test
+    fun anAbsoluteLinkTargetIsGuestRootRelativeNotAnEscape() {
+        val archive = archive(
+            listOf(
+                Member.Dir("./"),
+                Member.Link("./bin", "usr/bin"),
+                Member.Dir("./etc/"),
+                Member.Dir("./etc/alternatives/"),
+                Member.Dir("./usr/"),
+                Member.Dir("./usr/bin/"),
+                Member.Link("./usr/bin/sh", "dash"),
+                Member.Regular("./usr/bin/dash", byteArrayOf(0x7f, 0x45, 0x4c, 0x46)),
+                Member.Regular("./usr/bin/mawk", byteArrayOf(0x7f, 0x45, 0x4c, 0x46)),
+                Member.Link("./etc/alternatives/awk", "/usr/bin/mawk")
+            )
+        )
+        val out = temporaryFolder.newFolder("absolute-link")
+
+        RuntimeInstaller.extractTarXz(archive, out)
+
+        val link = File(out, "etc/alternatives/awk")
+        assertTrue(
+            "the absolute target must become a symlink inside the rootfs",
+            Files.isSymbolicLink(link.toPath())
+        )
+        assertEquals(
+            "the link must land on the rootfs's own /usr/bin/mawk",
+            File(out, "usr/bin/mawk").canonicalPath,
+            link.canonicalFile.path
+        )
+    }
+
     @Test
     fun aSingleTopLevelWrapperIsStillUnwrapped() {
         val archive = archive(
