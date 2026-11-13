@@ -179,7 +179,7 @@ gradle.taskGraph.whenReady {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-ktx:1.19.1")
     implementation("androidx.activity:activity-compose:1.10.0")
     implementation(platform("androidx.compose:compose-bom:2025.01.00"))
     implementation("androidx.compose.ui:ui")
@@ -188,13 +188,13 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
-    implementation("org.apache.commons:commons-compress:1.27.1")
-    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.apache.commons:commons-compress:1.28.0")
+    implementation("androidx.biometric:biometric:1.4.0-beta01")
     implementation("androidx.security:security-crypto:1.1.0")
-    implementation("androidx.fragment:fragment-ktx:1.8.5")
-    implementation("org.tukaani:xz:1.10")
-    implementation("com.google.zxing:core:3.5.3")
+    implementation("androidx.fragment:fragment-ktx:1.9.1")
+    implementation("org.tukaani:xz:1.12")
+    implementation("com.google.zxing:core:3.5.4")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     testImplementation("junit:junit:4.13.2")
     // Unit tests run against the mockable android.jar, whose org.json throws "not mocked" on
