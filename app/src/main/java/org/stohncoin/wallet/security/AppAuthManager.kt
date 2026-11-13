@@ -170,8 +170,6 @@ object AppAuthManager {
         setLockGraceMillis(prefs(context), millis)
 
     internal fun setLockGraceMillis(store: SharedPreferences, millis: Long) {
-        store.edit {
-            putLong(KEY_LOCK_GRACE, millis.coerceIn(0L, MAX_LOCK_GRACE_MILLIS))
-        }
+        store.edit { putLong(KEY_LOCK_GRACE, millis.coerceIn(0L, MAX_LOCK_GRACE_MILLIS)) }
     }
 }
