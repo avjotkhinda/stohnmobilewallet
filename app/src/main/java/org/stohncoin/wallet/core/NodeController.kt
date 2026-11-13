@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.StatFs
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -145,7 +146,7 @@ class NodeController private constructor(context: Context) : SendGateway {
 
     private fun setActiveWalletName(name: String) {
         activeWalletName = name
-        prefs.edit().putString(KEY_WALLET_NAME, name).apply()
+        prefs.edit { putString(KEY_WALLET_NAME, name) }
     }
 
     private suspend fun poll(b: RuntimeBackend) {
@@ -338,7 +339,7 @@ class NodeController private constructor(context: Context) : SendGateway {
         val key = creationHeightKey(walletName)
         val current = prefs.getLong(key, -1L)
         if (current >= 0L && current <= height) return
-        prefs.edit().putLong(key, height).apply()
+        prefs.edit { putLong(key, height) }
     }
 
     private fun creationHeightKey(walletName: String) = KEY_CREATED_HEIGHT + walletName
@@ -350,13 +351,16 @@ class NodeController private constructor(context: Context) : SendGateway {
 
     private fun recordBackupCreated() {
         val now = System.currentTimeMillis()
-        prefs.edit().putLong(KEY_LAST_BACKUP_AT, now).putInt(KEY_SENDS_SINCE_BACKUP, 0).apply()
+        prefs.edit {
+            putLong(KEY_LAST_BACKUP_AT, now)
+            putInt(KEY_SENDS_SINCE_BACKUP, 0)
+        }
         _backupReminder.value = BackupReminder.State(lastBackupAt = now, sendsSinceBackup = 0)
     }
 
     private fun recordSend() {
         val sends = prefs.getInt(KEY_SENDS_SINCE_BACKUP, 0) + 1
-        prefs.edit().putInt(KEY_SENDS_SINCE_BACKUP, sends).apply()
+        prefs.edit { putInt(KEY_SENDS_SINCE_BACKUP, sends) }
         _backupReminder.value = _backupReminder.value.copy(sendsSinceBackup = sends)
     }
 
@@ -393,10 +397,10 @@ class NodeController private constructor(context: Context) : SendGateway {
             // delete never races a dying writer.
             delay(1200)
         }
-        prefs.edit().putString(KEY_PRUNE_MODE, mode.name).apply()
+        prefs.edit { putString(KEY_PRUNE_MODE, mode.name) }
         // A chain that could not be cleared must not leave a mode Core will refuse on next start.
         val freed = runCatching { NodeStorage.resetChainData(dataDir) }.getOrElse { failure ->
-            prefs.edit().putString(KEY_PRUNE_MODE, previous.name).apply()
+            prefs.edit { putString(KEY_PRUNE_MODE, previous.name) }
             if (wasRunning) start()
             throw failure
         }

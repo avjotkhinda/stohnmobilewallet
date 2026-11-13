@@ -2,6 +2,7 @@ package org.stohncoin.wallet.security
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
@@ -86,10 +87,10 @@ object AppAuthManager {
 
     internal fun setBiometricEnabled(store: SharedPreferences, enabled: Boolean): Boolean {
         if (enabled && !hasPin(store)) {
-            store.edit().putBoolean(KEY_BIOMETRIC_ENABLED, false).apply()
+            store.edit { putBoolean(KEY_BIOMETRIC_ENABLED, false) }
             return false
         }
-        store.edit().putBoolean(KEY_BIOMETRIC_ENABLED, enabled).apply()
+        store.edit { putBoolean(KEY_BIOMETRIC_ENABLED, enabled) }
         return true
     }
 
@@ -100,12 +101,12 @@ object AppAuthManager {
             "PIN must be $MIN_PIN_LENGTH-$MAX_PIN_LENGTH digits"
         }
         require(pin.all { it.isDigit() }) { "PIN must contain digits only" }
-        store.edit()
-            .putString(KEY_UNLOCK_PIN, PinHasher.hash(pin))
-            .putBoolean(KEY_APP_LOCK_ENABLED, true)
-            .putInt(KEY_FAILURES, 0)
-            .putLong(KEY_BLOCKED_UNTIL, 0L)
-            .apply()
+        store.edit {
+            putString(KEY_UNLOCK_PIN, PinHasher.hash(pin))
+            putBoolean(KEY_APP_LOCK_ENABLED, true)
+            putInt(KEY_FAILURES, 0)
+            putLong(KEY_BLOCKED_UNTIL, 0L)
+        }
     }
 
     fun hasPin(context: Context): Boolean = hasPin(prefs(context))
@@ -128,19 +129,19 @@ object AppAuthManager {
         val stored = store.getString(KEY_UNLOCK_PIN, null) ?: return PinVerdict.Incorrect
         if (PinHasher.verify(pin, stored)) {
             val success = PinThrottle.afterSuccess()
-            val editor = store.edit()
-                .putInt(KEY_FAILURES, success.failures)
-                .putLong(KEY_BLOCKED_UNTIL, success.blockedUntil)
-            // A correct PIN is the moment a legacy unsalted digest can be replaced safely.
-            if (PinHasher.isLegacy(stored)) editor.putString(KEY_UNLOCK_PIN, PinHasher.hash(pin))
-            editor.apply()
+            store.edit {
+                putInt(KEY_FAILURES, success.failures)
+                putLong(KEY_BLOCKED_UNTIL, success.blockedUntil)
+                // A correct PIN is the moment a legacy unsalted digest can be replaced safely.
+                if (PinHasher.isLegacy(stored)) putString(KEY_UNLOCK_PIN, PinHasher.hash(pin))
+            }
             return PinVerdict.Success
         }
         val next = PinThrottle.afterFailure(state, now)
-        store.edit()
-            .putInt(KEY_FAILURES, next.failures)
-            .putLong(KEY_BLOCKED_UNTIL, next.blockedUntil)
-            .apply()
+        store.edit {
+            putInt(KEY_FAILURES, next.failures)
+            putLong(KEY_BLOCKED_UNTIL, next.blockedUntil)
+        }
         return if (PinThrottle.isBlocked(next, now)) {
             PinVerdict.Blocked(PinThrottle.remainingMillis(next, now))
         } else {
@@ -151,13 +152,13 @@ object AppAuthManager {
     fun clearPin(context: Context) = clearPin(prefs(context))
 
     internal fun clearPin(store: SharedPreferences) {
-        store.edit()
-            .remove(KEY_UNLOCK_PIN)
-            .putBoolean(KEY_APP_LOCK_ENABLED, false)
-            .putBoolean(KEY_BIOMETRIC_ENABLED, false)
-            .putInt(KEY_FAILURES, 0)
-            .putLong(KEY_BLOCKED_UNTIL, 0L)
-            .apply()
+        store.edit {
+            remove(KEY_UNLOCK_PIN)
+            putBoolean(KEY_APP_LOCK_ENABLED, false)
+            putBoolean(KEY_BIOMETRIC_ENABLED, false)
+            putInt(KEY_FAILURES, 0)
+            putLong(KEY_BLOCKED_UNTIL, 0L)
+        }
     }
 
     fun lockGraceMillis(context: Context): Long = lockGraceMillis(prefs(context))
@@ -169,8 +170,8 @@ object AppAuthManager {
         setLockGraceMillis(prefs(context), millis)
 
     internal fun setLockGraceMillis(store: SharedPreferences, millis: Long) {
-        store.edit()
-            .putLong(KEY_LOCK_GRACE, millis.coerceIn(0L, MAX_LOCK_GRACE_MILLIS))
-            .apply()
+        store.edit {
+            putLong(KEY_LOCK_GRACE, millis.coerceIn(0L, MAX_LOCK_GRACE_MILLIS))
+        }
     }
 }

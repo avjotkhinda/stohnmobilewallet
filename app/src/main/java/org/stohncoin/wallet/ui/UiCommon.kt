@@ -44,6 +44,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.createBitmap
+import androidx.core.graphics.set
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.journeyapps.barcodescanner.ScanContract
@@ -168,8 +170,10 @@ fun copy(context: Context, text: String) {
 
 fun qr(text: String, size: Int): android.graphics.Bitmap? = runCatching {
     val matrix = MultiFormatWriter().encode(text, BarcodeFormat.QR_CODE, size, size)
-    android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888).also { bitmap ->
-        for (x in 0 until size) for (y in 0 until size) bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+    createBitmap(size, size).also { bitmap ->
+        for (x in 0 until size) for (y in 0 until size) {
+            bitmap[x, y] = if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE
+        }
     }
 }.getOrNull()
 
