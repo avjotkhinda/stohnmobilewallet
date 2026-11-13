@@ -16,7 +16,7 @@ import org.robolectric.RobolectricTestRunner
 /**
  * The app-lock rules, run against a plain [SharedPreferences].
  *
- * `AppAuthManager.prefs` cannot appear here: it is an EncryptedSharedPreferences over a key held by
+ * The encrypted store cannot appear here: it is an EncryptedSharedPreferences over a key held by
  * the Android keystore, and Robolectric has no keystore, so building one throws
  * `KeyStoreException: AndroidKeyStore not found`. The `store` overloads take the same decisions
  * against whatever store they are handed, which is what makes the lock, the biometric gate and the

@@ -191,6 +191,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("androidx.biometric:biometric:1.2.0-alpha05")
+    // Deprecated upstream in 1.1.0 with no replacement class, so this is the last release that will
+    // ever exist - not a version to keep bumping. See AppAuthManager for why the migration to
+    // Keystore + DataStore cannot be done as a drive-by: the stored values are an on-disk contract.
     implementation("androidx.security:security-crypto:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("org.tukaani:xz:1.10")

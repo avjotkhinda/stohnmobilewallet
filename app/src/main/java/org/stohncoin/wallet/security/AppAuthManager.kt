@@ -24,6 +24,14 @@ import androidx.security.crypto.MasterKey
  *
  * When the keystore itself cannot produce a store, the `Context` overloads below fail closed: the
  * app counts as locked, nothing can be verified, and no write is invented. See [prefs].
+ *
+ * The store is an [EncryptedSharedPreferences] from `androidx.security:security-crypto`, an
+ * artifact Google deprecated in 1.1.0 with no replacement class: the guidance is to use the Android
+ * Keystore directly behind DataStore. That migration is not free here, because the values below are
+ * an on-disk contract - read them wrong and every existing user loses the verifier that gates their
+ * wallet. It therefore needs a dual-read path (new store first, legacy store second, rewritten on
+ * success) and it needs to land after a way to recover a forgotten PIN exists at all. Until then
+ * the dependency stays pinned at its last release, and this note is why.
  */
 object AppAuthManager {
     // Internal, not private, so a test can pin them: these names are an on-disk contract, and
@@ -65,7 +73,7 @@ object AppAuthManager {
      * would lock the user out for the lifetime of the process. Only a store that was built is
      * cached, which is also what keeps the successful path free of repeated keystore work.
      */
-    fun prefs(context: Context): SharedPreferences? {
+    private fun prefs(context: Context): SharedPreferences? {
         cached?.let { return it }
         synchronized(this) {
             cached?.let { return it }
@@ -106,8 +114,10 @@ object AppAuthManager {
         data object Unavailable : PinVerdict
     }
 
-    /** The lock is only meaningful while a PIN verifier exists. */
-    /** Fail closed: an unreadable store counts as locked, never as unprotected. */
+    /**
+     * The lock is only meaningful while a PIN verifier exists, and an unreadable store counts as
+     * locked rather than as unprotected.
+     */
     fun isAppLockEnabled(context: Context): Boolean = prefs(context)?.let { isAppLockEnabled(it) } ?: true
 
     internal fun isAppLockEnabled(store: SharedPreferences): Boolean =

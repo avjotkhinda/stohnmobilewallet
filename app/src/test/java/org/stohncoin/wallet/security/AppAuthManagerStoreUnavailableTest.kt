@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -31,8 +30,7 @@ class AppAuthManagerStoreUnavailableTest {
     }
 
     @Test
-    fun `an unavailable store yields no prefs and no exception`() {
-        assertNull(AppAuthManager.prefs(context))
+    fun `an unavailable store reports itself instead of throwing`() {
         assertFalse(AppAuthManager.isStoreAvailable(context))
     }
 
