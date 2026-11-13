@@ -85,6 +85,7 @@
 ./app/src/test/java/org/stohncoin/wallet/security/PinHasherTest.kt
 ./app/src/test/java/org/stohncoin/wallet/security/PinThrottleTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/LockScreenTest.kt
+./app/src/test/java/org/stohncoin/wallet/ui/QrTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/SendPageTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookParseTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookRoundTripTest.kt
