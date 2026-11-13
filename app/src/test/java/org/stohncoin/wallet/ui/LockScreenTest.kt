@@ -28,13 +28,15 @@ class LockScreenTest {
 
     private var unlocked = false
     private var biometricRequested = false
+    private var retried = false
 
     private fun render(
         hasPin: Boolean = true,
         biometricEnabled: Boolean = false,
         pin: String = "",
         error: String? = null,
-        blockedMillis: Long = 0L
+        blockedMillis: Long = 0L,
+        storeAvailable: Boolean = true
     ) {
         compose.setContent {
             LockScreenContent(
@@ -45,7 +47,9 @@ class LockScreenTest {
                 error = error,
                 blockedMillis = blockedMillis,
                 onUnlock = { unlocked = true },
-                onBiometric = { biometricRequested = true }
+                onBiometric = { biometricRequested = true },
+                storeAvailable = storeAvailable,
+                onRetryStore = { retried = true }
             )
         }
     }
@@ -112,6 +116,31 @@ class LockScreenTest {
 
         compose.onNodeWithText("Use Biometric/Device Unlock").assertDoesNotExist()
         assertFalse(biometricRequested)
+    }
+
+    @Test
+    fun `an unreadable store explains itself and offers no way in`() {
+        // Locked, but nothing here can be satisfied: no PIN field, no Unlock, no biometric bypass.
+        render(hasPin = true, storeAvailable = false)
+
+        compose.onNodeWithText("Stohn Wallet Locked").assertIsDisplayed()
+        compose.onNodeWithText(
+            "This device cannot open the app lock's encrypted storage, so the wallet stays locked."
+        ).assertIsDisplayed()
+        compose.onNodeWithText("Enter PIN").assertDoesNotExist()
+        compose.onNodeWithText("Unlock").assertDoesNotExist()
+        compose.onNodeWithText("Use Biometric/Device Unlock").assertDoesNotExist()
+        assertFalse(unlocked)
+    }
+
+    @Test
+    fun `retrying asks the store again rather than unlocking`() {
+        render(storeAvailable = false)
+
+        compose.onNodeWithText("Try again").performClick()
+
+        assertTrue(retried)
+        assertFalse(unlocked)
     }
 
     @Test

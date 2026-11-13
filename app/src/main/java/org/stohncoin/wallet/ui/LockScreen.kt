@@ -50,8 +50,13 @@ fun LockScreen(onUnlocked: () -> Unit) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var blockedMillis by remember { mutableStateOf(0L) }
-    val hasPin = remember { AppAuthManager.hasPin(context) }
-    val biometricEnabled = remember { AppAuthManager.isBiometricEnabled(context) }
+    // Read once: false means the keystore could not hand over the encrypted store at all. The
+    // lock then cannot be satisfied, so the screen says so instead of showing a PIN pad that
+    // could never succeed. Retrying re-attempts the keystore, because the failure can be
+    // transient - a device that has not been unlocked since boot, for instance.
+    var storeAvailable by remember { mutableStateOf(AppAuthManager.isStoreAvailable(context)) }
+    val hasPin = remember(storeAvailable) { AppAuthManager.hasPin(context) }
+    val biometricEnabled = remember(storeAvailable) { AppAuthManager.isBiometricEnabled(context) }
 
     fun showBiometric() {
         if (!hasPin) return
@@ -124,9 +129,17 @@ fun LockScreen(onUnlocked: () -> Unit) {
                     blockedMillis = verdict.retryAfterMillis
                     error = "Too many attempts"
                 }
+                is AppAuthManager.PinVerdict.Unavailable -> {
+                    // The store went away between composition and submission: refuse, never grant.
+                    pin = ""
+                    error = null
+                    storeAvailable = false
+                }
             }
         },
-        onBiometric = { showBiometric() }
+        onBiometric = { showBiometric() },
+        storeAvailable = storeAvailable,
+        onRetryStore = { storeAvailable = AppAuthManager.isStoreAvailable(context) }
     )
 }
 
@@ -145,7 +158,9 @@ internal fun LockScreenContent(
     error: String?,
     blockedMillis: Long,
     onUnlock: () -> Unit,
-    onBiometric: () -> Unit
+    onBiometric: () -> Unit,
+    storeAvailable: Boolean = true,
+    onRetryStore: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -162,7 +177,7 @@ internal fun LockScreenContent(
         Text("Authenticate to unlock", fontSize = 14.sp, color = Color(0xFF9CA3AF))
         Spacer(modifier = Modifier.height(32.dp))
 
-        if (hasPin) {
+        if (storeAvailable && hasPin) {
             OutlinedTextField(
                 value = pin,
                 onValueChange = onPinChange,
@@ -195,7 +210,7 @@ internal fun LockScreenContent(
             }
         }
 
-        if (biometricEnabled) {
+        if (storeAvailable && biometricEnabled) {
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedButton(
                 onClick = onBiometric,
@@ -205,6 +220,18 @@ internal fun LockScreenContent(
                 Icon(Icons.Default.Fingerprint, contentDescription = null)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Use Biometric/Device Unlock")
+            }
+        }
+
+        if (!storeAvailable) {
+            Text(
+                "This device cannot open the app lock's encrypted storage, so the wallet stays locked.",
+                color = Color(0xFFFF665F),
+                fontSize = 12.sp
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedButton(onClick = onRetryStore, modifier = Modifier.fillMaxWidth()) {
+                Text("Try again")
             }
         }
     }

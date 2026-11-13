@@ -81,6 +81,7 @@
 ./app/src/test/java/org/stohncoin/wallet/runtime/RuntimeManifestTransportTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/RuntimeTempTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/SignedRuntimeManifestTest.kt
+./app/src/test/java/org/stohncoin/wallet/security/AppAuthManagerStoreUnavailableTest.kt
 ./app/src/test/java/org/stohncoin/wallet/security/AppAuthManagerTest.kt
 ./app/src/test/java/org/stohncoin/wallet/security/LockGateTest.kt
 ./app/src/test/java/org/stohncoin/wallet/security/PinHasherTest.kt
