@@ -63,7 +63,7 @@ fun StohnWalletScreen(node: NodeController) {
     val state by node.state.collectAsState()
     val backupReminder by node.backupReminder.collectAsState()
     var route by rememberSaveable { mutableStateOf("home") }
-    var balance by remember { mutableStateOf(0L) }
+    var balance by remember { mutableLongStateOf(0L) }
     var transactions by remember { mutableStateOf(emptyList<WalletRpc.WalletTransaction>()) }
     var walletInfo by remember { mutableStateOf<WalletRpc.WalletInfoSnapshot?>(null) }
     var receiveAddress by remember { mutableStateOf("") }

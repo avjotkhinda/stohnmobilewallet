@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -49,7 +50,7 @@ fun LockScreen(onUnlocked: () -> Unit) {
     val context = LocalContext.current
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    var blockedMillis by remember { mutableStateOf(0L) }
+    var blockedMillis by remember { mutableLongStateOf(0L) }
     // Read once: false means the keystore could not hand over the encrypted store at all. The
     // lock then cannot be satisfied, so the screen says so instead of showing a PIN pad that
     // could never succeed. Retrying re-attempts the keystore, because the failure can be

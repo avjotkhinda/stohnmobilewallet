@@ -283,7 +283,7 @@ fun SecurityPage(info: WalletRpc.WalletInfoSnapshot?, onBackup: () -> Unit, onCh
     var appLockEnabled by remember { mutableStateOf(AppAuthManager.isAppLockEnabled(context)) }
     var biometricEnabled by remember { mutableStateOf(AppAuthManager.isBiometricEnabled(context)) }
     var hasPin by remember { mutableStateOf(AppAuthManager.hasPin(context)) }
-    var lockGraceMillis by remember { mutableStateOf(AppAuthManager.lockGraceMillis(context)) }
+    var lockGraceMillis by remember { mutableLongStateOf(AppAuthManager.lockGraceMillis(context)) }
     var showGraceDialog by remember { mutableStateOf(false) }
 
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

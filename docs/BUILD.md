@@ -4,7 +4,9 @@
 
 - **JDK 17** (or JDK 21 as used in CI) — `export JAVA_HOME=/path/to/jdk`
 - **Gradle 9.6.0** wrapper (`gradlew`) — AGP 9.4.0
-- **Android SDK** — `ANDROID_SDK_ROOT` must point to a valid SDK installation
+- **Android SDK** — `ANDROID_SDK_ROOT` must point to a valid SDK installation, with
+  **platform 37** for `compileSdk` (`sdkmanager "platforms;android-37.0"`; the minor-level
+  package name is what the SDK manager publishes, not `android-37`)
 - **Termux repo access** (for PRoot bundle builds) — the release job pulls `proot`, `libtalloc`, `libandroid-shmem`, and `libtalloc` from `https://packages.termux.dev/apt/termux-main`; pinned versions must still be published there
 
 ## Daily development
