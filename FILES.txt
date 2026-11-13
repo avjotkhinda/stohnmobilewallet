@@ -66,6 +66,7 @@
 ./app/src/main/jniLibs/arm64-v8a/libtalloc.so
 ./app/src/main/res/drawable-nodpi/stohn_logo.png
 ./app/src/main/res/values/styles.xml
+./app/src/main/res/xml/backup_rules.xml
 ./app/src/main/res/xml/data_extraction_rules.xml
 ./app/src/main/res/xml/file_paths.xml
 ./app/src/main/res/xml/network_security_config.xml
