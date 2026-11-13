@@ -189,4 +189,7 @@ VERSIONPY
 python3 "$ROOT/tools/check-release-history.py" "$ROOT"
 
 bash "$ROOT/tools/verify-fullmode-repair.sh"
+# artifacts/ is untracked, so this passes with nothing there; when an APK is present, its sidecar has
+# to describe that file rather than a build that has since been replaced.
+bash "$ROOT/tools/verify-apk-sidecars.sh"
 echo 'RELEASE PREFLIGHT: PASS'

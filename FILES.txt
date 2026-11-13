@@ -149,5 +149,6 @@
 ./settings.gradle.kts
 ./tools/check-release-history.py
 ./tools/security-audit.sh
+./tools/verify-apk-sidecars.sh
 ./tools/verify-files-list.sh
 ./tools/verify-fullmode-repair.sh

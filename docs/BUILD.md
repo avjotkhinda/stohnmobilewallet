@@ -31,6 +31,7 @@ The `android-build` GitHub Actions workflow has two jobs:
    - `assembleDebug`
    - APK artifact verification (`scripts/verify-apk-artifact.sh`)
    - Files-drift gate (`tools/verify-files-list.sh`)
+   - APK sidecar check (`tools/verify-apk-sidecars.sh`)
 
 2. **`release`** — currently fails at "Build pinned PRoot Android bundle" until the PRoot package pin is updated (see `runtime/proot/TERMUX-PACKAGE-LOCK.json`). When the bundle step succeeds, the remaining steps are:
    - `apt install patchelf binutils dpkg-dev`
@@ -78,4 +79,5 @@ bash scripts/verify-restore-path.sh     # should exit 0
 ./gradlew :app:testDebugUnitTest --console=plain  # BUILD SUCCESSFUL, 0 failures
 bash scripts/verify-apk-artifact.sh app/build/outputs/apk/debug/app-debug.apk  # PASS
 bash tools/verify-files-list.sh         # should exit 0
+bash tools/verify-apk-sidecars.sh       # should exit 0
 ```

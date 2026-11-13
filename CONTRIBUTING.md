@@ -25,6 +25,7 @@ Every change is expected to pass, in this order:
 ./gradlew :app:lintDebug --console=plain
 ./tools/security-audit.sh
 ./tools/verify-files-list.sh
+./tools/verify-apk-sidecars.sh
 ./scripts/verify-restore-path.sh
 bash scripts/release-preflight.sh
 ```
@@ -93,7 +94,9 @@ git ls-files | sed 's|^|./|' | LC_ALL=C sort > FILES.txt
   APK's sha256, the commit it was built from and the build time, which is the only attribution a
   build gets: the APK embeds no git revision, and `versionName` alone does not change between
   commits. Write the sidecar when you place an APK there, treat an APK without one as unattributable,
-  and delete a stale APK and its sidecar together.
+  and delete a stale APK and its sidecar together. `tools/verify-apk-sidecars.sh` holds you to that:
+  it fails on a missing sidecar whose sha256 or size no longer matches the file, whose `builtFrom` is
+  not a commit here, or whose build time does not parse, and the preflight runs it.
 
 ## Fetching and pushing
 
