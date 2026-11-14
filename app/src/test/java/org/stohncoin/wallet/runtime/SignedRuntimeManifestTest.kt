@@ -256,4 +256,39 @@ class SignedRuntimeManifestTest {
         ))
         assertEquals("", RuntimeManifest.RELEASE_PUBLIC_KEY)
     }
+
+    @Test fun aCorrectlySignedButOlderManifestCannotDowngrade() {
+        val dir = updateDir()
+        val newer = pins(version = SignedRuntimeManifest.builtin().version + 2)
+        val installed = SignedRuntimeManifest.stage(dir, document(newer), publicKeyOf(keyPair))
+        assertEquals(newer, installed)
+
+        // Hand-crafted older document: still newer than the built-in pins, but older than what
+        // this install has already accepted. It must be refused rather than replacing the newer one.
+        val older = pins(version = SignedRuntimeManifest.builtin().version + 1)
+        assertEquals(
+            "Runtime manifest version ${older.version} is not newer than the highest accepted " +
+                "version ${newer.version}; downgrades are refused",
+            refusal { SignedRuntimeManifest.stage(dir, document(older), publicKeyOf(keyPair)) }
+        )
+        assertTrue(!File(dir, SignedRuntimeManifest.UPDATE_FILE + ".part").exists())
+
+        // The accepted (newer) pins stay in force.
+        assertEquals(newer, SignedRuntimeManifest.effective(dir, publicKeyOf(keyPair)))
+    }
+
+    @Test fun anOlderDocumentPlacedOverTheStagedOneIsRefused() {
+        val dir = updateDir()
+        val newer = pins(version = SignedRuntimeManifest.builtin().version + 2)
+        SignedRuntimeManifest.stage(dir, document(newer), publicKeyOf(keyPair))
+
+        // A hand-crafted older document written straight over the staged file is a downgrade attempt.
+        val older = pins(version = SignedRuntimeManifest.builtin().version + 1)
+        File(dir, SignedRuntimeManifest.UPDATE_FILE).writeBytes(document(older))
+        assertEquals(
+            "Runtime manifest version ${older.version} is older than the highest accepted " +
+                "version ${newer.version}; downgrades are refused",
+            refusal { SignedRuntimeManifest.effective(dir, publicKeyOf(keyPair)) }
+        )
+    }
 }

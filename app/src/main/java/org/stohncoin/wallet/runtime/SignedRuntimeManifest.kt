@@ -83,6 +83,12 @@ object SignedRuntimeManifest {
     /** Where a staged document lives, inside app-private storage. */
     const val UPDATE_FILE = "manifest.txt"
 
+    /**
+     * The highest manifest version this install has ever accepted, persisted so a correctly signed
+     * but older document cannot replace a newer one (downgrade). Lives next to [UPDATE_FILE].
+     */
+    const val HIGH_WATER_FILE = "manifest.version"
+
     /** A manifest is a handful of short lines; anything larger is not one. */
     const val MAX_DOCUMENT_BYTES = 16 * 1024
 
@@ -209,7 +215,20 @@ object SignedRuntimeManifest {
 
         val pins = verifyDocument(file.readBytes(), publicKeyB64)
         val current = builtin()
+        // A document no newer than the built-in one is never applied (a captured old manifest
+        // cannot roll the pins back). This is a refusal to apply, not a hard failure.
         if (pins.version <= current.version) return current
+        // A document that verifies but is older than the highest version this install has already
+        // accepted is a downgrade attempt: refuse it hard rather than silently keeping the file.
+        val floor = acceptedFloor(updateDir)
+        if (pins.version < floor) {
+            fail(
+                "Runtime manifest version ${pins.version} is older than the highest accepted " +
+                    "version $floor; downgrades are refused"
+            )
+        }
+        // Remember the new high-water mark now that this document is in force.
+        rememberHighWater(updateDir, maxOf(floor, pins.version))
         return pins
     }
 
@@ -229,11 +248,16 @@ object SignedRuntimeManifest {
     ): RuntimePins {
         val pins = verifyDocument(document, publicKeyB64)
         val current = builtin()
-        if (pins.version <= current.version) {
-            fail(
+        val floor = maxOf(current.version, acceptedFloor(updateDir))
+        if (pins.version <= floor) {
+            val message = if (floor == current.version) {
                 "Runtime manifest version ${pins.version} is not newer than the built-in " +
                     "version ${current.version}; downgrades are refused"
-            )
+            } else {
+                "Runtime manifest version ${pins.version} is not newer than the highest accepted " +
+                    "version $floor; downgrades are refused"
+            }
+            fail(message)
         }
 
         updateDir.mkdirs()
@@ -246,6 +270,8 @@ object SignedRuntimeManifest {
             staging.delete()
             fail("Unable to install the runtime manifest update")
         }
+        // Remember that this version is now the highest this install has accepted.
+        rememberHighWater(updateDir, pins.version)
         return pins
     }
 
@@ -255,6 +281,31 @@ object SignedRuntimeManifest {
 
     /** The app-private directory a verified update document is staged in. */
     fun updateDirectory(context: Context): File = File(File(context.filesDir, "fullmode"), "runtime-update")
+
+    /**
+     * The highest manifest version this install has accepted so far. Defaults to the built-in
+     * version when no high-water mark has been recorded yet (a fresh install, or one that never
+     * staged an update).
+     */
+    private fun acceptedFloor(updateDir: File): Int {
+        val file = File(updateDir, HIGH_WATER_FILE)
+        if (!file.exists()) return builtin().version
+        val size = if (file.isFile) file.length() else -1L
+        if (size < 1L) fail("Runtime manifest high-water mark is missing or empty")
+        val text = file.readText(Charsets.US_ASCII).trim()
+        if (!MANIFEST_VERSION.matches(text)) fail("Runtime manifest high-water mark is not a version")
+        return text.toInt()
+    }
+
+    /** Persists [version] as the new high-water mark, monotonically. */
+    private fun rememberHighWater(updateDir: File, version: Int) {
+        updateDir.mkdirs()
+        val file = File(updateDir, HIGH_WATER_FILE)
+        FileOutputStream(file).use { out ->
+            out.write("$version\n".toByteArray(Charsets.US_ASCII))
+            out.fd.sync()
+        }
+    }
 
     private fun parse(payload: ByteArray): RuntimePins {
         val text = String(payload, Charsets.US_ASCII)
