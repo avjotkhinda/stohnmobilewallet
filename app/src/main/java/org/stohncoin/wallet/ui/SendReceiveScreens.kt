@@ -50,6 +50,7 @@ import org.stohncoin.wallet.wallet.AddressBook
 import org.stohncoin.wallet.wallet.AddressBookLabel
 import org.stohncoin.wallet.wallet.Amounts
 import org.stohncoin.wallet.wallet.WalletRpc
+import org.stohncoin.wallet.security.AddressBookKey
 import org.stohncoin.wallet.security.AppAuthManager
 import java.io.File
 
@@ -70,11 +71,12 @@ fun SendPage(
     var amountText by rememberSaveable { mutableStateOf("") }
     var label by rememberSaveable { mutableStateOf("") }
     val addressBookDir = remember { File(context.filesDir, "addressbook") }
+    val addressBookKey = remember { AddressBookKey.get(context) }
     // The label field always follows the address being paid to, so a saved name shows up as soon
     // as the recipient is entered or scanned.
     LaunchedEffect(address) {
         val trimmed = address.trim()
-        label = withContext(Dispatchers.IO) { AddressBook.load(addressBookDir).labelFor(trimmed) } ?: ""
+        label = withContext(Dispatchers.IO) { AddressBook.load(addressBookDir, addressBookKey).labelFor(trimmed) } ?: ""
     }
     // The passkey must never be persisted into saved state (it would outlive the process and
     // leak into the Activity's saved-state bundle), so it lives in a plain remember holder.
@@ -252,7 +254,7 @@ fun SendPage(
                         onBusy(true)
                         try {
                             node.send(address, amount, if (info?.encrypted == true) passphrase.toCharArray() else null, subtractFee, confTarget)
-                            runCatching { withContext(Dispatchers.IO) { persistLabel(addressBookDir, address.trim(), label) } }
+                            runCatching { withContext(Dispatchers.IO) { persistLabel(addressBookDir, address.trim(), label, addressBookKey) } }
                             toast(context, "Transaction sent")
                             passphrase = ""
                             onComplete()
@@ -280,8 +282,9 @@ fun AddressBookPage(onSend: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val addressBookDir = remember { File(context.filesDir, "addressbook") }
+    val addressBookKey = remember { AddressBookKey.get(context) }
     var query by rememberSaveable { mutableStateOf("") }
-    var entries by remember { mutableStateOf(AddressBook.load(addressBookDir).labels) }
+    var entries by remember { mutableStateOf(AddressBook.load(addressBookDir, addressBookKey).labels) }
     var draftAddress by rememberSaveable { mutableStateOf("") }
     var draftLabel by rememberSaveable { mutableStateOf("") }
     var editingRaw by rememberSaveable { mutableStateOf("") }
@@ -290,9 +293,9 @@ fun AddressBookPage(onSend: (String) -> Unit) {
 
     fun write(next: List<AddressBookLabel>) {
         scope.launch {
-            val saved = withContext(Dispatchers.IO) { runCatching { AddressBook.save(addressBookDir, next) } }
+            val saved = withContext(Dispatchers.IO) { runCatching { AddressBook.save(addressBookDir, next, addressBookKey) } }
             saved.onFailure { toast(context, "Could not save the address book", short = true) }
-            entries = withContext(Dispatchers.IO) { runCatching { AddressBook.load(addressBookDir).labels }.getOrElse { emptyList() } }
+            entries = withContext(Dispatchers.IO) { runCatching { AddressBook.load(addressBookDir, addressBookKey).labels }.getOrElse { emptyList() } }
         }
     }
 
@@ -441,12 +444,12 @@ private fun AddressBookRow(entry: AddressBookLabel, onSend: () -> Unit, onRename
 
 
 /** Saves the label typed on the send screen; clearing the field removes the saved entry. */
-private fun persistLabel(dir: File, address: String, label: String) {
+private fun persistLabel(dir: File, address: String, label: String, key: javax.crypto.SecretKey? = null) {
     if (address.isBlank()) return
     val trimmed = label.trim()
-    val others = AddressBook.load(dir).labels.filter { it.raw != address }
+    val others = AddressBook.load(dir, key).labels.filter { it.raw != address }
     val updated = if (trimmed.isEmpty()) others else others + AddressBookLabel(address, trimmed)
-    AddressBook.save(dir, updated)
+    AddressBook.save(dir, updated, key)
 }
 
 

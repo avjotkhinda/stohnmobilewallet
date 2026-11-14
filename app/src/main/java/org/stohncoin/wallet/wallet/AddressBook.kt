@@ -1,6 +1,10 @@
 package org.stohncoin.wallet.wallet
 
 import java.io.File
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 
 /**
  * App-level address-book labels, persisted in `filesDir/addressbook/labels.json`.
@@ -19,11 +23,34 @@ data class AddressBook(val labels: List<AddressBookLabel>) {
     companion object {
         private const val FILENAME = "labels.json"
 
-        fun load(dir: File): AddressBook {
+        private const val IV_LEN = 12
+
+        /**
+         * Reads the book, decrypting it when [key] is given and the file is encrypted. A plaintext
+         * (legacy) file is still read so an existing book is not lost, and is migrated to the
+         * encrypted form when [key] is available. With no [key] the book is read/written in plain
+         * text, which keeps the pure-JVM tests working and degrades gracefully on a device whose
+         * keystore is unavailable.
+         */
+        fun load(dir: File, key: SecretKey? = null): AddressBook {
             val file = File(dir, FILENAME)
             if (!file.isFile) return AddressBook(emptyList())
-            val text = file.readText()
-            return if (text.isBlank()) AddressBook(emptyList()) else parse(text)
+            val bytes = file.readBytes()
+            if (bytes.isEmpty() || bytes.all { it.toInt() and 0xff in setOf(0x20, 0x09, 0x0a, 0x0d) }) {
+                return AddressBook(emptyList())
+            }
+            val isPlain = bytes[0] == '{'.code.toByte()
+            val text = if (isPlain) {
+                String(bytes, Charsets.UTF_8)
+            } else {
+                if (key == null) return AddressBook(emptyList())
+                runCatching { decrypt(bytes, key) }.getOrNull() ?: return AddressBook(emptyList())
+            }
+            if (text.isBlank()) return AddressBook(emptyList())
+            val parsed = runCatching { parse(text) }.getOrNull() ?: return AddressBook(emptyList())
+            // Migrate a legacy plaintext book to encrypted storage on first read.
+            if (key != null && isPlain) runCatching { save(dir, parsed.labels, key) }
+            return parsed
         }
 
         internal fun parse(text: String): AddressBook {
@@ -118,7 +145,7 @@ data class AddressBook(val labels: List<AddressBookLabel>) {
             return AddressBook(list)
         }
 
-        fun save(dir: File, labels: List<AddressBookLabel>): AddressBook {
+        fun save(dir: File, labels: List<AddressBookLabel>, key: SecretKey? = null): AddressBook {
             require(labels.all { it.raw.isNotBlank() && it.label.isNotBlank() }) { "Invalid address-book labels" }
             dir.mkdirs()
             val sb = StringBuilder()
@@ -132,8 +159,30 @@ data class AddressBook(val labels: List<AddressBookLabel>) {
                 sb.append("\"}")
             }
             sb.append("]}")
-            File(dir, FILENAME).writeText(sb.toString())
+            val plaintext = sb.toString()
+            if (key == null) {
+                File(dir, FILENAME).writeText(plaintext)
+            } else {
+                File(dir, FILENAME).writeBytes(encrypt(plaintext, key))
+            }
             return AddressBook(labels)
+        }
+
+        private fun encrypt(plaintext: String, key: SecretKey): ByteArray {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            val iv = ByteArray(IV_LEN).also { SecureRandom().nextBytes(it) }
+            cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
+            val ct = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
+            return iv + ct
+        }
+
+        private fun decrypt(data: ByteArray, key: SecretKey): String {
+            require(data.size > IV_LEN) { "Address book is corrupted" }
+            val iv = data.copyOfRange(0, IV_LEN)
+            val ct = data.copyOfRange(IV_LEN, data.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+            return String(cipher.doFinal(ct), Charsets.UTF_8)
         }
 
         private fun escape(s: String): String {

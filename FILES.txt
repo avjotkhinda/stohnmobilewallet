@@ -39,6 +39,7 @@
 ./app/src/main/java/org/stohncoin/wallet/runtime/RuntimeTemp.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/SignedRuntimeManifest.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/WalletToolArgs.kt
+./app/src/main/java/org/stohncoin/wallet/security/AddressBookKey.kt
 ./app/src/main/java/org/stohncoin/wallet/security/AppAuthManager.kt
 ./app/src/main/java/org/stohncoin/wallet/security/LockGate.kt
 ./app/src/main/java/org/stohncoin/wallet/security/PinHasher.kt
@@ -89,6 +90,7 @@
 ./app/src/test/java/org/stohncoin/wallet/ui/LockScreenTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/QrTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/SendPageTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookEncryptionTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookParseTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookRoundTripTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AmountsTest.kt
