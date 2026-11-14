@@ -25,13 +25,9 @@ import androidx.security.crypto.MasterKey
  * When the keystore itself cannot produce a store, the `Context` overloads below fail closed: the
  * app counts as locked, nothing can be verified, and no write is invented. See [prefs].
  *
- * The store is an [EncryptedSharedPreferences] from `androidx.security:security-crypto`, an
- * artifact Google deprecated in 1.1.0 with no replacement class: the guidance is to use the Android
- * Keystore directly behind DataStore. That migration is not free here, because the values below are
- * an on-disk contract - read them wrong and every existing user loses the verifier that gates their
- * wallet. It therefore needs a dual-read path (new store first, legacy store second, rewritten on
- * success) and it needs to land after a way to recover a forgotten PIN exists at all. Until then
- * the dependency stays pinned at its last release, and this note is why.
+ * The store comes from a deprecated artifact (see build.gradle.kts). Replacing it means rewriting an
+ * on-disk contract: the keys below are what gate an existing wallet, so the migration needs a
+ * dual-read path and a forgotten-PIN recovery to exist first, not a new library.
  */
 object AppAuthManager {
     // Internal, not private, so a test can pin them: these names are an on-disk contract, and
