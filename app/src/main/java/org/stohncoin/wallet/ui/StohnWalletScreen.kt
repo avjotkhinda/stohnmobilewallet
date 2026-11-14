@@ -142,8 +142,9 @@ fun StohnWalletScreen(node: NodeController) {
         scope.launch {
             val encryptedFile = File(context.cacheDir, "stohn-backup-${System.currentTimeMillis()}.stohnbackup")
             busy = true
+            val passChars = backupPassword.toCharArray()
             try {
-                node.createWalletBackup(encryptedFile, backupPassword.toCharArray())
+                node.createWalletBackup(encryptedFile, passChars)
                 context.contentResolver.openOutputStream(uri)?.use { output -> encryptedFile.inputStream().use { it.copyTo(output) } }
                     ?: error("Unable to write the backup file")
                 Toast.makeText(context, "Encrypted wallet backup saved", Toast.LENGTH_LONG).show()
@@ -151,6 +152,7 @@ fun StohnWalletScreen(node: NodeController) {
             } catch (t: Throwable) {
                 Toast.makeText(context, "Backup failed: ${t.message}", Toast.LENGTH_LONG).show()
             } finally {
+                passChars.fill('\u0000')
                 encryptedFile.delete()
                 backupPassword = ""
                 busy = false
@@ -181,9 +183,11 @@ fun StohnWalletScreen(node: NodeController) {
                 } ?: error("Unable to read the backup file")
                 require(backupPassword.isNotBlank()) { "Enter the backup password first" }
                 require(!destination.exists()) { "A restored wallet already exists" }
+                val verifyChars = backupPassword.toCharArray()
                 // Read the manifest before installing anything: the user sees which wallet this
                 // file says it holds, and can still walk away.
-                pendingRestore = PendingRestore(staged, node.verifyWalletBackup(staged, backupPassword.toCharArray()))
+                pendingRestore = PendingRestore(staged, node.verifyWalletBackup(staged, verifyChars))
+                verifyChars.fill('\u0000')
             } catch (t: Throwable) {
                 staged.delete()
                 Toast.makeText(context, "Backup could not be checked: ${t.message}", Toast.LENGTH_LONG).show()
@@ -197,15 +201,17 @@ fun StohnWalletScreen(node: NodeController) {
         scope.launch {
             val destination = File(context.filesDir, "fullmode/stohn-data/restored-wallet")
             busy = true
+            val restoreChars = backupPassword.toCharArray()
             try {
                 require(!destination.exists()) { "A restored wallet already exists" }
-                node.restoreWalletBackup(pending.file, backupPassword.toCharArray(), destination)
+                node.restoreWalletBackup(pending.file, restoreChars, destination)
                 refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi }
                 Toast.makeText(context, "Wallet restored successfully", Toast.LENGTH_LONG).show()
                 route = "home"
             } catch (t: Throwable) {
                 Toast.makeText(context, "Restore failed: ${t.message}", Toast.LENGTH_LONG).show()
             } finally {
+                restoreChars.fill('\u0000')
                 pending.file.delete()
                 pendingRestore = null
                 backupPassword = ""
@@ -256,6 +262,7 @@ fun StohnWalletScreen(node: NodeController) {
         scope.launch {
             val staged = File(context.cacheDir, "stohn-backup-verify-${System.currentTimeMillis()}.stohnbackup")
             busy = true
+            val verifyChars = backupPassword.toCharArray()
             try {
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     staged.outputStream().use { output ->
@@ -273,12 +280,13 @@ fun StohnWalletScreen(node: NodeController) {
                 } ?: error("Unable to read the backup file")
                 require(backupPassword.isNotBlank()) { "Enter the backup password first" }
                 // Decrypts and unpacks in cache only; the live wallet is never opened or replaced.
-                backupVerification = node.verifyWalletBackup(staged, backupPassword.toCharArray())
+                backupVerification = node.verifyWalletBackup(staged, verifyChars)
                 backupVerifyError = null
             } catch (t: Throwable) {
                 backupVerification = null
                 backupVerifyError = t.message ?: "The backup could not be verified"
             } finally {
+                verifyChars.fill('\u0000')
                 staged.delete()
                 busy = false
             }

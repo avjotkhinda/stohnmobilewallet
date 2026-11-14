@@ -197,7 +197,7 @@ fun SendPage(
             }
         }
         if (info?.encrypted == true) item {
-            OutlinedTextField(passphrase, { passphrase = it }, Modifier.fillMaxWidth(), label = { Text("Wallet passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), shape = RoundedCornerShape(15.dp))
+            OutlinedTextField(passphrase, { passphrase = it }, Modifier.fillMaxWidth(), label = { Text("Wallet passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrect = false, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None), shape = RoundedCornerShape(15.dp))
         }
         item {
             OutlinedButton(
@@ -252,8 +252,9 @@ fun SendPage(
                     showConfirm = false
                     scope.launch {
                         onBusy(true)
+                        val passChars = if (info?.encrypted == true) passphrase.toCharArray() else null
                         try {
-                            node.send(address, amount, if (info?.encrypted == true) passphrase.toCharArray() else null, subtractFee, confTarget)
+                            node.send(address, amount, passChars, subtractFee, confTarget)
                             runCatching { withContext(Dispatchers.IO) { persistLabel(addressBookDir, address.trim(), label, addressBookKey) } }
                             toast(context, "Transaction sent")
                             passphrase = ""
@@ -261,6 +262,7 @@ fun SendPage(
                         } catch (t: Throwable) {
                             toast(context, "Send failed: ${t.message}")
                         } finally {
+                            passChars?.fill('\u0000')
                             passphrase = ""
                             onBusy(false)
                         }

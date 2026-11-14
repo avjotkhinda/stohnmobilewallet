@@ -454,6 +454,7 @@ fun BackupPage(
                         label = { Text("Use a strong backup password") },
                         singleLine = true,
                         visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrect = false, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None),
                         shape = RoundedCornerShape(14.dp)
                     )
                     Text("This password is separate from your wallet passkey. Keep it safe; it cannot be recovered.", color = DarkMuted, fontSize = 10.sp)
@@ -564,14 +565,18 @@ fun SecurityDialog(node: NodeController, info: WalletRpc.WalletInfoSnapshot?, on
             if (newPass != confirmPass) { Toast.makeText(context, "Passkeys do not match", Toast.LENGTH_SHORT).show(); return@Button }
             scope.launch {
                 working = true
+                val oldChars = if (encrypted) oldPass.toCharArray() else null
+                val newChars = newPass.toCharArray()
                 try {
-                    if (encrypted) node.changeWalletPassphrase(oldPass.toCharArray(), newPass.toCharArray())
-                    else node.setWalletPassphrase(newPass.toCharArray())
+                    if (encrypted) node.changeWalletPassphrase(oldChars!!, newChars)
+                    else node.setWalletPassphrase(newChars)
                     Toast.makeText(context, if (encrypted) "Passkey changed" else "Wallet encrypted", Toast.LENGTH_LONG).show()
                     onDismiss()
                 } catch (t: Throwable) {
                     Toast.makeText(context, "Wallet security failed: ${t.message}", Toast.LENGTH_LONG).show()
                 } finally {
+                    oldChars?.fill('\u0000')
+                    newChars.fill('\u0000')
                     oldPass = ""
                     newPass = ""
                     confirmPass = ""
@@ -581,9 +586,9 @@ fun SecurityDialog(node: NodeController, info: WalletRpc.WalletInfoSnapshot?, on
         }, enabled = !working) { Text(if (working) "Working…" else if (encrypted) "Change passkey" else "Set passkey") }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }, title = { Text(if (encrypted) "Change wallet passkey" else "Add wallet passkey", fontWeight = FontWeight.Black) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (encrypted) OutlinedTextField(oldPass, { oldPass = it }, Modifier.fillMaxWidth(), label = { Text("Current passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
-            OutlinedTextField(newPass, { newPass = it }, Modifier.fillMaxWidth(), label = { Text(if (encrypted) "New passkey" else "Passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
-            OutlinedTextField(confirmPass, { confirmPass = it }, Modifier.fillMaxWidth(), label = { Text("Confirm passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+            if (encrypted) OutlinedTextField(oldPass, { oldPass = it }, Modifier.fillMaxWidth(), label = { Text("Current passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrect = false, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None))
+            OutlinedTextField(newPass, { newPass = it }, Modifier.fillMaxWidth(), label = { Text(if (encrypted) "New passkey" else "Passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrect = false, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None))
+            OutlinedTextField(confirmPass, { confirmPass = it }, Modifier.fillMaxWidth(), label = { Text("Confirm passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrect = false, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None))
             Text("The passkey is sent only to the local Stohn Core RPC and is cleared from the UI state after the operation.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         }
     })
