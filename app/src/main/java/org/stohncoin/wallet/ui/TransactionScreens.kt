@@ -105,7 +105,7 @@ fun TransactionDetailPage(tx: WalletRpc.WalletTransaction?) {
         }.getOrDefault("Unknown")
     }
     // Labels live in the app's address book, outside the wallet, so look them up by address.
-    val savedLabel = remember(tx.address) { AddressBook.load(File(context.filesDir, "addressbook")).labelFor(tx.address) }
+    val savedLabel = remember(tx.address) { AddressBook.load(File(context.filesDir, "addressbook"), org.stohncoin.wallet.security.AddressBookKey.get()).labelFor(tx.address) }
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1824)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF203548))) {

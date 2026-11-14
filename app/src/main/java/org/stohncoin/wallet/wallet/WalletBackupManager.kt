@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.runtime.RuntimeManifest
+import org.stohncoin.wallet.security.AddressBookKey
 
 /**
  * Creates an app-owned encrypted-wallet backup container without ever modifying a live Core wallet.
@@ -79,11 +80,12 @@ class WalletBackupManager internal constructor(
         val usable = restored.filter { it.raw.isNotBlank() && it.label.isNotBlank() }
         if (usable.isEmpty()) return
         val dir = File(filesDir, "addressbook")
+        val key = AddressBookKey.get()
         // Keep labels saved after the backup was taken; the backup wins for the same address.
         val merged = LinkedHashMap<String, AddressBookLabel>()
-        AddressBook.load(dir).labels.forEach { merged[it.raw] = it }
+        AddressBook.load(dir, key).labels.forEach { merged[it.raw] = it }
         usable.forEach { merged[it.raw] = it }
-        AddressBook.save(dir, merged.values.toList())
+        AddressBook.save(dir, merged.values.toList(), key)
     }
 
     fun packageMigrationSnapshot(
@@ -102,6 +104,17 @@ class WalletBackupManager internal constructor(
             "Backup destination directory does not exist"
         }
         val plaintext = File.createTempFile("stohn-backup-", ".snapshot", cacheDir)
+        // Decrypt the address book into a temporary plaintext file so an encrypted book is
+        // packaged as JSON rather than as ciphertext.
+        val labelsDir = File(filesDir, "addressbook")
+        val labelsKey = AddressBookKey.get()
+        val labelsBook = AddressBook.load(labelsDir, labelsKey)
+        val plainLabelsDir = if (labelsBook.labels.isNotEmpty()) {
+            val d = File(cacheDir, "stohn-labels-${System.currentTimeMillis()}")
+            d.mkdirs()
+            AddressBook.save(d, labelsBook.labels, null)
+            d
+        } else null
         try {
             // Keep the temporary plaintext inside app-private cache and delete it immediately.
             // The writer lives next to the reader in BackupContainer so the two cannot drift, and
@@ -116,12 +129,13 @@ class WalletBackupManager internal constructor(
                     creationHeight = creationHeight,
                     walletSha256 = sha256(snapshot)
                 ),
-                labels = File(filesDir, "addressbook/labels.json")
+                labels = plainLabelsDir?.let { File(it, "labels.json") }
             )
             BackupCrypto.encrypt(plaintext, destination, password)
             return BackupResult(destination, sha256(destination))
         } finally {
             plaintext.delete()
+            plainLabelsDir?.deleteRecursively()
             password.fill('\u0000')
         }
     }
