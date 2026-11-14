@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -270,5 +271,39 @@ class SendPageTest {
 
         // The send threw, so onComplete should NOT have been called
         assertTrue(!completed)
+    }
+
+    @Test
+    fun `the wallet passkey does not survive saved-state restore`() {
+        val tester = StateRestorationTester(compose)
+        tester.setContent {
+            SendPage(
+                node = gateway,
+                info = WalletRpc.WalletInfoSnapshot(
+                    balanceSatoshis = 100_000_000L,
+                    unconfirmedSatoshis = 0L,
+                    immatureSatoshis = 0L,
+                    txCount = 0,
+                    encrypted = true
+                ),
+                balance = 100_000_000L,
+                busy = false,
+                onAddressBook = {},
+                onBusy = {},
+                onComplete = { completed = true }
+            )
+        }
+
+        type("Wallet passkey", "correct horse")
+        scrollTo("Wallet passkey")
+        val before = field("Wallet passkey").fetchSemanticsNode().config[SemanticsProperties.EditableText].text
+        // The field is masked, so only its length (13 chars) is observable.
+        assertEquals("correct horse".length, before.length)
+
+        tester.emulateSavedInstanceStateRestore()
+
+        scrollTo("Wallet passkey")
+        val after = field("Wallet passkey").fetchSemanticsNode().config[SemanticsProperties.EditableText].text
+        assertEquals("", after)
     }
 }

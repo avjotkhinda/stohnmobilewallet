@@ -76,7 +76,9 @@ fun SendPage(
         val trimmed = address.trim()
         label = withContext(Dispatchers.IO) { AddressBook.load(addressBookDir).labelFor(trimmed) } ?: ""
     }
-    var passphrase by rememberSaveable { mutableStateOf("") }
+    // The passkey must never be persisted into saved state (it would outlive the process and
+    // leak into the Activity's saved-state bundle), so it lives in a plain remember holder.
+    var passphrase by remember { mutableStateOf("") }
     var subtractFee by rememberSaveable { mutableStateOf(false) }
     var estimate by remember { mutableStateOf<WalletRpc.FeeEstimate?>(null) }
     var feePreset by rememberSaveable { mutableStateOf(FeePreset.Automatic.name) }
@@ -227,7 +229,7 @@ fun SendPage(
     if (showConfirm) {
         val confirmAmount = Amounts.parse(amountText) ?: 0L
         AlertDialog(
-            onDismissRequest = { showConfirm = false },
+            onDismissRequest = { showConfirm = false; passphrase = "" },
             title = { Text("Confirm transaction", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -263,7 +265,7 @@ fun SendPage(
                     }
                 }) { Text("Send") }
             },
-            dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showConfirm = false; passphrase = "" }) { Text("Cancel") } }
         )
     }
 }
