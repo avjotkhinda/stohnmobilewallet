@@ -71,7 +71,7 @@ fun SendPage(
     var amountText by rememberSaveable { mutableStateOf("") }
     var label by rememberSaveable { mutableStateOf("") }
     val addressBookDir = remember { File(context.filesDir, "addressbook") }
-    val addressBookKey = remember { AddressBookKey.get(context) }
+    val addressBookKey = remember { AddressBookKey.get() }
     // The label field always follows the address being paid to, so a saved name shows up as soon
     // as the recipient is entered or scanned.
     LaunchedEffect(address) {
@@ -197,7 +197,15 @@ fun SendPage(
             }
         }
         if (info?.encrypted == true) item {
-            OutlinedTextField(passphrase, { passphrase = it }, Modifier.fillMaxWidth(), label = { Text("Wallet passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrect = false, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None), shape = RoundedCornerShape(15.dp))
+            OutlinedTextField(
+                passphrase, { passphrase = it }, Modifier.fillMaxWidth(), label = { Text("Wallet passkey") },
+                singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    autoCorrect = false,
+                    capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None
+                ),
+                shape = RoundedCornerShape(15.dp)
+            )
         }
         item {
             OutlinedButton(
@@ -284,7 +292,7 @@ fun AddressBookPage(onSend: (String) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val addressBookDir = remember { File(context.filesDir, "addressbook") }
-    val addressBookKey = remember { AddressBookKey.get(context) }
+    val addressBookKey = remember { AddressBookKey.get() }
     var query by rememberSaveable { mutableStateOf("") }
     var entries by remember { mutableStateOf(AddressBook.load(addressBookDir, addressBookKey).labels) }
     var draftAddress by rememberSaveable { mutableStateOf("") }

@@ -586,9 +586,31 @@ fun SecurityDialog(node: NodeController, info: WalletRpc.WalletInfoSnapshot?, on
         }, enabled = !working) { Text(if (working) "Working…" else if (encrypted) "Change passkey" else "Set passkey") }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }, title = { Text(if (encrypted) "Change wallet passkey" else "Add wallet passkey", fontWeight = FontWeight.Black) }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (encrypted) OutlinedTextField(oldPass, { oldPass = it }, Modifier.fillMaxWidth(), label = { Text("Current passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrect = false, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None))
-            OutlinedTextField(newPass, { newPass = it }, Modifier.fillMaxWidth(), label = { Text(if (encrypted) "New passkey" else "Passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrect = false, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None))
-            OutlinedTextField(confirmPass, { confirmPass = it }, Modifier.fillMaxWidth(), label = { Text("Confirm passkey") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(autoCorrect = false, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None))
+            if (encrypted) OutlinedTextField(
+                oldPass, { oldPass = it }, Modifier.fillMaxWidth(), label = { Text("Current passkey") },
+                singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    autoCorrect = false,
+                    capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None
+                )
+            )
+            OutlinedTextField(
+                newPass, { newPass = it }, Modifier.fillMaxWidth(),
+                label = { Text(if (encrypted) "New passkey" else "Passkey") }, singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    autoCorrect = false,
+                    capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None
+                )
+            )
+            OutlinedTextField(
+                confirmPass, { confirmPass = it }, Modifier.fillMaxWidth(), label = { Text("Confirm passkey") },
+                singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    autoCorrect = false,
+                    capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None
+                )
+            )
             Text("The passkey is sent only to the local Stohn Core RPC and is cleared from the UI state after the operation.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         }
     })
