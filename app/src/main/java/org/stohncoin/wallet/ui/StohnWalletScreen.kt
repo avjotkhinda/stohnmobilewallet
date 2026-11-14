@@ -67,7 +67,8 @@ fun StohnWalletScreen(node: NodeController) {
     var transactions by remember { mutableStateOf(emptyList<WalletRpc.WalletTransaction>()) }
     var walletInfo by remember { mutableStateOf<WalletRpc.WalletInfoSnapshot?>(null) }
     var receiveAddress by remember { mutableStateOf("") }
-    var backupPassword by rememberSaveable { mutableStateOf("") }
+    // A backup password must not be persisted into saved state, so it lives in a plain remember holder.
+    var backupPassword by remember { mutableStateOf("") }
     // Result of the last Test Backup, cleared whenever the password or the chosen file changes.
     var backupVerification by remember { mutableStateOf<BackupVerification?>(null) }
     var backupVerifyError by remember { mutableStateOf<String?>(null) }
@@ -216,7 +217,7 @@ fun StohnWalletScreen(node: NodeController) {
     pendingRestore?.let { pending ->
         val verification = pending.verification
         AlertDialog(
-            onDismissRequest = { pending.file.delete(); pendingRestore = null },
+            onDismissRequest = { pending.file.delete(); pendingRestore = null; backupPassword = "" },
             title = { Text("Restore this wallet?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -245,7 +246,7 @@ fun StohnWalletScreen(node: NodeController) {
                 TextButton(onClick = { installPendingRestore(pending) }) { Text("Restore") }
             },
             dismissButton = {
-                TextButton(onClick = { pending.file.delete(); pendingRestore = null }) { Text("Cancel") }
+                TextButton(onClick = { pending.file.delete(); pendingRestore = null; backupPassword = "" }) { Text("Cancel") }
             }
         )
     }
