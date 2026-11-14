@@ -69,6 +69,28 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
+  # gradle/verification-metadata.xml is enforced, but only ever appended to: bump a dependency and
+  # the previous version's pins stay behind, each one an artifact the build would accept without
+  # anyone deciding it should. This job resolves everything again and compares, so drift has to be
+  # a deliberate edit rather than the default outcome of a version bump.
+  metadata-minimal:
+    name: Verification metadata is minimal
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '17'
+      # No setup-gradle here on purpose: this job is about what Gradle resolves, so it starts
+      # from an empty dependency cache rather than a restored one.
+      - name: Install the API 37 platform
+        run: |
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0"
+      - name: Regenerate the pins and compare with the committed file
+        run: bash tools/verify-metadata-minimal.sh
+
   # The release path is invisible to the rest of CI: R8, the signing configuration and the packaged
   # APK payload are exercised only by assembleRelease, which the release job runs only when the real
   # keystore secrets exist. A pull request gets the same build with a throwaway key, so a shrinker

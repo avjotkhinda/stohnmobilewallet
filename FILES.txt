@@ -154,3 +154,4 @@
 ./tools/verify-apk-sidecars.sh
 ./tools/verify-files-list.sh
 ./tools/verify-fullmode-repair.sh
+./tools/verify-metadata-minimal.sh
