@@ -184,7 +184,7 @@ internal fun LockScreenContent(
                 onValueChange = onPinChange,
                 label = { Text("Enter PIN") },
                 visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, autoCorrect = false, capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None),
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 isError = error != null,
