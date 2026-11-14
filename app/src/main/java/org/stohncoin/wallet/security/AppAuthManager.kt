@@ -126,9 +126,10 @@ object AppAuthManager {
 
     /** Returns false when enabling was refused because no PIN is set. */
     fun setBiometricEnabled(context: Context, enabled: Boolean): Boolean =
-        prefs(context)?.let { setBiometricEnabled(it, enabled) } ?: false
+        setBiometricEnabled(prefs(context), enabled)
 
-    internal fun setBiometricEnabled(store: SharedPreferences, enabled: Boolean): Boolean {
+    internal fun setBiometricEnabled(store: SharedPreferences?, enabled: Boolean): Boolean {
+        if (store == null) return false
         if (enabled && !hasPin(store)) {
             store.edit { putBoolean(KEY_BIOMETRIC_ENABLED, false) }
             return false
