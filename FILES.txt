@@ -150,6 +150,7 @@
 ./scripts/watch-pin-schedule.sh
 ./settings.gradle.kts
 ./tools/check-release-history.py
+./tools/resolve-all-configurations.init.gradle
 ./tools/security-audit.sh
 ./tools/verify-apk-sidecars.sh
 ./tools/verify-files-list.sh
