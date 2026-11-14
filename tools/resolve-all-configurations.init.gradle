@@ -1,0 +1,76 @@
+// Resolves every resolvable configuration in every project, including the buildscript classpath.
+//
+// Dependency verification is only exercised on configurations something actually resolves, so a
+// classpath no task of the standard build touches could lose a pin or carry a wrong hash and stay
+// invisible until the day someone runs that task. This walks the whole set instead.
+//
+// Run it under strict verification (no --write-verification-metadata): a missing or mismatched pin
+// then fails inside Gradle itself, naming the artifact, before this task can report success.
+//
+//   ./gradlew --no-daemon --refresh-dependencies --console=plain \
+//     -I tools/resolve-all-configurations.init.gradle resolveEveryConfiguration
+
+gradle.rootProject { root ->
+    root.tasks.register('resolveEveryConfiguration') {
+        group = 'verification'
+        description = 'Resolves every resolvable configuration so dependency verification covers all of them.'
+        doLast {
+            def resolvedProjects = 0
+            def resolvedConfigurations = 0
+            def resolvedArtifacts = 0
+            def skipped = []
+
+            root.allprojects { project ->
+                resolvedProjects++
+                def configurations = []
+                configurations.addAll(project.configurations.findAll { it.canBeResolved })
+                configurations.addAll(project.buildscript.configurations.findAll { it.canBeResolved })
+
+                configurations.each { configuration ->
+                    // A configuration with nothing in it is not evidence of anything. allDependencies
+                    // rather than dependencies: most classpaths inherit from an implementation
+                    // configuration and would otherwise be skipped as empty.
+                    if (configuration.allDependencies.isEmpty() &&
+                        configuration.incoming.dependencyConstraints.isEmpty()) {
+                        return
+                    }
+                    resolvedConfigurations++
+                    try {
+                        configuration.resolvedConfiguration.lenientConfiguration.artifacts.each {
+                            resolvedArtifacts++
+                            it.file.length()
+                        }
+                    } catch (Throwable failure) {
+                        // Only a resolution failure is worth failing on: it means an artifact this
+                        // configuration needs is not covered by the committed metadata. Anything
+                        // else (a variant this host cannot build) is not a verification question.
+                        // Walk the cause chain instead of trusting the top message: a
+                        // verification failure arrives wrapped in a resolve exception, and
+                        // matching on text is how a real one could be mistaken for noise.
+                        def verificationFailure = false
+                        def cursor = failure
+                        while (cursor != null && !verificationFailure) {
+                            def name = cursor.class.name.toLowerCase()
+                            verificationFailure = name.contains('verification') ||
+                                name.contains('checksum')
+                            cursor = cursor.cause
+                        }
+                        if (verificationFailure) {
+                            throw failure
+                        }
+                        def causes = []
+                        def causeCursor = failure
+                        while (causeCursor != null) {
+                            causes << "${causeCursor.class.name}: ${(causeCursor.message ?: '').readLines().first()}"
+                            causeCursor = causeCursor.cause
+                        }
+                        skipped << "${project.path}:${configuration.name}\n      " + causes.join("\n      ")
+                    }
+                }
+            }
+
+            println "resolved ${resolvedArtifacts} artifacts across ${resolvedConfigurations} configurations in ${resolvedProjects} projects"
+            skipped.each { println "  skipped (not a verification question): ${it}" }
+        }
+    }
+}

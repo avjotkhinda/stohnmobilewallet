@@ -97,9 +97,27 @@ def components(path):
         found.add((component.get("group"), component.get("name"), component.get("version")))
     return found
 
+def checksums(path):
+    root = ET.parse(path).getroot()
+    found = {}
+    for component in root.iter(NS + "component"):
+        key = (component.get("group"), component.get("name"), component.get("version"))
+        for artifact in component.iter(NS + "artifact"):
+            for digest in artifact.iter(NS + "sha256"):
+                found[(key, artifact.get("name"))] = digest.get("value")
+    return found
+
 committed, regenerated = components(sys.argv[1]), components(sys.argv[2])
 stale = sorted(committed - regenerated)
 missing = sorted(regenerated - committed)
+
+# Matching coordinates are not enough: an entry can name the right version and the wrong bytes.
+committed_hashes, regenerated_hashes = checksums(sys.argv[1]), checksums(sys.argv[2])
+tampered = sorted(
+    (key, name)
+    for (key, name), value in committed_hashes.items()
+    if (key, name) in regenerated_hashes and regenerated_hashes[(key, name)] != value
+)
 
 print(f"committed: {len(committed)} components | regeneration resolved: {len(regenerated)}")
 
@@ -122,7 +140,14 @@ if missing:
     if len(missing) > 20:
         print(f"  ... and {len(missing) - 20} more")
 
-if stale or missing:
+if tampered:
+    print(f"\nFAIL: {len(tampered)} artifact(s) are pinned with a checksum this build does not resolve:")
+    for (group, name, version), artifact in tampered[:20]:
+        print(f"  {group}:{name}:{version} {artifact}")
+    if len(tampered) > 20:
+        print(f"  ... and {len(tampered) - 20} more")
+
+if stale or missing or tampered:
     sys.exit(1)
 
 print("METADATA MINIMALITY: PASS: every pinned component is one this build resolves")

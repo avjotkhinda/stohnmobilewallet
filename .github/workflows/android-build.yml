@@ -74,7 +74,7 @@ jobs:
   # anyone deciding it should. This job resolves everything again and compares, so drift has to be
   # a deliberate edit rather than the default outcome of a version bump.
   metadata-minimal:
-    name: Verification metadata is minimal
+    name: Verification metadata is minimal and complete
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -88,6 +88,13 @@ jobs:
         run: |
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0"
+      - name: Resolve every configuration under strict verification
+        # The other direction from the gate below: this one fails when a configuration needs an
+        # artifact the committed file does not pin, or pins with the wrong checksum. Gradle's own
+        # verification does the work while resolving, so a failure names the artifact.
+        run: |
+          ./gradlew --no-daemon --refresh-dependencies --console=plain \
+            -I tools/resolve-all-configurations.init.gradle resolveEveryConfiguration
       - name: Regenerate the pins and compare with the committed file
         run: bash tools/verify-metadata-minimal.sh
 
