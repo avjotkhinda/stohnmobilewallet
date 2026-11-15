@@ -122,6 +122,15 @@ fun SendPage(
                 }
             }
         }
+        if (selectedInputs.isNotEmpty()) {
+            item {
+                Text(
+                    "Coin control: sending from ${selectedInputs.size} selected output(s) totalling ${Amounts.formatFixed(selectedInputs.sumOf { it.amountSatoshis })} STOHN",
+                    color = Electric,
+                    fontSize = 12.sp
+                )
+            }
+        }
         item {
             OutlinedTextField(
                 value = address,
