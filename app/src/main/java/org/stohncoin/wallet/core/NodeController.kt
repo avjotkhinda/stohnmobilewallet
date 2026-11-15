@@ -405,7 +405,7 @@ class NodeController private constructor(context: Context) : SendGateway {
             check(_state.value.status == Status.STOPPED) {
                 "The node did not stop, so the network was left alone"
             }
-            delay(1200)
+            delay(2000)
         }
         prefs.edit(commit = true) { putString(KEY_NETWORK, network.name) }
         activeNetwork = network

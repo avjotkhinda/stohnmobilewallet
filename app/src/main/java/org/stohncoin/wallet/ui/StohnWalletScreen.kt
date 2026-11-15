@@ -75,6 +75,14 @@ fun StohnWalletScreen(node: NodeController) {
     // A chosen backup that has been unpacked and checked but not yet installed; confirmed first.
     var pendingRestore by remember { mutableStateOf<PendingRestore?>(null) }
     var dialog by remember { mutableStateOf<DialogKind?>(null) }
+    // Screenshots are allowed everywhere except where key/backup material is visible.
+    val window = (context as? android.app.Activity)?.window
+    LaunchedEffect(route, dialog, backupPassword, pendingRestore, backupVerification) {
+        val sensitive = route == "security" || dialog == DialogKind.Security ||
+            backupPassword.isNotBlank() || pendingRestore != null || backupVerification != null
+        if (sensitive) window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        else window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+    }
     var busy by remember { mutableStateOf(false) }
     // Chain storage shown on the node screen; measured when that screen opens and after a mode change.
     var chainUsage by remember { mutableStateOf<NodeStorage.Usage?>(null) }

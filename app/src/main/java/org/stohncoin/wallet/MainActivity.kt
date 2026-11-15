@@ -37,8 +37,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Blocks screenshots, screen recording and the recents thumbnail for wallet content.
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
@@ -57,6 +55,9 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }.start()
+        // Default to secure; StohnWalletScreen clears this on non-sensitive screens so users can
+        // screenshot node status and addresses, while key/backup screens stay protected.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         locked = AppAuthManager.isAppLockEnabled(this)
         setContent {
             MaterialTheme(colorScheme = DarkScheme) {
