@@ -3,8 +3,10 @@ package org.stohncoin.wallet.ui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,7 +52,7 @@ class ZeroPeerHintUiTest {
         compose.onNodeWithText("Still at 0 peers", substring = true).assertDoesNotExist()
 
         compose.mainClock.advanceTimeBy(2)
-        compose.onNodeWithText("Still at 0 peers", substring = true).assertExists()
+        compose.onNodeWithText("Still at 0 peers", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -60,7 +62,7 @@ class ZeroPeerHintUiTest {
         render(peers = { peers })
 
         compose.mainClock.advanceTimeBy(ZeroPeerHint.DELAY_MILLIS + 1)
-        compose.onNodeWithText("Still at 0 peers", substring = true).assertExists()
+        compose.onNodeWithText("Still at 0 peers", substring = true).performScrollTo().assertIsDisplayed()
 
         peers = 1
         compose.mainClock.autoAdvance = true
