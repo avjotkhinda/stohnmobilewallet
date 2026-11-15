@@ -18,3 +18,6 @@ Thumbs.db
 
 # Scratch space used by scripts/build-proot-android-bundle.sh
 tmp/
+
+# Build artifacts (APKs and sidecars)
+artifacts/

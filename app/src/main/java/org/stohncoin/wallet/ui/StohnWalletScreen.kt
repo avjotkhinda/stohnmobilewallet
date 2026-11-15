@@ -87,6 +87,8 @@ fun StohnWalletScreen(node: NodeController) {
     var backupFrom by rememberSaveable { mutableStateOf("security") }
     // Address chosen in the address book, prefilled on the send screen.
     var pendingSendAddress by rememberSaveable { mutableStateOf("") }
+    // Coins selected for a coin-control send; not saved across process death.
+    var pendingSendInputs by remember { mutableStateOf<List<WalletRpc.Utxo>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val rootRoutes = setOf("home", "wallets", "activity", "settings")
     val goBack: () -> Unit = {
@@ -402,15 +404,21 @@ fun StohnWalletScreen(node: NodeController) {
                             balance = balance,
                             busy = busy,
                             initialAddress = pendingSendAddress,
+                            selectedInputs = pendingSendInputs,
                             onAddressBook = { addressBookFrom = "send"; route = "addressbook" },
                             onBusy = { busy = it },
                             onComplete = {
                                 route = "home"
+                                pendingSendInputs = emptyList()
                                 scope.launch { runCatching { refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi } } }
                             }
                         )
                         "receive" -> ReceivePage(receiveAddress, onCopy = { copy(context, receiveAddress) })
-                        "coins" -> CoinsPage(node = node)
+                        "coins" -> CoinsPage(node = node, onSendSelected = { inputs ->
+                            pendingSendInputs = inputs
+                            pendingSendAddress = ""
+                            route = "send"
+                        })
                         "node" -> NodeStatusPage(
                             state = state,
                             chainUsage = chainUsage,

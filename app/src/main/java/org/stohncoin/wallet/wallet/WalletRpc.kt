@@ -31,9 +31,17 @@ class WalletRpc(private val runtime: RuntimeBackend, private val walletName: Str
     )
 
     /** Uses Core's wallet coin-selection/funding path; never treats a fee-rate as a fee. */
-    suspend fun estimateFee(address: String, amountSatoshis: Long, subtractFeeFromAmount: Boolean, confTarget: Int? = null): FeeEstimate {
+    suspend fun estimateFee(
+        address: String,
+        amountSatoshis: Long,
+        subtractFeeFromAmount: Boolean,
+        confTarget: Int? = null,
+        inputs: List<Utxo> = emptyList()
+    ): FeeEstimate {
         require(address.isNotBlank()) { "Recipient address is required" }
         require(amountSatoshis in 1..Amounts.MAX_SATOSHIS) { "Amount must be a positive number of satoshis" }
+        val inputsArr = JSONArray()
+        for (u in inputs) inputsArr.put(JSONObject().put("txid", u.txid).put("vout", u.vout))
         val options = JSONObject().put("replaceable", true).put("lockUnspents", false)
         if (subtractFeeFromAmount) options.put("subtractFeeFromOutputs", JSONArray().put(0))
         // conf_target asks Core to fund against its own feerate estimate for a confirmation target;
@@ -45,7 +53,7 @@ class WalletRpc(private val runtime: RuntimeBackend, private val walletName: Str
         val outputs = JSONObject().put(address, Amounts.toJsonCoin(amountSatoshis))
         val result = runtime.rpcCall(
             "walletcreatefundedpsbt",
-            JSONArray().put(JSONArray()).put(outputs).put(0).put(options).put(true),
+            JSONArray().put(inputsArr).put(outputs).put(0).put(options).put(true),
             walletName
         )
         val rawFee = result.optDouble("fee", Double.NaN)
@@ -65,21 +73,48 @@ class WalletRpc(private val runtime: RuntimeBackend, private val walletName: Str
         amountSatoshis: Long,
         subtractFeeFromAmount: Boolean,
         comment: String = "",
-        confTarget: Int? = null
+        confTarget: Int? = null,
+        inputs: List<Utxo> = emptyList()
     ): String {
         require(address.isNotBlank()) { "Recipient address is required" }
         require(amountSatoshis in 1..Amounts.MAX_SATOSHIS) { "Amount must be a positive number of satoshis" }
-        val params = JSONArray()
-            .put(address)
-            .put(Amounts.toJsonCoin(amountSatoshis))
-            .put(comment)
-            .put("")
-            .put(subtractFeeFromAmount)
-        if (confTarget != null && confTarget > 0) {
-            // sendtoaddress: replaceable, conf_target, estimate_mode
-            params.put(true).put(confTarget).put("conservative")
+        if (inputs.isEmpty()) {
+            val params = JSONArray()
+                .put(address)
+                .put(Amounts.toJsonCoin(amountSatoshis))
+                .put(comment)
+                .put("")
+                .put(subtractFeeFromAmount)
+            if (confTarget != null && confTarget > 0) {
+                // sendtoaddress: replaceable, conf_target, estimate_mode
+                params.put(true).put(confTarget).put("conservative")
+            }
+            return runtime.rpcString("sendtoaddress", params, walletName)
         }
-        return runtime.rpcString("sendtoaddress", params, walletName)
+        // Coin control: build, sign and broadcast a transaction spending only the selected inputs.
+        val inputsArr = JSONArray()
+        for (u in inputs) inputsArr.put(JSONObject().put("txid", u.txid).put("vout", u.vout))
+        val outputs = JSONObject().put(address, Amounts.toJsonCoin(amountSatoshis))
+        val options = JSONObject().put("replaceable", true).put("lockUnspents", false)
+        if (subtractFeeFromAmount) options.put("subtractFeeFromOutputs", JSONArray().put(0))
+        if (confTarget != null && confTarget > 0) {
+            options.put("conf_target", confTarget)
+            options.put("estimate_mode", "conservative")
+        }
+        val funded = runtime.rpcCall(
+            "walletcreatefundedpsbt",
+            JSONArray().put(inputsArr).put(outputs).put(0).put(options).put(true),
+            walletName
+        )
+        val psbt = funded.optString("psbt")
+        require(psbt.isNotBlank()) { "Core did not return a funded transaction" }
+        val processed = runtime.rpcCall("walletprocesspsbt", JSONArray().put(psbt), walletName)
+        val signed = processed.optString("psbt", psbt)
+        val finalized = runtime.rpcCall("finalizepsbt", JSONArray().put(signed), walletName)
+        require(finalized.optBoolean("complete", false)) { "Transaction could not be finalized" }
+        val hex = finalized.optString("hex")
+        require(hex.isNotBlank()) { "Core did not return a finalized transaction" }
+        return runtime.rpcString("sendrawtransaction", JSONArray().put(hex), walletName)
     }
 
     data class Utxo(

@@ -337,6 +337,67 @@ class WalletRpcTest {
         assertTrue(WalletRpc(runtime).transactions().isEmpty())
     }
 
+    // ---- unspent outputs (coin control) --------------------------------------------------
+
+    @Test
+    fun `unspent asks Core for unspent outputs and maps them`() = runBlocking {
+        runtime.arrayReply = JSONArray()
+            .put(
+                JSONObject()
+                    .put("txid", "uuuu")
+                    .put("vout", 2)
+                    .put("address", "SaddrCoin")
+                    .put("amount", 0.01)
+                    .put("confirmations", 5)
+                    .put("spendable", true)
+            )
+            .put(
+                JSONObject()
+                    .put("txid", "vvvv")
+                    .put("vout", 0)
+                    .put("amount", 0.25)
+            )
+
+        val utxos = WalletRpc(runtime).unspent(minConfirmations = 3)
+
+        assertEquals("listunspent", runtime.method())
+        val params = runtime.params()
+        assertEquals(3, params.getInt(0))
+        assertEquals(9999999, params.getInt(1))
+
+        assertEquals(2, utxos.size)
+        assertEquals("uuuu", utxos[0].txid)
+        assertEquals(2, utxos[0].vout)
+        assertEquals("SaddrCoin", utxos[0].address)
+        assertEquals(1_000_000L, utxos[0].amountSatoshis)
+        assertEquals(5, utxos[0].confirmations)
+        assertTrue(utxos[0].spendable)
+        assertEquals("vvvv", utxos[1].txid)
+        assertEquals(0, utxos[1].vout)
+        assertEquals(25_000_000L, utxos[1].amountSatoshis)
+        assertEquals(0, utxos[1].confirmations)
+        assertTrue(utxos[1].spendable)
+    }
+
+    @Test
+    fun `unspent skips entries without a txid`() = runBlocking {
+        runtime.arrayReply = JSONArray()
+            .put(JSONObject().put("txid", "").put("amount", 1.0))
+            .put(JSONObject().put("txid", "zzzz").put("amount", 0.5))
+
+        val utxos = WalletRpc(runtime).unspent()
+
+        assertEquals(1, utxos.size)
+        assertEquals("zzzz", utxos[0].txid)
+    }
+
+    @Test
+    fun `unspent returns an empty list for an empty wallet`() = runBlocking {
+        runtime.arrayReply = JSONArray()
+
+        assertTrue(WalletRpc(runtime).unspent().isEmpty())
+    }
+
     // ---- passphrases ---------------------------------------------------------------------
 
     @Test

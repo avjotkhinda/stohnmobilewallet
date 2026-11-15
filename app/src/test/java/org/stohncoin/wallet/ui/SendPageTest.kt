@@ -57,7 +57,8 @@ class SendPageTest {
             address: String,
             amountSatoshis: Long,
             subtractFeeFromAmount: Boolean,
-            confTarget: Int?
+            confTarget: Int?,
+            inputs: List<WalletRpc.Utxo>
         ): WalletRpc.FeeEstimate {
             estimatedFor = Triple(address, amountSatoshis, subtractFeeFromAmount)
             return WalletRpc.FeeEstimate(
@@ -72,7 +73,8 @@ class SendPageTest {
             amountSatoshis: Long,
             passphrase: CharArray?,
             subtractFeeFromAmount: Boolean,
-            confTarget: Int?
+            confTarget: Int?,
+            inputs: List<WalletRpc.Utxo>
         ): String {
             submitted = Submission(address, amountSatoshis, passphrase?.concatToString(), subtractFeeFromAmount, confTarget)
             return "txid"
@@ -236,7 +238,8 @@ class SendPageTest {
                 address: String,
                 amountSatoshis: Long,
                 subtractFeeFromAmount: Boolean,
-                confTarget: Int?
+                confTarget: Int?,
+                inputs: List<WalletRpc.Utxo>
             ): WalletRpc.FeeEstimate {
                 estimatedFor = Triple(address, amountSatoshis, subtractFeeFromAmount)
                 return WalletRpc.FeeEstimate(
@@ -250,7 +253,8 @@ class SendPageTest {
                 amountSatoshis: Long,
                 passphrase: CharArray?,
                 subtractFeeFromAmount: Boolean,
-                confTarget: Int?
+                confTarget: Int?,
+                inputs: List<WalletRpc.Utxo>
             ): String {
                 throw Exception("Node rejected the transaction")
             }

@@ -14,7 +14,8 @@ interface SendGateway {
         address: String,
         amountSatoshis: Long,
         subtractFeeFromAmount: Boolean,
-        confTarget: Int? = null
+        confTarget: Int? = null,
+        inputs: List<WalletRpc.Utxo> = emptyList()
     ): WalletRpc.FeeEstimate
 
     suspend fun send(
@@ -22,6 +23,7 @@ interface SendGateway {
         amountSatoshis: Long,
         passphrase: CharArray?,
         subtractFeeFromAmount: Boolean,
-        confTarget: Int? = null
+        confTarget: Int? = null,
+        inputs: List<WalletRpc.Utxo> = emptyList()
     ): String
 }

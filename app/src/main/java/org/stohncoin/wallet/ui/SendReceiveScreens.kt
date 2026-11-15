@@ -63,7 +63,8 @@ fun SendPage(
     initialAddress: String = "",
     onAddressBook: () -> Unit,
     onBusy: (Boolean) -> Unit,
-    onComplete: () -> Unit
+    onComplete: () -> Unit,
+    selectedInputs: List<WalletRpc.Utxo> = emptyList()
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -214,7 +215,7 @@ fun SendPage(
                     if (amount == null || amount <= 0L || address.isBlank()) return@OutlinedButton
                     scope.launch {
                         onBusy(true)
-                        runCatching { estimate = node.estimateFee(address, amount, subtractFee, confTarget) }
+                        runCatching { estimate = node.estimateFee(address, amount, subtractFee, confTarget, selectedInputs) }
                             .onFailure { toast(context, "Fee estimate failed: ${it.message}") }
                         onBusy(false)
                     }
@@ -262,7 +263,7 @@ fun SendPage(
                         onBusy(true)
                         val passChars = if (info?.encrypted == true) passphrase.toCharArray() else null
                         try {
-                            node.send(address, amount, passChars, subtractFee, confTarget)
+                            node.send(address, amount, passChars, subtractFee, confTarget, selectedInputs)
                             runCatching { withContext(Dispatchers.IO) { persistLabel(addressBookDir, address.trim(), label, addressBookKey) } }
                             toast(context, "Transaction sent")
                             passphrase = ""
