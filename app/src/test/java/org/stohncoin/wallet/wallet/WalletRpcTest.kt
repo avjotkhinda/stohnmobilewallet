@@ -387,6 +387,21 @@ class WalletRpcTest {
         assertTrue(WalletRpc(runtime).transactions().isEmpty())
     }
 
+    @Test
+    fun `estimateFee forwards selected inputs to Core`() = runBlocking {
+        runtime.objectReply = { JSONObject().put("fee", 0.00002000) }
+        runtime.calls.clear()
+        val inputs = listOf(WalletRpc.Utxo("txid-in", 1, "addr", 1_000_000L, 2, true))
+
+        WalletRpc(runtime).estimateFee(address, 100_000L, subtractFeeFromAmount = false, inputs = inputs)
+
+        val params = runtime.params()
+        val fundedInputs = params.getJSONArray(0)
+        assertEquals(1, fundedInputs.length())
+        assertEquals("txid-in", fundedInputs.getJSONObject(0).getString("txid"))
+        assertEquals(1, fundedInputs.getJSONObject(0).getInt("vout"))
+    }
+
     // ---- unspent outputs (coin control) --------------------------------------------------
 
     @Test
