@@ -13,6 +13,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,6 +72,12 @@ fun CoinsPage(
         val selectedUtxos = utxos.filter { selected.contains("${it.txid}:${it.vout}") }
         val selectedTotal = selectedUtxos.sumOf { it.amountSatoshis }
         Text("Total: ${formatCoin(total)} STOHN across ${utxos.size} output(s)", color = Color(0xFF9CA3AF), fontSize = 12.sp)
+        if (utxos.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { selected = utxos.filter { it.spendable }.map { "${it.txid}:${it.vout}" }.toSet() }) { Text("Select all") }
+                TextButton(onClick = { selected = emptySet() }) { Text("Clear") }
+            }
+        }
         if (selectedUtxos.isNotEmpty()) {
             Text("Selected: ${formatCoin(selectedTotal)} STOHN across ${selectedUtxos.size} output(s)", color = Color(0xFF4F9BFF), fontSize = 12.sp)
             Button(
