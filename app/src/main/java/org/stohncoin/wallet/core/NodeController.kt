@@ -182,6 +182,7 @@ class NodeController private constructor(context: Context) : SendGateway {
             val info = try {
                 b.status()
             } catch (t: Throwable) {
+                Log.e("NodeController", "status RPC failed (attempt $failures)", t)
                 failures++
                 if (failures >= 20) throw t
                 delay(1000)

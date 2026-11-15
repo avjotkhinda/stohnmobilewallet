@@ -1,6 +1,7 @@
 package org.stohncoin.wallet.runtime
 
 import android.content.Context
+import android.util.Log
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -46,14 +47,22 @@ interface RuntimeBackend {
     suspend fun status(): NodeInfo = withContext(Dispatchers.IO) {
         val rpc = LocalRpc(dataDir, rpcPort)
         val chain = rpc.objectResult("getblockchaininfo")
-        val network = rpc.objectResult("getnetworkinfo")
-        NodeInfo(
+        val peers = try {
+            rpc.objectResult("getnetworkinfo").optInt("connections", 0)
+        } catch (t: Throwable) {
+            Log.w("RuntimeBackend", "getnetworkinfo failed, falling back to getconnectioncount", t)
+            try { rpc.stringResult("getconnectioncount").toIntOrNull() ?: 0 } catch (_: Throwable) { 0 }
+        }
+        val info = NodeInfo(
             blocks = chain.optLong("blocks", 0),
             headers = chain.optLong("headers", 0),
-            peers = network.optInt("connections", 0),
+            peers = peers,
             ibd = chain.optBoolean("initialblockdownload", true),
-            version = network.optString("subversion", "unknown")
+            version = "unknown"
         )
+        Log.d("RuntimeBackend", "status raw: $chain")
+        Log.d("RuntimeBackend", "status: blocks=${info.blocks} headers=${info.headers} peers=${info.peers} ibd=${info.ibd}")
+        info
     }
 
     suspend fun rpcCall(method: String, params: org.json.JSONArray = org.json.JSONArray(), walletName: String? = null): org.json.JSONObject =
