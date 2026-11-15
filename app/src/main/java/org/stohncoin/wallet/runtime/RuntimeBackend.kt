@@ -114,12 +114,10 @@ interface RuntimeBackend {
         /** The node data directory, shared with the controller so both sides measure the same tree. */
         fun dataDirectory(context: Context): File = File(File(context.filesDir, "fullmode"), "stohn-data")
 
-        /** Network selection plus the optional user-supplied testnet peer. */
-        fun networkArguments(network: Network, testnetPeer: String? = null): List<String> = buildList {
+        /** Network selection plus the optional user-supplied peer. */
+        fun networkArguments(network: Network, peer: String? = null): List<String> = buildList {
             network.cliFlag()?.let(::add)
-            if (network == Network.TESTNET) {
-                TestnetPeer.normalize(testnetPeer)?.let { add("-addnode=$it") }
-            }
+            TestnetPeer.normalize(peer)?.let { add("-addnode=$it") }
         }
 
         /** Core's configuration: loopback-only RPC, single instance, no daemon fork. */

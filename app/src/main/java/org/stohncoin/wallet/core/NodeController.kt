@@ -98,7 +98,7 @@ class NodeController private constructor(context: Context) : SendGateway {
                     _state.value = State(status = Status.STARTING, message = "Installing Full Mode runtime…")
                     RuntimeInstaller.installIfNeeded(appContext)
                     _state.value = State(status = Status.STARTING, message = "Starting Stohn Core…")
-                    started = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB, activeNetwork, testnetPeer())
+                    started = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB, activeNetwork, peer())
                     started.start()
                     backend = started
                     logDiagnostic("startCoreFromService", "backend created on ${activeNetwork.name}")
@@ -418,16 +418,25 @@ class NodeController private constructor(context: Context) : SendGateway {
     /** Optional peer Core dials on testnet, because Stohn testnet ships without seeds. */
     fun testnetPeer(): String? = prefs.getString(KEY_TESTNET_PEER, null)
 
+    /** Optional peer for mainnet, whose bundled fixed seeds may be stale. */
+    fun mainnetPeer(): String? = prefs.getString(KEY_MAINNET_PEER, null)
+
+    /** The custom peer for the currently selected network, if any. */
+    fun peer(): String? = if (activeNetwork == RuntimeBackend.Network.TESTNET) testnetPeer() else mainnetPeer()
+
     /** Saves a testnet peer in host[:port] form; blank clears it. Restarts a running testnet node. */
-    suspend fun setTestnetPeer(raw: String?) = withContext(Dispatchers.IO) {
+    suspend fun setTestnetPeer(raw: String?) = setPeer(KEY_TESTNET_PEER, raw, RuntimeBackend.Network.TESTNET)
+
+    /** Saves a mainnet peer in host[:port] form; blank clears it. Restarts a running mainnet node. */
+    suspend fun setMainnetPeer(raw: String?) = setPeer(KEY_MAINNET_PEER, raw, RuntimeBackend.Network.MAINNET)
+
+    private suspend fun setPeer(key: String, raw: String?, network: RuntimeBackend.Network) = withContext(Dispatchers.IO) {
         val peer = TestnetPeer.normalize(raw)
         prefs.edit(commit = true) {
-            if (peer == null) remove(KEY_TESTNET_PEER) else putString(KEY_TESTNET_PEER, peer)
+            if (peer == null) remove(key) else putString(key, peer)
         }
-        if (activeNetwork == RuntimeBackend.Network.TESTNET &&
-            (_state.value.isRunning || _state.value.status == Status.STOPPING)
-        ) {
-            stopCoreInPlace("Applying testnet peer…")
+        if (activeNetwork == network && (_state.value.isRunning || _state.value.status == Status.STOPPING)) {
+            stopCoreInPlace("Applying ${network.label} peer…")
             userStopped = false
             startCoreFromService()
         }
@@ -562,6 +571,7 @@ class NodeController private constructor(context: Context) : SendGateway {
         private const val KEY_PRUNE_MODE = "prune_mode"
         private const val KEY_NETWORK = "network"
         private const val KEY_TESTNET_PEER = "testnet_peer"
+        private const val KEY_MAINNET_PEER = "mainnet_peer"
         private const val DEFAULT_WALLET_NAME = "stohn-wallet"
         private const val DIAGNOSTICS_FILE = "node_diagnostics.log"
         private const val DIAGNOSTICS_MAX_BYTES = 512L * 1024L

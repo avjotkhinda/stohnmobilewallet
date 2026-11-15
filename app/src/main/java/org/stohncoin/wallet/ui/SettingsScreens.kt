@@ -106,11 +106,13 @@ fun NodeStatusPage(
     pruneMode: NodeStorage.Mode,
     network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET,
     testnetPeer: String? = null,
+    mainnetPeer: String? = null,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onPruneMode: (NodeStorage.Mode) -> Unit,
     onNetwork: (RuntimeBackend.Network) -> Unit = {},
-    onTestnetPeer: (String?) -> Unit = {}
+    onTestnetPeer: (String?) -> Unit = {},
+    onMainnetPeer: (String?) -> Unit = {}
 ) {
     var showStorageDialog by remember { mutableStateOf(false) }
     var showNetworkDialog by remember { mutableStateOf(false) }
@@ -130,10 +132,8 @@ fun NodeStatusPage(
                 NodeFact("Connections", "${state.peers} peers")
                 NodeFact("Network", network.label)
                 TextButton(onClick = { showNetworkDialog = true }) { Text("Change network", color = Electric) }
-                if (network == RuntimeBackend.Network.TESTNET) {
-                    NodeFact("Testnet peer", testnetPeer ?: "None set")
-                    TextButton(onClick = { showPeerDialog = true }) { Text("Set testnet peer", color = Electric) }
-                }
+                NodeFact("Custom peer", (if (network == RuntimeBackend.Network.TESTNET) testnetPeer else mainnetPeer) ?: "None set")
+                TextButton(onClick = { showPeerDialog = true }) { Text("Set custom peer", color = Electric) }
                 NodeFact("Node", "Local Full Node")
                 NodeFact("Sync", nodeSyncLabel(state))
                 HorizontalDivider(color = Color(0xFF203244))
@@ -174,30 +174,35 @@ fun NodeStatusPage(
         )
     }
     if (showPeerDialog) {
-        TestnetPeerDialog(
-            current = testnetPeer,
+        CustomPeerDialog(
+            network = network,
+            current = if (network == RuntimeBackend.Network.TESTNET) testnetPeer else mainnetPeer,
             onDismiss = { showPeerDialog = false },
             onSave = { peer ->
                 showPeerDialog = false
-                onTestnetPeer(peer)
+                if (network == RuntimeBackend.Network.TESTNET) onTestnetPeer(peer) else onMainnetPeer(peer)
             }
         )
     }
 }
 
 
-/** Stohn testnet has no seeds, so an optional user-supplied peer is the only way to connect. */
+/** Adds a reachable peer when Core's bundled seeds do not connect. */
 @Composable
-private fun TestnetPeerDialog(current: String?, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
+private fun CustomPeerDialog(network: RuntimeBackend.Network, current: String?, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
     var peer by remember(current) { mutableStateOf(current.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Testnet peer") },
+        title = { Text("${network.label} peer") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "Stohn Core's testnet has no DNS or fixed seeds, so it stays at 0 peers unless you supply one. Enter a reachable testnet node as host or host:port. Leave blank to clear it.",
+                    if (network == RuntimeBackend.Network.TESTNET) {
+                        "Stohn Core's testnet has no DNS or fixed seeds, so it stays at 0 peers unless you supply one. Enter a reachable testnet node as host or host:port. Leave blank to clear it."
+                    } else {
+                        "Stohn mainnet has no DNS seeds and its bundled fixed seeds may be stale. If the node stays at 0 peers, enter a reachable mainnet node as host or host:port. Leave blank to clear it."
+                    },
                     color = DarkMuted,
                     fontSize = 11.sp
                 )

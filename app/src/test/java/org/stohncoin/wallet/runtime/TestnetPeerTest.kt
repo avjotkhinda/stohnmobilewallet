@@ -40,8 +40,8 @@ class TestnetPeerTest {
     }
 
     @Test
-    fun mainnetIgnoresTheTestnetPeer() {
+    fun mainnetAlsoAcceptsACustomPeer() {
         val args = RuntimeBackend.networkArguments(RuntimeBackend.Network.MAINNET, "node.example.org")
-        assertTrue(args.isEmpty())
+        assertEquals(listOf("-addnode=node.example.org"), args)
     }
 }

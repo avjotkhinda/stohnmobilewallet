@@ -27,6 +27,7 @@
 ./app/src/main/java/org/stohncoin/wallet/core/NodeStorage.kt
 ./app/src/main/java/org/stohncoin/wallet/core/SendGateway.kt
 ./app/src/main/java/org/stohncoin/wallet/core/SyncProgress.kt
+./app/src/main/java/org/stohncoin/wallet/runtime/CoreLog.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/EmbeddedLinuxRuntime.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/KeyExportGuard.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/LocalRpc.kt

@@ -450,6 +450,7 @@ fun StohnWalletScreen(node: NodeController) {
                             pruneMode = pruneMode,
                             network = node.network(),
                             testnetPeer = node.testnetPeer(),
+                            mainnetPeer = node.mainnetPeer(),
                             onStart = { node.start() },
                             onStop = { node.stop() },
                             onPruneMode = { mode ->
@@ -480,6 +481,15 @@ fun StohnWalletScreen(node: NodeController) {
                                     busy = true
                                     runCatching { node.setTestnetPeer(peer) }
                                         .onSuccess { Toast.makeText(context, if (peer == null) "Testnet peer cleared" else "Testnet peer saved", Toast.LENGTH_LONG).show() }
+                                        .onFailure { Toast.makeText(context, "Peer unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
+                                    busy = false
+                                }
+                            },
+                            onMainnetPeer = { peer ->
+                                scope.launch {
+                                    busy = true
+                                    runCatching { node.setMainnetPeer(peer) }
+                                        .onSuccess { Toast.makeText(context, if (peer == null) "Mainnet peer cleared" else "Mainnet peer saved", Toast.LENGTH_LONG).show() }
                                         .onFailure { Toast.makeText(context, "Peer unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
                                     busy = false
                                 }
