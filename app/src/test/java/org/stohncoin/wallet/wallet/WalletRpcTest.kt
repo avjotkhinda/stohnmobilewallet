@@ -319,6 +319,18 @@ class WalletRpcTest {
     }
 
     @Test
+    fun `coin-control send surfaces a clear error when selected coins cannot cover amount plus fee`() {
+        runtime.failure = IllegalStateException("Insufficient funds")
+        runtime.objectReply = { JSONObject() }
+        runtime.calls.clear()
+        val inputs = listOf(WalletRpc.Utxo("txid1", 2, "addr", 100_000L, 3, true))
+
+        expectFailure("cannot cover amount") {
+            runBlocking { WalletRpc(runtime).send(address, 500_000L, subtractFeeFromAmount = false, inputs = inputs) }
+        }
+    }
+
+    @Test
     fun `send refuses an address or amount it cannot use`() {
         expectFailure("Recipient address is required") {
             runBlocking { WalletRpc(runtime).send("", 1_000L, subtractFeeFromAmount = false) }

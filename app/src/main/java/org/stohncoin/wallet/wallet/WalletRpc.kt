@@ -40,6 +40,10 @@ class WalletRpc(private val runtime: RuntimeBackend, private val walletName: Str
     ): FeeEstimate {
         require(address.isNotBlank()) { "Recipient address is required" }
         require(amountSatoshis in 1..Amounts.MAX_SATOSHIS) { "Amount must be a positive number of satoshis" }
+        val selectedTotal = inputs.sumOf { it.amountSatoshis }
+        require(inputs.isEmpty() || subtractFeeFromAmount || selectedTotal >= amountSatoshis) {
+            "Selected coins ($selectedTotal satoshis) cannot cover amount ($amountSatoshis satoshis) plus fee"
+        }
         val inputsArr = JSONArray()
         for (u in inputs) inputsArr.put(JSONObject().put("txid", u.txid).put("vout", u.vout))
         val options = JSONObject().put("replaceable", true).put("lockUnspents", false)
@@ -51,11 +55,15 @@ class WalletRpc(private val runtime: RuntimeBackend, private val walletName: Str
             options.put("estimate_mode", "conservative")
         }
         val outputs = JSONObject().put(address, Amounts.toJsonCoin(amountSatoshis))
-        val result = runtime.rpcCall(
-            "walletcreatefundedpsbt",
-            JSONArray().put(inputsArr).put(outputs).put(0).put(options).put(true),
-            walletName
-        )
+        val result = try {
+            runtime.rpcCall(
+                "walletcreatefundedpsbt",
+                JSONArray().put(inputsArr).put(outputs).put(0).put(options).put(true),
+                walletName
+            )
+        } catch (t: Throwable) {
+            error("Selected coins ($selectedTotal satoshis) cannot cover amount ($amountSatoshis satoshis) plus fee: ${t.message.orEmpty()}")
+        }
         val rawFee = result.optDouble("fee", Double.NaN)
         require(rawFee.isFinite() && rawFee >= 0.0) { "Core did not return a valid transaction fee" }
         val fee = Amounts.fromJsonCoin(rawFee)
@@ -101,11 +109,16 @@ class WalletRpc(private val runtime: RuntimeBackend, private val walletName: Str
             options.put("conf_target", confTarget)
             options.put("estimate_mode", "conservative")
         }
-        val funded = runtime.rpcCall(
-            "walletcreatefundedpsbt",
-            JSONArray().put(inputsArr).put(outputs).put(0).put(options).put(true),
-            walletName
-        )
+        val selectedTotal = inputs.sumOf { it.amountSatoshis }
+        val funded = try {
+            runtime.rpcCall(
+                "walletcreatefundedpsbt",
+                JSONArray().put(inputsArr).put(outputs).put(0).put(options).put(true),
+                walletName
+            )
+        } catch (t: Throwable) {
+            error("Selected coins ($selectedTotal satoshis) cannot cover amount ($amountSatoshis satoshis) plus fee: ${t.message.orEmpty()}")
+        }
         val psbt = funded.optString("psbt")
         require(psbt.isNotBlank()) { "Core did not return a funded transaction" }
         val processed = runtime.rpcCall("walletprocesspsbt", JSONArray().put(psbt), walletName)
