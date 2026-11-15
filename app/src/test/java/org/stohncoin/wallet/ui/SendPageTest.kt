@@ -81,7 +81,7 @@ class SendPageTest {
         }
     }
 
-    private fun render(gateway: SendGateway = this.gateway, encrypted: Boolean = false) {
+    private fun render(gateway: SendGateway = this.gateway, encrypted: Boolean = false, selectedInputs: List<WalletRpc.Utxo> = emptyList()) {
         compose.setContent {
             SendPage(
                 node = gateway,
@@ -96,7 +96,8 @@ class SendPageTest {
                 busy = false,
                 onAddressBook = {},
                 onBusy = {},
-                onComplete = { completed = true }
+                onComplete = { completed = true },
+                selectedInputs = selectedInputs
             )
         }
     }
@@ -185,6 +186,49 @@ class SendPageTest {
         assertEquals(125_000_000L, submitted?.amountSatoshis)
         assertEquals(false, submitted?.subtractFee)
         assertTrue("the screen must report a completed send", completed)
+    }
+
+    @Test
+    fun `coin control forwards the selected inputs to estimate and send`() {
+        val selected = listOf(WalletRpc.Utxo("txid-coin", 3, "SaddrCoin", 2_000_000L, 4, true))
+        var estimateInputs: List<WalletRpc.Utxo> = emptyList()
+        var sendInputs: List<WalletRpc.Utxo> = emptyList()
+        val gateway = object : SendGateway {
+            override suspend fun estimateFee(
+                address: String,
+                amountSatoshis: Long,
+                subtractFeeFromAmount: Boolean,
+                confTarget: Int?,
+                inputs: List<WalletRpc.Utxo>
+            ): WalletRpc.FeeEstimate {
+                estimateInputs = inputs
+                return WalletRpc.FeeEstimate(1_000L, amountSatoshis + 1_000L, amountSatoshis)
+            }
+            override suspend fun send(
+                address: String,
+                amountSatoshis: Long,
+                passphrase: CharArray?,
+                subtractFeeFromAmount: Boolean,
+                confTarget: Int?,
+                inputs: List<WalletRpc.Utxo>
+            ): String {
+                sendInputs = inputs
+                return "txid"
+            }
+        }
+        render(gateway = gateway, selectedInputs = selected)
+        type("To", recipient)
+        type("Amount", "1.25")
+        scrollTo("Estimate Fee")
+        compose.onNodeWithText("Estimate Fee").performClick()
+        compose.waitUntil(5_000) { estimateInputs.isNotEmpty() }
+        assertEquals(selected, estimateInputs)
+
+        scrollTo("Review & Send")
+        compose.onNodeWithText("Review & Send").performClick()
+        compose.onNodeWithText("Send").performClick()
+        compose.waitUntil(5_000) { completed }
+        assertEquals(selected, sendInputs)
     }
 
     @Test
