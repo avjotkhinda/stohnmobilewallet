@@ -119,7 +119,7 @@ class NodeController private constructor(context: Context) : SendGateway {
         error("Stohn Core RPC did not become ready")
     }
 
-    private suspend fun restoreWallet(b: RuntimeBackend) {
+    internal suspend fun restoreWallet(b: RuntimeBackend) {
         val node = b
         val loadedWallets = node.rpcArray("listwallets")
         var savedName = activeWalletName
