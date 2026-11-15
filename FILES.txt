@@ -155,6 +155,7 @@
 ./tools/check-release-history.py
 ./tools/resolve-all-configurations.init.gradle
 ./tools/security-audit.sh
+./tools/sign-runtime-manifest.sh
 ./tools/verify-apk-sidecars.sh
 ./tools/verify-files-list.sh
 ./tools/verify-fullmode-repair.sh
