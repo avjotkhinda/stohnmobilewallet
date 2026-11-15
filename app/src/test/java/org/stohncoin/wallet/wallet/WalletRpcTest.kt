@@ -393,13 +393,16 @@ class WalletRpcTest {
         runtime.calls.clear()
         val inputs = listOf(WalletRpc.Utxo("txid-in", 1, "addr", 1_000_000L, 2, true))
 
-        WalletRpc(runtime).estimateFee(address, 100_000L, subtractFeeFromAmount = false, inputs = inputs)
+        val estimate = WalletRpc(runtime).estimateFee(address, 100_000L, subtractFeeFromAmount = false, inputs = inputs)
 
         val params = runtime.params()
         val fundedInputs = params.getJSONArray(0)
         assertEquals(1, fundedInputs.length())
         assertEquals("txid-in", fundedInputs.getJSONObject(0).getString("txid"))
         assertEquals(1, fundedInputs.getJSONObject(0).getInt("vout"))
+        assertEquals(2_000L, estimate.feeSatoshis)
+        assertEquals(100_000L, estimate.recipientSatoshis)
+        assertEquals(102_000L, estimate.totalSatoshis)
     }
 
     // ---- unspent outputs (coin control) --------------------------------------------------
