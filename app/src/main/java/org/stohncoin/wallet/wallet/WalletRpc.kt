@@ -82,6 +82,35 @@ class WalletRpc(private val runtime: RuntimeBackend, private val walletName: Str
         return runtime.rpcString("sendtoaddress", params, walletName)
     }
 
+    data class Utxo(
+        val txid: String,
+        val vout: Int,
+        val address: String,
+        val amountSatoshis: Long,
+        val confirmations: Int,
+        val spendable: Boolean
+    )
+
+    suspend fun unspent(minConfirmations: Int = 1): List<Utxo> {
+        val result = runtime.rpcArray("listunspent", JSONArray().put(minConfirmations).put(9999999), walletName)
+        return buildList {
+            for (i in 0 until result.length()) result.optJSONObject(i)?.let { item ->
+                val txid = item.optString("txid")
+                if (txid.isBlank()) return@let
+                add(
+                    Utxo(
+                        txid = txid,
+                        vout = item.optInt("vout", 0),
+                        address = item.optString("address", ""),
+                        amountSatoshis = Amounts.fromJsonCoin(item.optDouble("amount", 0.0)),
+                        confirmations = item.optInt("confirmations", 0),
+                        spendable = item.optBoolean("spendable", true)
+                    )
+                )
+            }
+        }
+    }
+
     suspend fun transactions(count: Int = 25): List<WalletTransaction> {
         val result = runtime.rpcArray("listtransactions", JSONArray().put("*").put(count).put(0).put(true), walletName)
         return buildList {

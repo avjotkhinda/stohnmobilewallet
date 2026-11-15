@@ -390,7 +390,8 @@ fun StohnWalletScreen(node: NodeController) {
                             onLock = { scope.launch { runCatching { node.lockWallet() } } },
                             onNode = { route = "node" },
                             onWallets = { route = "wallets" },
-                            onAddressBook = { addressBookFrom = "settings"; route = "addressbook" }
+                            onAddressBook = { addressBookFrom = "settings"; route = "addressbook" },
+                            onCoins = { route = "coins" }
                         )
                         "addressbook" -> AddressBookPage(
                             onSend = { addr -> pendingSendAddress = addr; route = "send" }
@@ -409,6 +410,7 @@ fun StohnWalletScreen(node: NodeController) {
                             }
                         )
                         "receive" -> ReceivePage(receiveAddress, onCopy = { copy(context, receiveAddress) })
+                        "coins" -> CoinsPage(node = node)
                         "node" -> NodeStatusPage(
                             state = state,
                             chainUsage = chainUsage,
@@ -486,6 +488,7 @@ private fun AppHeader(route: String, onBack: () -> Unit, onActivity: () -> Unit)
         "settings" -> "Settings"
         "send" -> "Send STOHN"
         "receive" -> "Receive STOHN"
+        "coins" -> "Coins"
         "addressbook" -> "Address Book"
         "node" -> "Node Status"
         "security" -> "Security"

@@ -225,6 +225,7 @@ class NodeController private constructor(context: Context) : SendGateway {
         retrySend(address, amountSatoshis, passphrase, subtractFeeFromAmount, confTarget)
 
     suspend fun transactions(): List<WalletRpc.WalletTransaction> = walletMutex.withLock { walletRpc().transactions() }
+    suspend fun unspent(): List<WalletRpc.Utxo> = walletMutex.withLock { walletRpc().unspent() }
     suspend fun lockWallet() = walletMutex.withLock { walletRpc().lock() }
 
     suspend fun setWalletPassphrase(newPassphrase: CharArray) = walletMutex.withLock {
