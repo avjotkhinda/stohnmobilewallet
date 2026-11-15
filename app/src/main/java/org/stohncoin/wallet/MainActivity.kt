@@ -92,11 +92,11 @@ class MainActivity : FragmentActivity() {
         super.onStop()
     }
 
-    private companion object {
+    internal companion object {
         @Volatile private var crashHandlerInstalled = false
 
         /** Installs the persistent handler once per process, never once per activity recreation. */
-        fun installCrashHandler(context: Context) {
+        internal fun installCrashHandler(context: Context) {
             if (crashHandlerInstalled) return
             synchronized(this) {
                 if (crashHandlerInstalled) return
