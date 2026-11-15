@@ -25,6 +25,7 @@
 ./app/src/main/java/org/stohncoin/wallet/core/NodeController.kt
 ./app/src/main/java/org/stohncoin/wallet/core/NodeService.kt
 ./app/src/main/java/org/stohncoin/wallet/core/NodeStorage.kt
+./app/src/main/java/org/stohncoin/wallet/core/SeedConnectionSelfTest.kt
 ./app/src/main/java/org/stohncoin/wallet/core/SendGateway.kt
 ./app/src/main/java/org/stohncoin/wallet/core/SyncProgress.kt
 ./app/src/main/java/org/stohncoin/wallet/runtime/CoreLog.kt
@@ -77,6 +78,7 @@
 ./app/src/test/java/org/stohncoin/wallet/core/NodeControllerNetworkTest.kt
 ./app/src/test/java/org/stohncoin/wallet/core/NodeDiagnosticsTest.kt
 ./app/src/test/java/org/stohncoin/wallet/core/NodeStorageTest.kt
+./app/src/test/java/org/stohncoin/wallet/core/SeedConnectionSelfTestTest.kt
 ./app/src/test/java/org/stohncoin/wallet/core/SyncProgressTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/AppVersionSingleSourceTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/KeyExportGuardTest.kt
@@ -98,6 +100,7 @@
 ./app/src/test/java/org/stohncoin/wallet/ui/QrTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/SendPageTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/ZeroPeerHintTest.kt
+./app/src/test/java/org/stohncoin/wallet/ui/ZeroPeerHintUiTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookEncryptionTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookFuzzTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookParseTest.kt

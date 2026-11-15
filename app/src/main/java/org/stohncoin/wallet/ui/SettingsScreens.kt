@@ -51,6 +51,7 @@ import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
 import org.stohncoin.wallet.core.NodeStorage
+import org.stohncoin.wallet.core.SeedConnectionSelfTest
 import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.runtime.TestnetPeer
 import org.stohncoin.wallet.wallet.Amounts
@@ -423,21 +424,53 @@ fun SettingsPage(
 
 
 @Composable
-fun DiagnosticsPage() {
+fun DiagnosticsPage(
+    network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET,
+    customPeer: String? = null,
+) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val maxBytes = 64 * 1024
     var content by remember { mutableStateOf(readNodeDiagnostics(context, maxBytes)) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var runningSelfTest by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
         item {
             Text("Node diagnostics", fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text("Most recent 64 KiB of node, crash and Core output logs, including rotated files", color = DarkMuted, fontSize = 12.sp)
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { content = readNodeDiagnostics(context, maxBytes) }) { Text("Refresh") }
-                Button(onClick = { shareNodeDiagnostics(context, "Stohn Wallet node diagnostics") }) { Text("Share log") }
-                OutlinedButton(onClick = { showClearDialog = true }) { Text("Clear") }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { content = readNodeDiagnostics(context, maxBytes) }) { Text("Refresh") }
+                    Button(onClick = { shareNodeDiagnostics(context, "Stohn Wallet node diagnostics") }) { Text("Share log") }
+                    OutlinedButton(onClick = { showClearDialog = true }) { Text("Clear") }
+                }
+                Button(
+                    onClick = {
+                        if (runningSelfTest) return@Button
+                        runningSelfTest = true
+                        scope.launch {
+                            try {
+                                val report = SeedConnectionSelfTest.run(network, customPeer)
+                                NodeController.appendDiagnostic(context, "SeedSelfTest", report)
+                                toast(context, "Seed self-test finished", short = true)
+                            } catch (t: Throwable) {
+                                NodeController.appendDiagnostic(context, "SeedSelfTest", "failed", t)
+                                toast(context, "Seed self-test failed: ${t.message ?: "unknown error"}")
+                            } finally {
+                                content = readNodeDiagnostics(context, maxBytes)
+                                runningSelfTest = false
+                            }
+                        }
+                    },
+                    enabled = !runningSelfTest
+                ) { Text(if (runningSelfTest) "Running seed self-test…" else "Run seed self-test") }
+                Text(
+                    "Resolves Stohn's seeds for ${network.label} and attempts TCP connections to show whether DNS, routing, or the seeds are failing.",
+                    color = DarkMuted,
+                    fontSize = 11.sp
+                )
             }
         }
         item {
