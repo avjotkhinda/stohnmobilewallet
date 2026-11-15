@@ -19,6 +19,7 @@ import android.util.Log
 import org.stohncoin.wallet.ui.CrashLogCapture
 import java.nio.file.Files
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.zip.GZIPInputStream
 
@@ -685,10 +686,23 @@ object RuntimeInstaller {
                         "Hardlink target missing: ${link.target}"
                     }
 
-                    Files.createLink(
-                        destination.toPath(),
-                        target.toPath()
-                    )
+                    try {
+                        Files.createLink(
+                            destination.toPath(),
+                            target.toPath()
+                        )
+                    } catch (ex: java.io.IOException) {
+                        // Some Android filesystems or runtime states reject hard links even inside
+                        // the app-private data directory. A byte-for-byte copy with attributes keeps
+                        // the rootfs usable without changing the extracted tree's layout.
+                        runCatching { Log.w(TAG, "Hard link failed, copying: ${ex.message}") }
+                        Files.copy(
+                            target.toPath(),
+                            destination.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.COPY_ATTRIBUTES
+                        )
+                    }
                 } else {
                     val relativeTarget =
                         destination.parentFile!!

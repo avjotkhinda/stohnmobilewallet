@@ -7,7 +7,9 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
+import org.stohncoin.wallet.ui.DarkScheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
@@ -54,10 +56,12 @@ class MainActivity : FragmentActivity() {
         }.start()
         locked = AppAuthManager.isAppLockEnabled(this)
         setContent {
-            if (locked) {
-                LockScreen(onUnlocked = { locked = false })
-            } else {
-                StohnWalletScreen(node)
+            MaterialTheme(colorScheme = DarkScheme) {
+                if (locked) {
+                    LockScreen(onUnlocked = { locked = false })
+                } else {
+                    StohnWalletScreen(node)
+                }
             }
         }
     }
