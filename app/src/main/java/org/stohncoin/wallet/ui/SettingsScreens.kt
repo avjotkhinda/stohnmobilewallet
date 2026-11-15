@@ -99,6 +99,15 @@ fun ActivityPage(state: NodeController.State, txs: List<WalletRpc.WalletTransact
 }
 
 
+/** Decides when the node screen should suggest a custom peer. */
+internal object ZeroPeerHint {
+    const val DELAY_MILLIS = 30_000L
+
+    fun shouldShow(running: Boolean, peers: Int, runningForMillis: Long): Boolean =
+        running && peers == 0 && runningForMillis >= DELAY_MILLIS
+}
+
+
 @Composable
 fun NodeStatusPage(
     state: NodeController.State,
@@ -123,11 +132,10 @@ fun NodeStatusPage(
     val running = state.isRunning
     val peers = state.peers
     LaunchedEffect(running, peers) {
+        showNoPeerHint = false
         if (running && peers == 0) {
-            delay(30_000)
-            showNoPeerHint = true
-        } else {
-            showNoPeerHint = false
+            delay(ZeroPeerHint.DELAY_MILLIS)
+            showNoPeerHint = ZeroPeerHint.shouldShow(true, 0, ZeroPeerHint.DELAY_MILLIS)
         }
     }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
