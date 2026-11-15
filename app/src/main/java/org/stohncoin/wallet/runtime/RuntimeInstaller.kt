@@ -406,10 +406,25 @@ object RuntimeInstaller {
                         "Core archive contains too many entries"
                     }
 
+                    // PAX/GNU metadata entries are bookkeeping, not files to extract; skip them
+                    // instead of treating their tar type flags as unsupported archive content.
+                    if (
+                        e.isPaxHeader() ||
+                            e.isGlobalPaxHeader() ||
+                            e.isGNULongNameEntry() ||
+                            e.isGNULongLinkEntry() ||
+                            e.isGNUSparse() ||
+                            e.isOldGNUSparse()
+                    ) {
+                        continue
+                    }
+
+                    // Symlinks and hard links are never followed for the Core payload; skip them
+                    // instead of aborting the whole install.
+                    if (e.isSymbolicLink || e.isLink) continue
+
                     require(
-                        !e.isSymbolicLink &&
-                            !e.isLink &&
-                            !e.isCharacterDevice &&
+                        !e.isCharacterDevice &&
                             !e.isBlockDevice &&
                             !e.isFIFO
                     ) {
