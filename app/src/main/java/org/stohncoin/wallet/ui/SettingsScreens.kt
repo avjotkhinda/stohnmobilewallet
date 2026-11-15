@@ -46,6 +46,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
@@ -117,6 +118,18 @@ fun NodeStatusPage(
     var showStorageDialog by remember { mutableStateOf(false) }
     var showNetworkDialog by remember { mutableStateOf(false) }
     var showPeerDialog by remember { mutableStateOf(false) }
+    // Give Core a chance to connect before calling out that it has no peers.
+    var showNoPeerHint by remember { mutableStateOf(false) }
+    val running = state.isRunning
+    val peers = state.peers
+    LaunchedEffect(running, peers) {
+        if (running && peers == 0) {
+            delay(30_000)
+            showNoPeerHint = true
+        } else {
+            showNoPeerHint = false
+        }
+    }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1B28)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3549))) {
             Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -134,6 +147,13 @@ fun NodeStatusPage(
                 TextButton(onClick = { showNetworkDialog = true }) { Text("Change network", color = Electric) }
                 NodeFact("Custom peer", (if (network == RuntimeBackend.Network.TESTNET) testnetPeer else mainnetPeer) ?: "None set")
                 TextButton(onClick = { showPeerDialog = true }) { Text("Set custom peer", color = Electric) }
+                if (showNoPeerHint && peers == 0) {
+                    Text(
+                        "Still at 0 peers. Stohn's bundled seeds may be unreachable; set a Custom peer above.",
+                        color = Color(0xFFE9B455),
+                        fontSize = 11.sp
+                    )
+                }
                 NodeFact("Node", "Local Full Node")
                 NodeFact("Sync", nodeSyncLabel(state))
                 HorizontalDivider(color = Color(0xFF203244))
