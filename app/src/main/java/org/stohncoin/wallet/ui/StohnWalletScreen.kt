@@ -92,6 +92,10 @@ fun StohnWalletScreen(node: NodeController) {
     val scope = rememberCoroutineScope()
     val rootRoutes = setOf("home", "wallets", "activity", "settings")
     val goBack: () -> Unit = {
+        if (route == "send") {
+            pendingSendInputs = emptyList()
+            pendingSendAddress = ""
+        }
         route = when (route) {
             "security", "node" -> "settings"
             "backup" -> backupFrom
@@ -364,7 +368,7 @@ fun StohnWalletScreen(node: NodeController) {
                             transactions = transactions,
                             busy = busy,
                             onTransaction = { tx -> selectedTx = tx; route = "txdetail" },
-                            onSend = { pendingSendAddress = ""; route = "send" },
+                            onSend = { pendingSendAddress = ""; pendingSendInputs = emptyList(); route = "send" },
                             onReceive = {
                                 scope.launch {
                                     busy = true
@@ -396,7 +400,7 @@ fun StohnWalletScreen(node: NodeController) {
                             onCoins = { route = "coins" }
                         )
                         "addressbook" -> AddressBookPage(
-                            onSend = { addr -> pendingSendAddress = addr; route = "send" }
+                            onSend = { addr -> pendingSendAddress = addr; pendingSendInputs = emptyList(); route = "send" }
                         )
                         "send" -> SendPage(
                             node = node,
