@@ -1,6 +1,7 @@
 package org.stohncoin.wallet.wallet
 
 import java.io.File
+import java.io.FileOutputStream
 import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
@@ -160,10 +161,26 @@ data class AddressBook(val labels: List<AddressBookLabel>) {
             }
             sb.append("]}")
             val plaintext = sb.toString()
+            val target = File(dir, FILENAME)
+            val tmp = File(dir, "$FILENAME.tmp")
             if (key == null) {
-                File(dir, FILENAME).writeText(plaintext)
+                FileOutputStream(tmp).use { out ->
+                    out.write(plaintext.toByteArray(Charsets.UTF_8))
+                    out.flush()
+                    out.fd.sync()
+                }
             } else {
-                File(dir, FILENAME).writeBytes(encrypt(plaintext, key))
+                val bytes = encrypt(plaintext, key)
+                FileOutputStream(tmp).use { out ->
+                    out.write(bytes)
+                    out.flush()
+                    out.fd.sync()
+                }
+            }
+            if (target.exists()) target.delete()
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
             }
             return AddressBook(labels)
         }

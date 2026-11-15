@@ -163,7 +163,14 @@ fun EmptyCard(text: String) {
 
 
 fun copy(context: Context, text: String) {
-    context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("Stohn address", text))
+    val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
+    clipboard.setPrimaryClip(ClipData.newPlainText("Stohn address", text))
+    // Drop the copied value from the clipboard shortly after, so it does not linger for other apps.
+    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        if (clipboard.hasPrimaryClip() && clipboard.primaryClip?.getItemAt(0)?.text?.toString() == text) {
+            clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
+        }
+    }, 30_000L)
     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
 }
 
