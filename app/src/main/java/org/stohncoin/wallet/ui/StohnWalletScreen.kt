@@ -109,7 +109,7 @@ fun StohnWalletScreen(node: NodeController) {
             pendingSendSubtractFee = false
         }
         route = when (route) {
-            "security", "node" -> "settings"
+            "security", "node", "diagnostics" -> "settings"
             "backup" -> backupFrom
             "txdetail" -> "activity"
             "addressbook" -> addressBookFrom
@@ -409,8 +409,10 @@ fun StohnWalletScreen(node: NodeController) {
                             onNode = { route = "node" },
                             onWallets = { route = "wallets" },
                             onAddressBook = { addressBookFrom = "settings"; route = "addressbook" },
-                            onCoins = { route = "coins" }
+                            onCoins = { route = "coins" },
+                            onDiagnostics = { route = "diagnostics" }
                         )
+                        "diagnostics" -> DiagnosticsPage()
                         "addressbook" -> AddressBookPage(
                             onSend = { addr -> pendingSendAddress = addr; pendingSendInputs = emptyList(); pendingSendAmount = ""; pendingSendSubtractFee = false; route = "send" }
                         )
@@ -531,6 +533,7 @@ private fun AppHeader(route: String, onBack: () -> Unit, onActivity: () -> Unit)
         "coins" -> "Coins"
         "addressbook" -> "Address Book"
         "node" -> "Node Status"
+        "diagnostics" -> "Node Diagnostics"
         "security" -> "Security"
         "backup" -> "Backup Wallet"
         "txdetail" -> "Transaction"

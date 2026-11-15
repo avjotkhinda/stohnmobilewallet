@@ -220,9 +220,23 @@ fun shareTextFile(
 
 
 /**
- * Shares a crash log built from the app-private ring buffer via the system share chooser. */
+ * Shares a crash log built from the app-private ring buffer via the system share chooser.
+ */
 fun shareCrashLog(context: Context, chooserTitle: String) {
     shareTextFile(context, CrashLogCapture.buildLog(), chooserTitle, filename = "stohn-crash-log.txt")
+}
+
+
+/** Contents of the persistent node/crash diagnostics written by NodeController. */
+fun readNodeDiagnostics(context: Context): String = runCatching {
+    File(context.filesDir, "node_diagnostics.log").takeIf { it.isFile }?.readText().orEmpty()
+}.getOrDefault("")
+
+
+/** Shares the persistent `node_diagnostics.log`, or says so when nothing has been recorded yet. */
+fun shareNodeDiagnostics(context: Context, chooserTitle: String) {
+    val text = readNodeDiagnostics(context).ifBlank { "No node diagnostics have been recorded yet." }
+    shareTextFile(context, text, chooserTitle, filename = "node-diagnostics.txt")
 }
 
 

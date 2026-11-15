@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.filled.BugReport
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -285,7 +287,8 @@ fun SettingsPage(
     onNode: () -> Unit,
     onWallets: () -> Unit,
     onAddressBook: () -> Unit,
-    onCoins: () -> Unit = {}
+    onCoins: () -> Unit = {},
+    onDiagnostics: () -> Unit = {}
 ) {
     val context = LocalContext.current
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
@@ -301,11 +304,47 @@ fun SettingsPage(
         item { SettingCard("About Stohn", "Full node · Local RPC", Icons.Default.Info, {}) }
         item {
             SettingCard(
+                "Node diagnostics",
+                "View or share the persistent node/crash log",
+                Icons.Default.BugReport,
+                onClick = onDiagnostics
+            )
+        }
+        item {
+            SettingCard(
                 "Share crash log",
                 "Copy or send the latest runtime log",
                 Icons.Default.BugReport,
                 onClick = { shareCrashLog(context, "Stohn Wallet crash log") }
             )
+        }
+    }
+}
+
+
+@Composable
+fun DiagnosticsPage() {
+    val context = LocalContext.current
+    var content by remember { mutableStateOf(readNodeDiagnostics(context)) }
+    LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
+        item {
+            Text("Node diagnostics", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            Text("Persistent node and crash log from this device", color = DarkMuted, fontSize = 12.sp)
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { content = readNodeDiagnostics(context) }) { Text("Refresh") }
+                Button(onClick = { shareNodeDiagnostics(context, "Stohn Wallet node diagnostics") }) { Text("Share log") }
+            }
+        }
+        item {
+            if (content.isBlank()) {
+                Text("No node diagnostics have been recorded yet.", color = DarkMuted, fontSize = 12.sp)
+            } else {
+                SelectionContainer {
+                    Text(content, fontFamily = FontFamily.Monospace, fontSize = 10.sp, lineHeight = 14.sp)
+                }
+            }
         }
     }
 }
