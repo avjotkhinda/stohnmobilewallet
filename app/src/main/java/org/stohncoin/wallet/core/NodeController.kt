@@ -84,6 +84,7 @@ class NodeController private constructor(context: Context) : SendGateway {
     }
 
     internal fun startCoreFromService() {
+        logDiagnostic("startCoreFromService", "enter; startJobActive=${startJob?.isActive == true} backendPresent=${backend != null}")
         if (startJob?.isActive == true || backend != null) return
         startJob = scope.launch {
             startMutex.withLock {
@@ -95,11 +96,13 @@ class NodeController private constructor(context: Context) : SendGateway {
                     val b = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB, activeNetwork)
                     b.start()
                     backend = b
+                    logDiagnostic("startCoreFromService", "backend created on ${activeNetwork.name}")
                     waitForRpc(b)
                     restoreWallet(b)
                     poll(b)
                 } catch (t: Throwable) {
                     Log.e("NodeController", "startCoreFromService failed", t)
+                    logDiagnostic("startCoreFromService", "failed", t)
                     runCatching { backend?.stop() }
                     backend = null
                     _state.value = State(status = Status.ERROR, message = t.message ?: "Unable to start Core")
@@ -121,6 +124,7 @@ class NodeController private constructor(context: Context) : SendGateway {
     }
 
     internal suspend fun restoreWallet(b: RuntimeBackend) {
+        logDiagnostic("restoreWallet", "enter on ${activeNetwork.name}")
         try {
         val node = b
         val loadedWallets = node.rpcArray("listwallets")
@@ -161,6 +165,7 @@ class NodeController private constructor(context: Context) : SendGateway {
         setActiveWalletName(DEFAULT_WALLET_NAME)
         } catch (t: Throwable) {
             Log.e("NodeController", "restoreWallet failed", t)
+            logDiagnostic("restoreWallet", "failed", t)
             throw t
         }
     }
@@ -401,6 +406,7 @@ class NodeController private constructor(context: Context) : SendGateway {
      * Core's network subdirectory, so the downloaded chain is not deleted here.
      */
     suspend fun applyNetwork(network: RuntimeBackend.Network) = withContext(Dispatchers.IO) {
+        logDiagnostic("applyNetwork", "request ${network.name}; current ${activeNetwork.name}; state ${_state.value.status}")
         try {
         if (network == activeNetwork) return@withContext
         val wasRunning = _state.value.isRunning || _state.value.status == Status.STOPPING
@@ -428,9 +434,28 @@ class NodeController private constructor(context: Context) : SendGateway {
             userStopped = false
             startCoreFromService()
         }
+        logDiagnostic("applyNetwork", "completed; now ${activeNetwork.name}")
         } catch (t: Throwable) {
             Log.e("NodeController", "applyNetwork failed", t)
+            logDiagnostic("applyNetwork", "failed", t)
             throw t
+        }
+    }
+
+    private fun logDiagnostic(tag: String, message: String, throwable: Throwable? = null) {
+        try {
+            val file = File(appContext.filesDir, "node_diagnostics.log")
+            val line = buildString {
+                append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date()))
+                append(" [")
+                append(tag)
+                append("] ")
+                append(message)
+                append('\n')
+                throwable?.let { append(android.util.Log.getStackTraceString(it)); append('\n') }
+            }
+            synchronized(this) { file.appendText(line) }
+        } catch (_: Throwable) {
         }
     }
 
