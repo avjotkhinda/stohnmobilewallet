@@ -325,16 +325,19 @@ fun SettingsPage(
 @Composable
 fun DiagnosticsPage() {
     val context = LocalContext.current
-    var content by remember { mutableStateOf(readNodeDiagnostics(context)) }
+    val maxBytes = 64 * 1024
+    var content by remember { mutableStateOf(readNodeDiagnostics(context, maxBytes)) }
+    var showClearDialog by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
         item {
             Text("Node diagnostics", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-            Text("Persistent node and crash log from this device", color = DarkMuted, fontSize = 12.sp)
+            Text("Most recent 64 KiB of the persistent node and crash log", color = DarkMuted, fontSize = 12.sp)
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { content = readNodeDiagnostics(context) }) { Text("Refresh") }
+                Button(onClick = { content = readNodeDiagnostics(context, maxBytes) }) { Text("Refresh") }
                 Button(onClick = { shareNodeDiagnostics(context, "Stohn Wallet node diagnostics") }) { Text("Share log") }
+                OutlinedButton(onClick = { showClearDialog = true }) { Text("Clear") }
             }
         }
         item {
@@ -346,6 +349,22 @@ fun DiagnosticsPage() {
                 }
             }
         }
+    }
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    clearNodeDiagnostics(context)
+                    content = ""
+                    showClearDialog = false
+                    Toast.makeText(context, "Diagnostics cleared", Toast.LENGTH_SHORT).show()
+                }) { Text("Clear") }
+            },
+            dismissButton = { TextButton(onClick = { showClearDialog = false }) { Text("Cancel") } },
+            title = { Text("Clear diagnostics?") },
+            text = { Text("This deletes the current and rotated node/crash logs from this device.", color = DarkMuted, fontSize = 12.sp) }
+        )
     }
 }
 

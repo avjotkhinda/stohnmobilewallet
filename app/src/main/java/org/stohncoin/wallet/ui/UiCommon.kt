@@ -228,9 +228,26 @@ fun shareCrashLog(context: Context, chooserTitle: String) {
 
 
 /** Contents of the persistent node/crash diagnostics written by NodeController. */
-fun readNodeDiagnostics(context: Context): String = runCatching {
-    File(context.filesDir, "node_diagnostics.log").takeIf { it.isFile }?.readText().orEmpty()
+fun readNodeDiagnostics(context: Context, maxBytes: Int? = null): String = runCatching {
+    val file = File(context.filesDir, "node_diagnostics.log")
+    if (!file.isFile) return@runCatching ""
+    val start = maxBytes?.let { (file.length() - it).coerceAtLeast(0L) } ?: 0L
+    java.io.RandomAccessFile(file, "r").use { reader ->
+        reader.seek(start)
+        val bytes = ByteArray((file.length() - start).toInt())
+        reader.readFully(bytes)
+        String(bytes, Charsets.UTF_8)
+    }
 }.getOrDefault("")
+
+
+/** Removes the current and rotated diagnostics logs. */
+fun clearNodeDiagnostics(context: Context) {
+    runCatching {
+        File(context.filesDir, "node_diagnostics.log").delete()
+        File(context.filesDir, "node_diagnostics.log.1").delete()
+    }
+}
 
 
 /** Shares the persistent `node_diagnostics.log`, or says so when nothing has been recorded yet. */
