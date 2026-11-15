@@ -99,6 +99,7 @@ class NodeController private constructor(context: Context) : SendGateway {
                     restoreWallet(b)
                     poll(b)
                 } catch (t: Throwable) {
+                    Log.e("NodeController", "startCoreFromService failed", t)
                     runCatching { backend?.stop() }
                     backend = null
                     _state.value = State(status = Status.ERROR, message = t.message ?: "Unable to start Core")
@@ -120,6 +121,7 @@ class NodeController private constructor(context: Context) : SendGateway {
     }
 
     internal suspend fun restoreWallet(b: RuntimeBackend) {
+        try {
         val node = b
         val loadedWallets = node.rpcArray("listwallets")
         var savedName = activeWalletName
@@ -157,6 +159,10 @@ class NodeController private constructor(context: Context) : SendGateway {
 
         node.rpcCall("createwallet", org.json.JSONArray().put(DEFAULT_WALLET_NAME))
         setActiveWalletName(DEFAULT_WALLET_NAME)
+        } catch (t: Throwable) {
+            Log.e("NodeController", "restoreWallet failed", t)
+            throw t
+        }
     }
 
     private fun setActiveWalletName(name: String) {
@@ -394,24 +400,37 @@ class NodeController private constructor(context: Context) : SendGateway {
      * Core's network subdirectory, so the downloaded chain is not deleted here.
      */
     suspend fun applyNetwork(network: RuntimeBackend.Network) = withContext(Dispatchers.IO) {
+        try {
         if (network == activeNetwork) return@withContext
         val wasRunning = _state.value.isRunning || _state.value.status == Status.STOPPING
         if (wasRunning) {
-            stop()
-            repeat(60) {
-                if (_state.value.status == Status.STOPPED) return@repeat
-                delay(250)
+            // Restart Core in place instead of tearing down the foreground service. Tearing the
+            // service down and starting a new one races the old onDestroy against the new start,
+            // which can leave the controller with no backend and close the app.
+            startJob?.cancel()
+            startJob = null
+            val oldBackend = backend
+            backend = null
+            _state.value = State(status = Status.STOPPING, message = "Switching network…")
+            try {
+                oldBackend?.stop()
+            } catch (t: Throwable) {
+                Log.e("NodeController", "Failed to stop Core while switching network", t)
             }
-            check(_state.value.status == Status.STOPPED) {
-                "The node did not stop, so the network was left alone"
-            }
-            delay(2000)
+            delay(500)
         }
         prefs.edit(commit = true) { putString(KEY_NETWORK, network.name) }
         activeNetwork = network
         // Each network has its own wallet namespace; do not carry a mainnet wallet name onto testnet.
         activeWalletName = prefs.getString(walletNameKey(activeNetwork), null)
-        if (wasRunning) start()
+        if (wasRunning) {
+            userStopped = false
+            startCoreFromService()
+        }
+        } catch (t: Throwable) {
+            Log.e("NodeController", "applyNetwork failed", t)
+            throw t
+        }
     }
 
     /** Bytes and files the node's data directory currently holds. */
