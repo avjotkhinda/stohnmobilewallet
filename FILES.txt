@@ -126,6 +126,7 @@
 ./gradle/wrapper/gradle-wrapper.properties
 ./gradlew
 ./gradlew.bat
+./runtime/manifest.txt
 ./runtime/proot/README.md
 ./runtime/proot/TERMUX-PACKAGE-LOCK.json
 ./runtime/proot/proot-version-runbook.json
