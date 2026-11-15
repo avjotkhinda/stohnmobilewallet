@@ -22,7 +22,13 @@ import kotlinx.coroutines.withContext
  * the glibc backend — a native binary that does not match its pin is a hard failure, never a
  * quiet swap to some other runtime.
  */
-class NativeRuntime(private val context: Context, private val pruneMiB: Int, private val pins: RuntimePins, private val network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET) : RuntimeBackend {
+class NativeRuntime(
+    private val context: Context,
+    private val pruneMiB: Int,
+    private val pins: RuntimePins,
+    private val network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET,
+    private val testnetPeer: String? = null
+) : RuntimeBackend {
     private val nativeDir = File(context.applicationInfo.nativeLibraryDir)
     private val core = File(nativeDir, NativeLaunch.CORE_LIB)
     private val walletTool = File(nativeDir, NativeLaunch.WALLET_TOOL_LIB)
@@ -52,7 +58,8 @@ class NativeRuntime(private val context: Context, private val pruneMiB: Int, pri
             dataDir = dataDir.absolutePath,
             rpcPort = rpcPort,
             pruneMiB = pruneMiB,
-            network = network
+            network = network,
+            testnetPeer = testnetPeer
         )
         process = ProcessBuilder(command).apply {
             // The daemon links the shared libraries shipped beside it in nativeLibraryDir.
@@ -171,14 +178,14 @@ object NativeLaunch {
      * the same `-prune` rule as the glibc backend — the depth is fixed for the life of a chain
      * database, because Core refuses to reuse one built under another mode.
      */
-    fun coreArguments(conf: String, dataDir: String, rpcPort: Int, pruneMiB: Int, network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET): List<String> =
+    fun coreArguments(conf: String, dataDir: String, rpcPort: Int, pruneMiB: Int, network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET, testnetPeer: String? = null): List<String> =
         listOf(
             "-conf=$conf",
             "-datadir=$dataDir",
             "-rpcport=$rpcPort",
             "-daemon=0",
             "-prune=$pruneMiB"
-        ) + RuntimeBackend.networkArguments(network)
+        ) + RuntimeBackend.networkArguments(network, testnetPeer)
 
     /** Convenience overload for callers that only know whether testnet is requested. */
     fun coreArguments(conf: String, dataDir: String, rpcPort: Int, pruneMiB: Int, testnet: Boolean): List<String> =

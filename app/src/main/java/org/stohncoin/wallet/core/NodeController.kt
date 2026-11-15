@@ -25,6 +25,7 @@ import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.runtime.RuntimeBackendFactory
 import org.stohncoin.wallet.runtime.RuntimeInstaller
 import org.stohncoin.wallet.runtime.RuntimeManifest
+import org.stohncoin.wallet.runtime.TestnetPeer
 import org.stohncoin.wallet.wallet.BackupManifest
 import org.stohncoin.wallet.wallet.CoreWalletMigration
 import org.stohncoin.wallet.wallet.WalletBackupManager
@@ -97,7 +98,7 @@ class NodeController private constructor(context: Context) : SendGateway {
                     _state.value = State(status = Status.STARTING, message = "Installing Full Mode runtime…")
                     RuntimeInstaller.installIfNeeded(appContext)
                     _state.value = State(status = Status.STARTING, message = "Starting Stohn Core…")
-                    started = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB, activeNetwork)
+                    started = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB, activeNetwork, testnetPeer())
                     started.start()
                     backend = started
                     logDiagnostic("startCoreFromService", "backend created on ${activeNetwork.name}")
@@ -414,6 +415,24 @@ class NodeController private constructor(context: Context) : SendGateway {
     val network: RuntimeBackend.Network get() = activeNetwork
     fun network(): RuntimeBackend.Network = activeNetwork
 
+    /** Optional peer Core dials on testnet, because Stohn testnet ships without seeds. */
+    fun testnetPeer(): String? = prefs.getString(KEY_TESTNET_PEER, null)
+
+    /** Saves a testnet peer in host[:port] form; blank clears it. Restarts a running testnet node. */
+    suspend fun setTestnetPeer(raw: String?) = withContext(Dispatchers.IO) {
+        val peer = TestnetPeer.normalize(raw)
+        prefs.edit(commit = true) {
+            if (peer == null) remove(KEY_TESTNET_PEER) else putString(KEY_TESTNET_PEER, peer)
+        }
+        if (activeNetwork == RuntimeBackend.Network.TESTNET &&
+            (_state.value.isRunning || _state.value.status == Status.STOPPING)
+        ) {
+            stopCoreInPlace("Applying testnet peer…")
+            userStopped = false
+            startCoreFromService()
+        }
+    }
+
     /**
      * Switches network by stopping the node first. Each network keeps its own chain data under
      * Core's network subdirectory, so the downloaded chain is not deleted here.
@@ -423,23 +442,7 @@ class NodeController private constructor(context: Context) : SendGateway {
         try {
         if (network == activeNetwork) return@withContext
         val wasRunning = _state.value.isRunning || _state.value.status == Status.STOPPING
-        if (wasRunning) {
-            // Restart Core in place instead of tearing down the foreground service. Tearing the
-            // service down and starting a new one races the old onDestroy against the new start,
-            // which can leave the controller with no backend and close the app.
-            val oldBackend = backend
-            backend = null
-            _state.value = State(status = Status.STOPPING, message = "Switching network…")
-            // Wait for the start/poll coroutine to finish so it cannot race the new backend.
-            startJob?.cancelAndJoin()
-            startJob = null
-            try {
-                oldBackend?.stop()
-            } catch (t: Throwable) {
-                Log.e("NodeController", "Failed to stop Core while switching network", t)
-            }
-            delay(500)
-        }
+        if (wasRunning) stopCoreInPlace("Switching network…")
         prefs.edit(commit = true) { putString(KEY_NETWORK, network.name) }
         activeNetwork = network
         // Each network has its own wallet namespace; do not carry a mainnet wallet name onto testnet.
@@ -454,6 +457,24 @@ class NodeController private constructor(context: Context) : SendGateway {
             logDiagnostic("applyNetwork", "failed", t)
             throw t
         }
+    }
+
+    /**
+     * Stops Core without tearing down the foreground service. Tearing the service down and
+     * starting a new one races the old onDestroy against the new start.
+     */
+    private suspend fun stopCoreInPlace(message: String) {
+        val oldBackend = backend
+        backend = null
+        _state.value = State(status = Status.STOPPING, message = message)
+        startJob?.cancelAndJoin()
+        startJob = null
+        try {
+            oldBackend?.stop()
+        } catch (t: Throwable) {
+            Log.e("NodeController", "Failed to stop Core", t)
+        }
+        delay(500)
     }
 
     private fun logDiagnostic(tag: String, message: String, throwable: Throwable? = null) =
@@ -540,6 +561,7 @@ class NodeController private constructor(context: Context) : SendGateway {
         private const val KEY_CREATED_HEIGHT = "created_height:"
         private const val KEY_PRUNE_MODE = "prune_mode"
         private const val KEY_NETWORK = "network"
+        private const val KEY_TESTNET_PEER = "testnet_peer"
         private const val DEFAULT_WALLET_NAME = "stohn-wallet"
         private const val DIAGNOSTICS_FILE = "node_diagnostics.log"
         private const val DIAGNOSTICS_MAX_BYTES = 512L * 1024L

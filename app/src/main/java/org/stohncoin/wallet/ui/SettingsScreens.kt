@@ -51,6 +51,7 @@ import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
 import org.stohncoin.wallet.core.NodeStorage
 import org.stohncoin.wallet.runtime.RuntimeBackend
+import org.stohncoin.wallet.runtime.TestnetPeer
 import org.stohncoin.wallet.wallet.Amounts
 import org.stohncoin.wallet.wallet.BackupVerification
 import org.stohncoin.wallet.wallet.WalletRpc
@@ -104,13 +105,16 @@ fun NodeStatusPage(
     freeBytes: Long?,
     pruneMode: NodeStorage.Mode,
     network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET,
+    testnetPeer: String? = null,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onPruneMode: (NodeStorage.Mode) -> Unit,
-    onNetwork: (RuntimeBackend.Network) -> Unit = {}
+    onNetwork: (RuntimeBackend.Network) -> Unit = {},
+    onTestnetPeer: (String?) -> Unit = {}
 ) {
     var showStorageDialog by remember { mutableStateOf(false) }
     var showNetworkDialog by remember { mutableStateOf(false) }
+    var showPeerDialog by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1B28)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3549))) {
             Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -126,6 +130,10 @@ fun NodeStatusPage(
                 NodeFact("Connections", "${state.peers} peers")
                 NodeFact("Network", network.label)
                 TextButton(onClick = { showNetworkDialog = true }) { Text("Change network", color = Electric) }
+                if (network == RuntimeBackend.Network.TESTNET) {
+                    NodeFact("Testnet peer", testnetPeer ?: "None set")
+                    TextButton(onClick = { showPeerDialog = true }) { Text("Set testnet peer", color = Electric) }
+                }
                 NodeFact("Node", "Local Full Node")
                 NodeFact("Sync", nodeSyncLabel(state))
                 HorizontalDivider(color = Color(0xFF203244))
@@ -165,6 +173,58 @@ fun NodeStatusPage(
             }
         )
     }
+    if (showPeerDialog) {
+        TestnetPeerDialog(
+            current = testnetPeer,
+            onDismiss = { showPeerDialog = false },
+            onSave = { peer ->
+                showPeerDialog = false
+                onTestnetPeer(peer)
+            }
+        )
+    }
+}
+
+
+/** Stohn testnet has no seeds, so an optional user-supplied peer is the only way to connect. */
+@Composable
+private fun TestnetPeerDialog(current: String?, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
+    var peer by remember(current) { mutableStateOf(current.orEmpty()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Testnet peer") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Stohn Core's testnet has no DNS or fixed seeds, so it stays at 0 peers unless you supply one. Enter a reachable testnet node as host or host:port. Leave blank to clear it.",
+                    color = DarkMuted,
+                    fontSize = 11.sp
+                )
+                OutlinedTextField(
+                    value = peer,
+                    onValueChange = { peer = it; error = null },
+                    singleLine = true,
+                    label = { Text("host or host:port") },
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        autoCorrect = false,
+                        capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None
+                    )
+                )
+                error?.let { Text(it, color = Danger, fontSize = 11.sp) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                try {
+                    onSave(TestnetPeer.normalize(peer))
+                } catch (e: IllegalArgumentException) {
+                    error = e.message ?: "Invalid peer"
+                }
+            }) { Text("Save") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 

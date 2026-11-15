@@ -110,6 +110,19 @@ class NodeControllerNetworkTest {
     }
 
     @Test
+    fun testnetPeerPersistsAndClears() {
+        val node = node()
+        kotlinx.coroutines.runBlocking {
+            node.setTestnetPeer("node.example.org:47218")
+        }
+        assertEquals("node.example.org:47218", node.testnetPeer())
+        kotlinx.coroutines.runBlocking {
+            node.setTestnetPeer("")
+        }
+        assertEquals(null, node.testnetPeer())
+    }
+
+    @Test
     fun restoreWalletFallsBackWhenSavedWalletMissing() {
         val node = node()
         val prefs = prefs(node)

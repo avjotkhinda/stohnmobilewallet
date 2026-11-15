@@ -114,8 +114,13 @@ interface RuntimeBackend {
         /** The node data directory, shared with the controller so both sides measure the same tree. */
         fun dataDirectory(context: Context): File = File(File(context.filesDir, "fullmode"), "stohn-data")
 
-        /** Network selection for the Core command line. */
-        fun networkArguments(network: Network): List<String> = listOfNotNull(network.cliFlag())
+        /** Network selection plus the optional user-supplied testnet peer. */
+        fun networkArguments(network: Network, testnetPeer: String? = null): List<String> = buildList {
+            network.cliFlag()?.let(::add)
+            if (network == Network.TESTNET) {
+                TestnetPeer.normalize(testnetPeer)?.let { add("-addnode=$it") }
+            }
+        }
 
         /** Core's configuration: loopback-only RPC, single instance, no daemon fork. */
         fun coreConfig() = """
@@ -163,7 +168,7 @@ fun artifactSha256(file: File): String {
  * nobody notices is exactly what the pins exist to prevent.
  */
 object RuntimeBackendFactory {
-    fun create(context: Context, pruneMiB: Int = 0, network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET): RuntimeBackend {
+    fun create(context: Context, pruneMiB: Int = 0, network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET, testnetPeer: String? = null): RuntimeBackend {
         val nativeDir = File(context.applicationInfo.nativeLibraryDir)
         val pins = SignedRuntimeManifest.effective(context)
         val decision = NativeLaunch.decide(
@@ -173,8 +178,8 @@ object RuntimeBackendFactory {
             walletToolPin = pins.nativeWalletToolSha256
         )
         return when (decision) {
-            is NativeLaunch.Ready -> NativeRuntime(context, pruneMiB, pins, network)
-            NativeLaunch.NoNativeBuild -> EmbeddedLinuxRuntime(context, pruneMiB, network)
+            is NativeLaunch.Ready -> NativeRuntime(context, pruneMiB, pins, network, testnetPeer)
+            NativeLaunch.NoNativeBuild -> EmbeddedLinuxRuntime(context, pruneMiB, network, testnetPeer)
             else -> error(decision.refusal)
         }
     }
