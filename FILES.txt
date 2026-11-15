@@ -91,6 +91,7 @@
 ./app/src/test/java/org/stohncoin/wallet/ui/QrTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/SendPageTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookEncryptionTest.kt
+./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookFuzzTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookParseTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookRoundTripTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AmountsTest.kt
