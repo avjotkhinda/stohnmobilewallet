@@ -331,7 +331,7 @@ fun DiagnosticsPage() {
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
         item {
             Text("Node diagnostics", fontSize = 25.sp, fontWeight = FontWeight.Bold)
-            Text("Most recent 64 KiB of the persistent node and crash log", color = DarkMuted, fontSize = 12.sp)
+            Text("Most recent 64 KiB of the persistent node and crash log, including the rotated log", color = DarkMuted, fontSize = 12.sp)
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

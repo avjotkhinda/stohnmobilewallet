@@ -73,6 +73,7 @@
 ./app/src/main/res/xml/file_paths.xml
 ./app/src/main/res/xml/network_security_config.xml
 ./app/src/test/java/org/stohncoin/wallet/core/NodeControllerNetworkTest.kt
+./app/src/test/java/org/stohncoin/wallet/core/NodeDiagnosticsTest.kt
 ./app/src/test/java/org/stohncoin/wallet/core/NodeStorageTest.kt
 ./app/src/test/java/org/stohncoin/wallet/core/SyncProgressTest.kt
 ./app/src/test/java/org/stohncoin/wallet/runtime/AppVersionSingleSourceTest.kt

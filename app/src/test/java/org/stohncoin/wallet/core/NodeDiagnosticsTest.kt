@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -13,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.stohncoin.wallet.MainActivity
+import org.stohncoin.wallet.ui.readNodeDiagnostics
 
 @RunWith(RobolectricTestRunner::class)
 class NodeDiagnosticsTest {
@@ -60,6 +62,30 @@ class NodeDiagnosticsTest {
         val log = logFile.readText()
         assertTrue(log.contains("first line"))
         assertTrue(log.contains("second line"))
+    }
+
+    @Test
+    fun diagnosticsIncludeRotatedLogBeforeCurrentLog() {
+        rotatedFile.writeText("older entry\n")
+        logFile.writeText("newer entry\n")
+
+        val text = readNodeDiagnostics(context)
+
+        assertTrue(text.contains("older entry"))
+        assertTrue(text.contains("newer entry"))
+        assertTrue(text.indexOf("older entry") < text.indexOf("newer entry"))
+    }
+
+    @Test
+    fun cappedDiagnosticsKeepTheNewestBytesAcrossRotation() {
+        rotatedFile.writeText("A".repeat(1000))
+        logFile.writeText("B".repeat(1000))
+
+        val text = readNodeDiagnostics(context, 500)
+
+        assertEquals(500, text.length)
+        assertFalse(text.contains("A"))
+        assertTrue(text.startsWith("B"))
     }
 
     @Test

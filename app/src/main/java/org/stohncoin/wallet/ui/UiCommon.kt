@@ -227,18 +227,36 @@ fun shareCrashLog(context: Context, chooserTitle: String) {
 }
 
 
-/** Contents of the persistent node/crash diagnostics written by NodeController. */
+/** Contents of the persistent node/crash diagnostics, including any rotated log. */
 fun readNodeDiagnostics(context: Context, maxBytes: Int? = null): String = runCatching {
-    val file = File(context.filesDir, "node_diagnostics.log")
-    if (!file.isFile) return@runCatching ""
-    val start = maxBytes?.let { (file.length() - it).coerceAtLeast(0L) } ?: 0L
-    java.io.RandomAccessFile(file, "r").use { reader ->
-        reader.seek(start)
-        val bytes = ByteArray((file.length() - start).toInt())
-        reader.readFully(bytes)
-        String(bytes, Charsets.UTF_8)
+    val current = File(context.filesDir, "node_diagnostics.log")
+    val rotated = File(context.filesDir, "node_diagnostics.log.1")
+    if (maxBytes == null) {
+        buildString {
+            if (rotated.isFile) append(rotated.readText())
+            if (current.isFile) append(current.readText())
+        }
+    } else {
+        val currentLength = if (current.isFile) current.length() else 0L
+        val fromCurrent = minOf(maxBytes.toLong(), currentLength)
+        val fromRotated = maxBytes - fromCurrent
+        val older = if (fromRotated > 0L) readFileTail(rotated, fromRotated) else ByteArray(0)
+        val newer = if (fromCurrent > 0L) readFileTail(current, fromCurrent) else ByteArray(0)
+        String(older + newer, Charsets.UTF_8)
     }
 }.getOrDefault("")
+
+
+private fun readFileTail(file: File, maxBytes: Long): ByteArray {
+    if (!file.isFile || maxBytes <= 0L) return ByteArray(0)
+    val length = file.length()
+    val start = (length - maxBytes).coerceAtLeast(0L)
+    val size = (length - start).toInt()
+    return java.io.RandomAccessFile(file, "r").use { reader ->
+        reader.seek(start)
+        ByteArray(size).also { reader.readFully(it) }
+    }
+}
 
 
 /** Removes the current and rotated diagnostics logs. */
