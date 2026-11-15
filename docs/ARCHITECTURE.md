@@ -41,3 +41,13 @@ New artifacts require a **new pin**; there is no silent swap path. The runtime-u
 - UI `MainActivity` binds to the service and displays sync progress (`syncPercent`).
 - User controls (Start/Stop) go through `LockGate` — a PIN is required to start unless `startUnlessStopped` is set.
 - Stopping the node clears `blocks`, `chainstate`, and `indexes` (never `wallets` or config) via the tested `NodeStorage` allowlist.
+
+## Network and peers
+
+Stohn Core's testnet chain parameters clear both its DNS seeds and fixed seeds, so a fresh testnet node has no bootstrap peer and normally shows **0 peers**. That is a property of the Stohn network, not an app fault.
+
+- **Mainnet** uses DNS discovery only (`dnsseed=1`, `discover=1`) with no peer IPs bundled in the app. If it stays at 0 peers, Core's seeds may be stale; supply a reachable peer manually.
+- **Optional peer**: open **Node Status**, tap **Set custom peer**, and enter `host` or `host:port` (bracket literal IPv6 addresses, e.g. `[2001:db8::1]:37218`). Save with a blank field to clear it. The value is stored per network for the active chain, passed to Core as `-addnode=<peer>`, and a running node restarts to apply the change.
+- **Testnet** remains at 0 peers until a reachable testnet peer is entered this way.
+
+Connection and DNS failures are captured in **Settings → Node diagnostics** under the Core output section (`core_output.log`).
