@@ -14,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.stohncoin.wallet.MainActivity
+import org.stohncoin.wallet.runtime.CoreLog
 import org.stohncoin.wallet.ui.readNodeDiagnostics
 
 @RunWith(RobolectricTestRunner::class)
@@ -30,6 +31,8 @@ class NodeDiagnosticsTest {
         rotatedFile = File(context.filesDir, "node_diagnostics.log.1")
         logFile.delete()
         rotatedFile.delete()
+        coreFile().delete()
+        coreRotatedFile().delete()
         resetCrashHandlerFlag()
     }
 
@@ -37,6 +40,8 @@ class NodeDiagnosticsTest {
     fun tearDown() {
         logFile.delete()
         rotatedFile.delete()
+        coreFile().delete()
+        coreRotatedFile().delete()
         resetCrashHandlerFlag()
     }
 
@@ -89,6 +94,19 @@ class NodeDiagnosticsTest {
     }
 
     @Test
+    fun coreOutputRotatesAndAppearsInDiagnostics() {
+        coreFile().writeText("x".repeat(256 * 1024))
+
+        CoreLog.append(context, "dns error connecting to seed")
+
+        assertTrue(coreRotatedFile().isFile)
+        assertTrue(coreFile().readText().contains("dns error connecting to seed"))
+        val text = readNodeDiagnostics(context)
+        assertTrue(text.contains("=== Core output ==="))
+        assertTrue(text.contains("dns error connecting to seed"))
+    }
+
+    @Test
     fun crashHandlerIsInstalledOnlyOncePerProcess() {
         val savedHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { _, _ -> }
@@ -108,6 +126,10 @@ class NodeDiagnosticsTest {
             Thread.setDefaultUncaughtExceptionHandler(savedHandler)
         }
     }
+
+    private fun coreFile(): File = File(context.filesDir, CoreLog.FILE_NAME)
+
+    private fun coreRotatedFile(): File = File(context.filesDir, CoreLog.ROTATED_FILE_NAME)
 
     private fun resetCrashHandlerFlag() {
         val field = MainActivity::class.java.getDeclaredField("crashHandlerInstalled")

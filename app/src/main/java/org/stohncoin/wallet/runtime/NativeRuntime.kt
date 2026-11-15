@@ -66,7 +66,14 @@ class NativeRuntime(
             environment()["LD_LIBRARY_PATH"] = nativeDir.absolutePath
         }.redirectErrorStream(true).start()
         // Drain Core output so a full pipe can never stall the node.
-        Thread { process?.inputStream?.bufferedReader()?.forEachLine { } }.start()
+        Thread {
+            try {
+                process?.inputStream?.bufferedReader()?.use { reader ->
+                    reader.forEachLine { CoreLog.append(context, it) }
+                }
+            } catch (_: Throwable) {
+            }
+        }.start()
     }
 
     override suspend fun stop() = withContext(Dispatchers.IO) {

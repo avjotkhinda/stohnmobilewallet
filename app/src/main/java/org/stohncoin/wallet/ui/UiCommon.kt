@@ -227,11 +227,24 @@ fun shareCrashLog(context: Context, chooserTitle: String) {
 }
 
 
-/** Contents of the persistent node/crash diagnostics, including any rotated log. */
+/** Contents of the persistent node/crash diagnostics plus Core output, including rotated files. */
 fun readNodeDiagnostics(context: Context, maxBytes: Int? = null): String = runCatching {
-    val current = File(context.filesDir, "node_diagnostics.log")
-    val rotated = File(context.filesDir, "node_diagnostics.log.1")
-    if (maxBytes == null) {
+    val node = readRotatedLog(context, "node_diagnostics.log", "node_diagnostics.log.1", maxBytes)
+    val core = readRotatedLog(context, "core_output.log", "core_output.log.1", maxBytes)
+    if (core.isBlank()) node else "$node\n\n=== Core output ===\n$core"
+}.getOrDefault("")
+
+
+/** Recent Core stdout/stderr, including the rotated file. */
+fun readCoreOutput(context: Context, maxBytes: Int? = null): String = runCatching {
+    readRotatedLog(context, "core_output.log", "core_output.log.1", maxBytes)
+}.getOrDefault("")
+
+
+private fun readRotatedLog(context: Context, currentName: String, rotatedName: String, maxBytes: Int?): String {
+    val current = File(context.filesDir, currentName)
+    val rotated = File(context.filesDir, rotatedName)
+    return if (maxBytes == null) {
         buildString {
             if (rotated.isFile) append(rotated.readText())
             if (current.isFile) append(current.readText())
@@ -244,7 +257,7 @@ fun readNodeDiagnostics(context: Context, maxBytes: Int? = null): String = runCa
         val newer = if (fromCurrent > 0L) readFileTail(current, fromCurrent) else ByteArray(0)
         String(older + newer, Charsets.UTF_8)
     }
-}.getOrDefault("")
+}
 
 
 private fun readFileTail(file: File, maxBytes: Long): ByteArray {
@@ -264,6 +277,8 @@ fun clearNodeDiagnostics(context: Context) {
     runCatching {
         File(context.filesDir, "node_diagnostics.log").delete()
         File(context.filesDir, "node_diagnostics.log.1").delete()
+        File(context.filesDir, "core_output.log").delete()
+        File(context.filesDir, "core_output.log.1").delete()
     }
 }
 

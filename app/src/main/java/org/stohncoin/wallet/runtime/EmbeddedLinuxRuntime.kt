@@ -95,7 +95,9 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
         // interrupts this read, which must not surface as an uncaught exception.
         Thread {
             try {
-                process?.inputStream?.bufferedReader()?.use { reader -> reader.forEachLine { } }
+                process?.inputStream?.bufferedReader()?.use { reader ->
+                    reader.forEachLine { CoreLog.append(context, it) }
+                }
             } catch (_: Throwable) {
             }
         }.start()
