@@ -81,9 +81,10 @@ The controls above describe what the source does, not what has been proven. The 
 - No instrumented or device tests, so unlock, send and restore are exercised only by unit tests
   against fakes.
 - Release signing secrets are unset, so the release job builds and then skips signing.
-- The runtime update path (`RuntimeManifestTransport` plus `SignedRuntimeManifest`) is implemented
-  but inert: `MANIFEST_URL` and `RELEASE_PUBLIC_KEY` are blank, so no signed update can be fetched
-  or applied. The pins in force are the ones compiled into the APK.
+- The runtime update path (`RuntimeManifestTransport` plus `SignedRuntimeManifest`) is live:
+  `RELEASE_PUBLIC_KEY` is published and `MANIFEST_URL` points at a signed v2 manifest, so a newer
+  document is fetched, verified and staged on first run. The pins in force are still the ones
+  compiled into the APK until that document applies.
 - `RuntimeInstaller` still fetches the Debian rootfs even when the native backend would be chosen,
   and the bionic `stohncoind` build has not been produced, so PRoot remains the only live path.
 - A rooted or compromised device defeats the app lock at runtime; the PIN is a local access

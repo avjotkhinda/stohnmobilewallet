@@ -40,5 +40,5 @@ object RuntimeManifest {
     // no request is made and the pins stay the ones this APK was built with. Set it together with
     // RELEASE_PUBLIC_KEY, and only to a plain HTTPS URL: a document that does not verify against
     // that key is refused, so publishing the address alone changes nothing.
-    const val MANIFEST_URL = ""
+    const val MANIFEST_URL = "https://raw.githubusercontent.com/avjotkhinda/stohnmobilewallet/main/runtime/manifest.txt"
 }
