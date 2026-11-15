@@ -442,22 +442,8 @@ class NodeController private constructor(context: Context) : SendGateway {
         }
     }
 
-    private fun logDiagnostic(tag: String, message: String, throwable: Throwable? = null) {
-        try {
-            val file = File(appContext.filesDir, "node_diagnostics.log")
-            val line = buildString {
-                append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date()))
-                append(" [")
-                append(tag)
-                append("] ")
-                append(message)
-                append('\n')
-                throwable?.let { append(android.util.Log.getStackTraceString(it)); append('\n') }
-            }
-            synchronized(this) { file.appendText(line) }
-        } catch (_: Throwable) {
-        }
-    }
+    private fun logDiagnostic(tag: String, message: String, throwable: Throwable? = null) =
+        appendDiagnostic(appContext, tag, message, throwable)
 
     /** Bytes and files the node's data directory currently holds. */
     suspend fun chainUsage(): NodeStorage.Usage = withContext(Dispatchers.IO) { NodeStorage.measure(dataDir) }
@@ -541,6 +527,36 @@ class NodeController private constructor(context: Context) : SendGateway {
         private const val KEY_PRUNE_MODE = "prune_mode"
         private const val KEY_NETWORK = "network"
         private const val DEFAULT_WALLET_NAME = "stohn-wallet"
+        private const val DIAGNOSTICS_FILE = "node_diagnostics.log"
+        private const val DIAGNOSTICS_MAX_BYTES = 512L * 1024L
+        private val DIAGNOSTICS_LOCK = Any()
+
+        /** Appends to the persistent diagnostics log, rotating it once it exceeds 512 KiB. */
+        fun appendDiagnostic(context: Context, tag: String, message: String, throwable: Throwable? = null) {
+            try {
+                val dir = context.filesDir
+                val file = File(dir, DIAGNOSTICS_FILE)
+                val line = buildString {
+                    append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date()))
+                    append(" [")
+                    append(tag)
+                    append("] ")
+                    append(message)
+                    append('\n')
+                    throwable?.let { append(android.util.Log.getStackTraceString(it)); append('\n') }
+                }
+                synchronized(DIAGNOSTICS_LOCK) {
+                    if (file.length() >= DIAGNOSTICS_MAX_BYTES) {
+                        val rotated = File(dir, "$DIAGNOSTICS_FILE.1")
+                        if (rotated.exists()) rotated.delete()
+                        if (!file.renameTo(rotated)) file.writeText("")
+                    }
+                    file.appendText(line)
+                }
+            } catch (_: Throwable) {
+            }
+        }
+
         fun walletNameKey(network: Network): String = "active_wallet_name_${network.name}"
         typealias Network = RuntimeBackend.Network
         @Volatile private var instance: NodeController? = null
