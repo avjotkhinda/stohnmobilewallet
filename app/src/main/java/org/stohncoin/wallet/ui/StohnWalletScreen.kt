@@ -438,6 +438,7 @@ fun StohnWalletScreen(node: NodeController) {
                             chainUsage = chainUsage,
                             freeBytes = freeSpace,
                             pruneMode = pruneMode,
+                            network = node.network(),
                             onStart = { node.start() },
                             onStop = { node.stop() },
                             onPruneMode = { mode ->
@@ -451,6 +452,15 @@ fun StohnWalletScreen(node: NodeController) {
                                             Toast.makeText(context, "Storage mode set to ${mode.label}", Toast.LENGTH_LONG).show()
                                         }
                                         .onFailure { Toast.makeText(context, "Storage mode unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
+                                    busy = false
+                                }
+                            },
+                            onNetwork = { network ->
+                                scope.launch {
+                                    busy = true
+                                    runCatching { node.applyNetwork(network) }
+                                        .onSuccess { Toast.makeText(context, "Network set to ${network.label}", Toast.LENGTH_LONG).show() }
+                                        .onFailure { Toast.makeText(context, "Network unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
                                     busy = false
                                 }
                             }

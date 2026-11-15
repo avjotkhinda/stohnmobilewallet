@@ -48,6 +48,7 @@ import kotlinx.coroutines.launch
 import org.stohncoin.wallet.R
 import org.stohncoin.wallet.core.NodeController
 import org.stohncoin.wallet.core.NodeStorage
+import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.wallet.Amounts
 import org.stohncoin.wallet.wallet.BackupVerification
 import org.stohncoin.wallet.wallet.WalletRpc
@@ -100,11 +101,14 @@ fun NodeStatusPage(
     chainUsage: NodeStorage.Usage?,
     freeBytes: Long?,
     pruneMode: NodeStorage.Mode,
+    network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    onPruneMode: (NodeStorage.Mode) -> Unit
+    onPruneMode: (NodeStorage.Mode) -> Unit,
+    onNetwork: (RuntimeBackend.Network) -> Unit = {}
 ) {
     var showStorageDialog by remember { mutableStateOf(false) }
+    var showNetworkDialog by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1B28)), border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3549))) {
             Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
@@ -118,7 +122,8 @@ fun NodeStatusPage(
                 NodeFact("Block Height", state.blocks.toString())
                 NodeFact("Headers", state.headers.toString())
                 NodeFact("Connections", "${state.peers} peers")
-                NodeFact("Network", "Mainnet")
+                NodeFact("Network", network.label)
+                TextButton(onClick = { showNetworkDialog = true }) { Text("Change network", color = Electric) }
                 NodeFact("Node", "Local Full Node")
                 NodeFact("Sync", nodeSyncLabel(state))
                 HorizontalDivider(color = Color(0xFF203244))
@@ -148,6 +153,43 @@ fun NodeStatusPage(
             }
         )
     }
+    if (showNetworkDialog) {
+        NetworkModeDialog(
+            current = network,
+            onDismiss = { showNetworkDialog = false },
+            onSelect = { mode ->
+                showNetworkDialog = false
+                if (mode != network) onNetwork(mode)
+            }
+        )
+    }
+}
+
+
+/** Lets the user pick which chain the node runs. */
+@Composable
+private fun NetworkModeDialog(current: RuntimeBackend.Network, onDismiss: () -> Unit, onSelect: (RuntimeBackend.Network) -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Network") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Switching networks stops the node and uses that chain's own data. Wallets are network-specific.", color = DarkMuted, fontSize = 11.sp)
+                RuntimeBackend.Network.values().forEach { mode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(mode) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = current == mode, onClick = { onSelect(mode) })
+                        Text(mode.label, fontSize = 14.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 

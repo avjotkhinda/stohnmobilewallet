@@ -48,6 +48,9 @@ class NodeController private constructor(context: Context) : SendGateway {
     @Volatile private var backend: RuntimeBackend? = null
     @Volatile private var userStopped = false
     @Volatile private var activeWalletName: String? = prefs.getString(KEY_WALLET_NAME, null)
+    @Volatile private var activeNetwork: RuntimeBackend.Network =
+        RuntimeBackend.Network.values().firstOrNull { it.name == prefs.getString(KEY_NETWORK, null) }
+            ?: RuntimeBackend.Network.MAINNET
     private var startJob: Job? = null
 
     data class State(
@@ -88,7 +91,7 @@ class NodeController private constructor(context: Context) : SendGateway {
                     _state.value = State(status = Status.STARTING, message = "Installing Full Mode runtime…")
                     RuntimeInstaller.installIfNeeded(appContext)
                     _state.value = State(status = Status.STARTING, message = "Starting Stohn Core…")
-                    val b = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB)
+                    val b = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB, activeNetwork)
                     b.start()
                     backend = b
                     waitForRpc(b)
@@ -370,6 +373,33 @@ class NodeController private constructor(context: Context) : SendGateway {
     fun pruneMode(): NodeStorage.Mode =
         NodeStorage.Mode.values().firstOrNull { it.name == prefs.getString(KEY_PRUNE_MODE, null) } ?: NodeStorage.Mode.FULL
 
+    /** The network the next Core start will use. */
+    val network: RuntimeBackend.Network get() = activeNetwork
+    fun network(): RuntimeBackend.Network = activeNetwork
+
+    /**
+     * Switches network by stopping the node first. Each network keeps its own chain data under
+     * Core's network subdirectory, so the downloaded chain is not deleted here.
+     */
+    suspend fun applyNetwork(network: RuntimeBackend.Network) = withContext(Dispatchers.IO) {
+        if (network == activeNetwork) return@withContext
+        val wasRunning = _state.value.isRunning || _state.value.status == Status.STOPPING
+        if (wasRunning) {
+            stop()
+            repeat(60) {
+                if (_state.value.status == Status.STOPPED) return@repeat
+                delay(250)
+            }
+            check(_state.value.status == Status.STOPPED) {
+                "The node did not stop, so the network was left alone"
+            }
+            delay(1200)
+        }
+        prefs.edit { putString(KEY_NETWORK, network.name) }
+        activeNetwork = network
+        if (wasRunning) start()
+    }
+
     /** Bytes and files the node's data directory currently holds. */
     suspend fun chainUsage(): NodeStorage.Usage = withContext(Dispatchers.IO) { NodeStorage.measure(dataDir) }
 
@@ -451,7 +481,9 @@ class NodeController private constructor(context: Context) : SendGateway {
         private const val KEY_SENDS_SINCE_BACKUP = "sends_since_backup"
         private const val KEY_CREATED_HEIGHT = "created_height:"
         private const val KEY_PRUNE_MODE = "prune_mode"
+        private const val KEY_NETWORK = "network"
         private const val DEFAULT_WALLET_NAME = "stohn-wallet"
+        typealias Network = RuntimeBackend.Network
         @Volatile private var instance: NodeController? = null
         fun get(context: Context): NodeController = instance ?: synchronized(this) {
             instance ?: NodeController(context).also { instance = it }

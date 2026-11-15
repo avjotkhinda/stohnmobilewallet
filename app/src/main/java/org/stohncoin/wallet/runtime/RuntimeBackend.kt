@@ -15,6 +15,15 @@ import kotlinx.coroutines.withContext
  * against this interface only, so changing which runtime runs underneath never touches a call site.
  */
 interface RuntimeBackend {
+    /** Which chain this backend is running. Testnet uses Core's built-in test chain. */
+    enum class Network(val label: String) {
+        MAINNET("Mainnet"),
+        TESTNET("Testnet");
+
+        /** Core CLI flag selecting this network, or null for the default (mainnet). */
+        fun cliFlag(): String? = if (this == TESTNET) "-testnet" else null
+    }
+
     data class NodeInfo(val blocks: Long, val headers: Long, val peers: Int, val ibd: Boolean, val version: String = "unknown")
     data class ToolResult(val exitCode: Int, val stdout: String, val stderr: String)
 
@@ -140,7 +149,7 @@ fun artifactSha256(file: File): String {
  * nobody notices is exactly what the pins exist to prevent.
  */
 object RuntimeBackendFactory {
-    fun create(context: Context, pruneMiB: Int = 0): RuntimeBackend {
+    fun create(context: Context, pruneMiB: Int = 0, network: RuntimeBackend.Network = RuntimeBackend.Network.MAINNET): RuntimeBackend {
         val nativeDir = File(context.applicationInfo.nativeLibraryDir)
         val pins = SignedRuntimeManifest.effective(context)
         val decision = NativeLaunch.decide(
@@ -150,8 +159,8 @@ object RuntimeBackendFactory {
             walletToolPin = pins.nativeWalletToolSha256
         )
         return when (decision) {
-            is NativeLaunch.Ready -> NativeRuntime(context, pruneMiB, pins)
-            NativeLaunch.NoNativeBuild -> EmbeddedLinuxRuntime(context, pruneMiB)
+            is NativeLaunch.Ready -> NativeRuntime(context, pruneMiB, pins, network)
+            NativeLaunch.NoNativeBuild -> EmbeddedLinuxRuntime(context, pruneMiB, network)
             else -> error(decision.refusal)
         }
     }
