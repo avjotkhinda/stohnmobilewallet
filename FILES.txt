@@ -44,6 +44,7 @@
 ./app/src/main/java/org/stohncoin/wallet/security/LockGate.kt
 ./app/src/main/java/org/stohncoin/wallet/security/PinHasher.kt
 ./app/src/main/java/org/stohncoin/wallet/security/PinThrottle.kt
+./app/src/main/java/org/stohncoin/wallet/ui/CoinsScreen.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/LockScreen.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/SendReceiveScreens.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/SettingsScreens.kt
