@@ -6,10 +6,13 @@ import android.content.Intent
 import android.os.StatFs
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -89,22 +92,30 @@ class NodeController private constructor(context: Context) : SendGateway {
         startJob = scope.launch {
             startMutex.withLock {
                 if (backend != null) return@withLock
+                var started: RuntimeBackend? = null
                 try {
                     _state.value = State(status = Status.STARTING, message = "Installing Full Mode runtime…")
                     RuntimeInstaller.installIfNeeded(appContext)
                     _state.value = State(status = Status.STARTING, message = "Starting Stohn Core…")
-                    val b = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB, activeNetwork)
-                    b.start()
-                    backend = b
+                    started = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB, activeNetwork)
+                    started.start()
+                    backend = started
                     logDiagnostic("startCoreFromService", "backend created on ${activeNetwork.name}")
-                    waitForRpc(b)
-                    restoreWallet(b)
-                    poll(b)
+                    waitForRpc(started)
+                    restoreWallet(started)
+                    poll(started)
+                } catch (c: CancellationException) {
+                    // A network switch cancels this job on purpose; stop what it started and let
+                    // the switch install the new backend instead of reporting an ERROR state.
+                    logDiagnostic("startCoreFromService", "cancelled", c)
+                    withContext(NonCancellable) { runCatching { started?.stop() } }
+                    if (backend === started) backend = null
+                    throw c
                 } catch (t: Throwable) {
                     Log.e("NodeController", "startCoreFromService failed", t)
                     logDiagnostic("startCoreFromService", "failed", t)
-                    runCatching { backend?.stop() }
-                    backend = null
+                    runCatching { started?.stop() }
+                    if (backend === started) backend = null
                     _state.value = State(status = Status.ERROR, message = t.message ?: "Unable to start Core")
                 }
             }
@@ -188,12 +199,14 @@ class NodeController private constructor(context: Context) : SendGateway {
                 b.status()
             } catch (t: Throwable) {
                 Log.e("NodeController", "status RPC failed (attempt $failures)", t)
+                logDiagnostic("poll", "status RPC failed (attempt $failures)", t)
                 failures++
                 if (failures >= 20) throw t
                 delay(1000)
                 continue
             }
             failures = 0
+            logDiagnostic("poll", "blocks=${info.blocks} headers=${info.headers} peers=${info.peers} ibd=${info.ibd}")
             val ready = info.headers > 0 && info.blocks >= info.headers && !info.ibd
             _state.value = State(
                 status = if (ready) Status.READY else Status.SYNCING,
@@ -414,11 +427,12 @@ class NodeController private constructor(context: Context) : SendGateway {
             // Restart Core in place instead of tearing down the foreground service. Tearing the
             // service down and starting a new one races the old onDestroy against the new start,
             // which can leave the controller with no backend and close the app.
-            startJob?.cancel()
-            startJob = null
             val oldBackend = backend
             backend = null
             _state.value = State(status = Status.STOPPING, message = "Switching network…")
+            // Wait for the start/poll coroutine to finish so it cannot race the new backend.
+            startJob?.cancelAndJoin()
+            startJob = null
             try {
                 oldBackend?.stop()
             } catch (t: Throwable) {

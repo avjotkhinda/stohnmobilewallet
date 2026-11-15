@@ -42,7 +42,8 @@ class NativeRuntime(private val context: Context, private val pruneMiB: Int, pri
         // exec without being checked against the pin.
         NativeLaunch.requireReady(core, walletTool, pins.nativeCoreSha256, pins.nativeWalletToolSha256)
         dataDir.mkdirs()
-        if (!conf.exists()) conf.writeText(RuntimeBackend.coreConfig())
+        // The config is app-managed, so rewrite it each start to pick up network fixes.
+        conf.writeText(RuntimeBackend.coreConfig())
         // RPC listens on a fresh random loopback port for every start so another app on the
         // device cannot pre-bind a fixed, publicly known port.
         rpcPort = RuntimeBackend.reserveRpcPort()
@@ -177,7 +178,7 @@ object NativeLaunch {
             "-rpcport=$rpcPort",
             "-daemon=0",
             "-prune=$pruneMiB"
-        ) + (network.cliFlag()?.let { listOf(it) } ?: emptyList())
+        ) + RuntimeBackend.networkArguments(network)
 
     /** Convenience overload for callers that only know whether testnet is requested. */
     fun coreArguments(conf: String, dataDir: String, rpcPort: Int, pruneMiB: Int, testnet: Boolean): List<String> =

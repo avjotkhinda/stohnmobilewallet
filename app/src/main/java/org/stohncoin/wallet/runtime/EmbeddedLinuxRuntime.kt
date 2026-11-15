@@ -45,7 +45,8 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
         check(rootfs.isDirectory) { "Embedded Debian rootfs is missing" }
         check(coreBin.isFile) { "Stohn Core binary is missing" }
         coreBin.setExecutable(true)
-        if (!conf.exists()) conf.writeText(RuntimeBackend.coreConfig())
+        // The config is app-managed, so rewrite it each start to pick up network fixes.
+        conf.writeText(RuntimeBackend.coreConfig())
         writeDnsConfig()
         check(proot.isFile) { "Embedded Android PRoot is missing from nativeLibraryDir" }
         check(loader.isFile) { "Embedded PRoot loader is missing from nativeLibraryDir" }
@@ -79,7 +80,7 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
                     // Prune depth is fixed for the life of a chain database; NodeStorage clears the chain
                     // when the mode changes, because Core refuses to reuse one built under another mode.
                     "-prune=$pruneMiB"
-                ) + (network.cliFlag()?.let { listOf(it) } ?: emptyList())
+                ) + RuntimeBackend.networkArguments(network)
             ).apply {
                 environment()["PROOT_LOADER"] = loader.absolutePath
                 environment()["PROOT_TMP_DIR"] = tmp.absolutePath
@@ -90,8 +91,14 @@ class EmbeddedLinuxRuntime(private val context: Context, private val pruneMiB: I
             RuntimeTemp.purge(context.cacheDir)
             throw failure
         }
-        // Drain Core output so a full pipe can never stall the node.
-        Thread { process?.inputStream?.bufferedReader()?.forEachLine { } }.start()
+                // Drain Core output so a full pipe can never stall the node. Closing the process
+        // interrupts this read, which must not surface as an uncaught exception.
+        Thread {
+            try {
+                process?.inputStream?.bufferedReader()?.use { reader -> reader.forEachLine { } }
+            } catch (_: Throwable) {
+            }
+        }.start()
     }
 
     override suspend fun stop() = withContext(Dispatchers.IO) {
