@@ -1,6 +1,7 @@
 package org.stohncoin.wallet.wallet
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -64,6 +65,35 @@ class WalletToolArgsTest {
                 walletFormat = "sqlite"
             )
         }
+    }
+
+    @Test fun testnetFlagIsPropagated() {
+        val args = WalletToolArgs.build(
+            dataDir = "/workspace",
+            walletName = "wallet.dat",
+            command = "info",
+            testnet = true
+        )
+        assertTrue("-testnet" in args)
+    }
+
+    @Test fun networkOverloadIsPropagated() {
+        val args = WalletToolArgs.build(
+            dataDir = "/workspace",
+            walletName = "wallet.dat",
+            command = "info",
+            network = org.stohncoin.wallet.runtime.RuntimeBackend.Network.TESTNET
+        )
+        assertTrue("-testnet" in args)
+    }
+
+    @Test fun mainnetBuildHasNoTestnetFlag() {
+        val args = WalletToolArgs.build(
+            dataDir = "/workspace",
+            walletName = "wallet.dat",
+            command = "info"
+        )
+        assertFalse("-testnet" in args)
     }
 
     @Test fun unknownWalletFormatIsRefused() {

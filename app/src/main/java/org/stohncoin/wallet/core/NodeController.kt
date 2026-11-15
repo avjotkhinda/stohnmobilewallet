@@ -395,7 +395,7 @@ class NodeController private constructor(context: Context) : SendGateway {
             }
             delay(1200)
         }
-        prefs.edit { putString(KEY_NETWORK, network.name) }
+        prefs.edit(commit = true) { putString(KEY_NETWORK, network.name) }
         activeNetwork = network
         if (wasRunning) start()
     }

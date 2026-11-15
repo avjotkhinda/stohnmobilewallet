@@ -141,6 +141,38 @@ class NativeLaunchTest {
             args.any { it == "-r" || it == "-b" || it.startsWith("-b=") })
     }
 
+    @Test fun testnetCommandLineCarriesTheTestnetFlag() {
+        val args = NativeLaunch.coreArguments(
+            conf = "/data/user/0/app/files/fullmode/stohn-data/stohn.conf",
+            dataDir = "/data/user/0/app/files/fullmode/stohn-data",
+            rpcPort = 42_123,
+            pruneMiB = 550,
+            testnet = true
+        )
+        assertTrue("-testnet" in args)
+    }
+
+    @Test fun networkOverloadCarriesTheTestnetFlag() {
+        val args = NativeLaunch.coreArguments(
+            conf = "/data/user/0/app/files/fullmode/stohn-data/stohn.conf",
+            dataDir = "/data/user/0/app/files/fullmode/stohn-data",
+            rpcPort = 42_123,
+            pruneMiB = 550,
+            network = org.stohncoin.wallet.runtime.RuntimeBackend.Network.TESTNET
+        )
+        assertTrue("-testnet" in args)
+    }
+
+    @Test fun mainnetCommandLineHasNoTestnetFlag() {
+        val args = NativeLaunch.coreArguments(
+            conf = "/data/user/0/app/files/fullmode/stohn-data/stohn.conf",
+            dataDir = "/data/user/0/app/files/fullmode/stohn-data",
+            rpcPort = 42_123,
+            pruneMiB = 550
+        )
+        assertFalse("-testnet" in args)
+    }
+
     @Test fun artifactSha256MatchesTheKnownVector() {
         val file = tempArtifact("abc")
         assertEquals(
