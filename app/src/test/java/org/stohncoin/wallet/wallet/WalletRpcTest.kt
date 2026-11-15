@@ -269,6 +269,56 @@ class WalletRpcTest {
     }
 
     @Test
+    fun `send with selected inputs builds signs and broadcasts a PSBT`() = runBlocking {
+        runtime.objectReply = { method ->
+            when (method) {
+                "walletcreatefundedpsbt" -> JSONObject().put("psbt", "psbt-1").put("fee", 0.00001)
+                "walletprocesspsbt" -> JSONObject().put("psbt", "psbt-2")
+                "finalizepsbt" -> JSONObject().put("hex", "rawhex").put("complete", true)
+                else -> JSONObject()
+            }
+        }
+        runtime.calls.clear()
+        runtime.stringReply = "txid-coin"
+        val inputs = listOf(WalletRpc.Utxo("txid1", 2, "addr", 1_000_000L, 3, true))
+
+        val txid = WalletRpc(runtime).send(address, 50_000L, subtractFeeFromAmount = false, inputs = inputs)
+
+        assertEquals("txid-coin", txid)
+        // First call: funded PSBT with the selected input.
+        assertEquals("walletcreatefundedpsbt", runtime.calls[0].method)
+        val fundedParams = runtime.calls[0].params
+        val fundedInputs = fundedParams.getJSONArray(0)
+        assertEquals(1, fundedInputs.length())
+        assertEquals("txid1", fundedInputs.getJSONObject(0).getString("txid"))
+        assertEquals(2, fundedInputs.getJSONObject(0).getInt("vout"))
+        // Then signing, finalizing, broadcasting.
+        assertEquals("walletprocesspsbt", runtime.calls[1].method)
+        assertEquals("psbt-1", runtime.calls[1].params.getString(0))
+        assertEquals("finalizepsbt", runtime.calls[2].method)
+        assertEquals("psbt-2", runtime.calls[2].params.getString(0))
+        assertEquals("sendrawtransaction", runtime.calls[3].method)
+        assertEquals("rawhex", runtime.calls[3].params.getString(0))
+    }
+
+    @Test
+    fun `send with selected inputs fails when Core cannot finalize`() {
+        runtime.objectReply = { method ->
+            when (method) {
+                "walletcreatefundedpsbt" -> JSONObject().put("psbt", "psbt-1")
+                "walletprocesspsbt" -> JSONObject().put("psbt", "psbt-2")
+                "finalizepsbt" -> JSONObject().put("hex", "").put("complete", false)
+                else -> JSONObject()
+            }
+        }
+        runtime.calls.clear()
+        val inputs = listOf(WalletRpc.Utxo("txid1", 0, "addr", 1_000_000L, 3, true))
+        expectFailure("could not be finalized") {
+            runBlocking { WalletRpc(runtime).send(address, 50_000L, subtractFeeFromAmount = false, inputs = inputs) }
+        }
+    }
+
+    @Test
     fun `send refuses an address or amount it cannot use`() {
         expectFailure("Recipient address is required") {
             runBlocking { WalletRpc(runtime).send("", 1_000L, subtractFeeFromAmount = false) }
