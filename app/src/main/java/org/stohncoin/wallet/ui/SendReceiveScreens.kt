@@ -61,6 +61,8 @@ fun SendPage(
     balance: Long,
     busy: Boolean,
     initialAddress: String = "",
+    initialAmount: String = "",
+    initialSubtractFee: Boolean = false,
     onAddressBook: () -> Unit,
     onBusy: (Boolean) -> Unit,
     onComplete: () -> Unit,
@@ -69,7 +71,8 @@ fun SendPage(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var address by rememberSaveable { mutableStateOf(initialAddress) }
-    var amountText by rememberSaveable { mutableStateOf("") }
+    var amountText by rememberSaveable { mutableStateOf(initialAmount) }
+    var subtractFee by rememberSaveable { mutableStateOf(initialSubtractFee) }
     var label by rememberSaveable { mutableStateOf("") }
     val addressBookDir = remember { File(context.filesDir, "addressbook") }
     val addressBookKey = remember { AddressBookKey.get() }
@@ -82,7 +85,6 @@ fun SendPage(
     // The passkey must never be persisted into saved state (it would outlive the process and
     // leak into the Activity's saved-state bundle), so it lives in a plain remember holder.
     var passphrase by remember { mutableStateOf("") }
-    var subtractFee by rememberSaveable { mutableStateOf(false) }
     var estimate by remember { mutableStateOf<WalletRpc.FeeEstimate?>(null) }
     var feePreset by rememberSaveable { mutableStateOf(FeePreset.Automatic.name) }
     var showConfirm by remember { mutableStateOf(false) }

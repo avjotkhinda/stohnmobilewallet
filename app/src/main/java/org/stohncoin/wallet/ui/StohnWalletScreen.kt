@@ -89,12 +89,16 @@ fun StohnWalletScreen(node: NodeController) {
     var pendingSendAddress by rememberSaveable { mutableStateOf("") }
     // Coins selected for a coin-control send; not saved across process death.
     var pendingSendInputs by remember { mutableStateOf<List<WalletRpc.Utxo>>(emptyList()) }
+    var pendingSendAmount by remember { mutableStateOf("") }
+    var pendingSendSubtractFee by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val rootRoutes = setOf("home", "wallets", "activity", "settings")
     val goBack: () -> Unit = {
         if (route == "send") {
             pendingSendInputs = emptyList()
             pendingSendAddress = ""
+            pendingSendAmount = ""
+            pendingSendSubtractFee = false
         }
         route = when (route) {
             "security", "node" -> "settings"
@@ -400,7 +404,7 @@ fun StohnWalletScreen(node: NodeController) {
                             onCoins = { route = "coins" }
                         )
                         "addressbook" -> AddressBookPage(
-                            onSend = { addr -> pendingSendAddress = addr; pendingSendInputs = emptyList(); route = "send" }
+                            onSend = { addr -> pendingSendAddress = addr; pendingSendInputs = emptyList(); pendingSendAmount = ""; pendingSendSubtractFee = false; route = "send" }
                         )
                         "send" -> SendPage(
                             node = node,
@@ -408,19 +412,25 @@ fun StohnWalletScreen(node: NodeController) {
                             balance = balance,
                             busy = busy,
                             initialAddress = pendingSendAddress,
+                            initialAmount = pendingSendAmount,
+                            initialSubtractFee = pendingSendSubtractFee,
                             selectedInputs = pendingSendInputs,
                             onAddressBook = { addressBookFrom = "send"; route = "addressbook" },
                             onBusy = { busy = it },
                             onComplete = {
                                 route = "home"
                                 pendingSendInputs = emptyList()
+                                pendingSendAmount = ""
+                                pendingSendSubtractFee = false
                                 scope.launch { runCatching { refresh(node) { b, tx, wi -> balance = b; transactions = tx; walletInfo = wi } } }
                             }
                         )
                         "receive" -> ReceivePage(receiveAddress, onCopy = { copy(context, receiveAddress) })
-                        "coins" -> CoinsPage(node = node, onSendSelected = { inputs ->
+                        "coins" -> CoinsPage(node = node, onSendSelected = { inputs, amount ->
                             pendingSendInputs = inputs
                             pendingSendAddress = ""
+                            pendingSendAmount = amount
+                            pendingSendSubtractFee = amount.isNotBlank()
                             route = "send"
                         })
                         "node" -> NodeStatusPage(

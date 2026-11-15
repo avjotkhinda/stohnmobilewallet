@@ -34,12 +34,13 @@ import java.text.DecimalFormat
 @Composable
 fun CoinsPage(
     node: org.stohncoin.wallet.core.NodeController? = null,
-    onSendSelected: (List<WalletRpc.Utxo>) -> Unit = {}
+    onSendSelected: (List<WalletRpc.Utxo>, String) -> Unit = { _, _ -> }
 ) {
     var utxos by remember { mutableStateOf<List<WalletRpc.Utxo>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var prefillAmount by remember { mutableStateOf(false) }
 
     LaunchedEffect(node) {
         loading = true
@@ -80,8 +81,12 @@ fun CoinsPage(
         }
         if (selectedUtxos.isNotEmpty()) {
             Text("Selected: ${formatCoin(selectedTotal)} STOHN across ${selectedUtxos.size} output(s)", color = Color(0xFF4F9BFF), fontSize = 12.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = prefillAmount, onCheckedChange = { prefillAmount = it })
+                Text("Prefill send amount with selected total", color = Color(0xFF9CA3AF), fontSize = 12.sp)
+            }
             Button(
-                onClick = { onSendSelected(selectedUtxos) },
+                onClick = { onSendSelected(selectedUtxos, if (prefillAmount) formatCoin(selectedTotal) else "") },
                 modifier = Modifier.fillMaxWidth()
             ) { Text("Send from selected coins") }
         }
