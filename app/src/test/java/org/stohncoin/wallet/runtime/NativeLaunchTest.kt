@@ -133,11 +133,7 @@ class NativeLaunchTest {
                 "-datadir=/data/user/0/app/files/fullmode/stohn-data",
                 "-rpcport=42123",
                 "-daemon=0",
-                "-prune=550",
-                "-addnode=162.19.244.187",
-                "-addnode=167.71.172.58",
-                "-addnode=37.59.20.42",
-                "-addnode=54.150.227.110"
+                "-prune=550"
             ),
             args
         )

@@ -22,17 +22,17 @@ class RuntimeBackendNetworkTest {
     }
 
     @Test
-    fun mainnetArgumentsIncludeFallbackPeers() {
+    fun mainnetArgumentsAddNoPeers() {
         val args = RuntimeBackend.networkArguments(RuntimeBackend.Network.MAINNET)
-        assertTrue(args.contains("-addnode=37.59.20.42"))
-        assertEquals(4, args.count { it.startsWith("-addnode=") })
-        assertTrue(args.none { it == "-testnet" })
+        assertTrue(args.isEmpty())
+        assertTrue(args.none { it.startsWith("-addnode=") })
     }
 
     @Test
-    fun testnetArgumentsDoNotIncludeMainnetPeers() {
+    fun testnetArgumentsCarryOnlyTheTestnetFlag() {
         val args = RuntimeBackend.networkArguments(RuntimeBackend.Network.TESTNET)
         assertEquals(listOf("-testnet"), args)
+        assertTrue(args.none { it.startsWith("-addnode=") })
     }
 
     @Test

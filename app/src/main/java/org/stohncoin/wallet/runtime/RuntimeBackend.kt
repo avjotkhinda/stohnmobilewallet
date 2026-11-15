@@ -114,22 +114,8 @@ interface RuntimeBackend {
         /** The node data directory, shared with the controller so both sides measure the same tree. */
         fun dataDirectory(context: Context): File = File(File(context.filesDir, "fullmode"), "stohn-data")
 
-        /**
-         * Known-good mainnet peers used when Core's built-in seeds are unreachable. Taken from
-         * the public Stohn explorer peer list; Core still validates every block it receives.
-         */
-        val MAINNET_FALLBACK_PEERS = listOf(
-            "162.19.244.187",
-            "167.71.172.58",
-            "37.59.20.42",
-            "54.150.227.110"
-        )
-
-        /** Network selection plus fallback peers for the Core command line. */
-        fun networkArguments(network: Network): List<String> = buildList {
-            network.cliFlag()?.let(::add)
-            if (network == Network.MAINNET) MAINNET_FALLBACK_PEERS.forEach { add("-addnode=$it") }
-        }
+        /** Network selection for the Core command line. */
+        fun networkArguments(network: Network): List<String> = listOfNotNull(network.cliFlag())
 
         /** Core's configuration: loopback-only RPC, single instance, no daemon fork. */
         fun coreConfig() = """
