@@ -236,7 +236,7 @@ class SignedRuntimeManifestTest {
     @Test fun withNoReleaseKeyPublishedNothingCanBeStaged() {
         val dir = updateDir()
         assertEquals(
-            "Runtime manifest release key is not configured",
+            "Runtime manifest signature check failed",
             refusal { SignedRuntimeManifest.stage(dir, document(pins())) }
         )
         assertTrue(!File(dir, SignedRuntimeManifest.UPDATE_FILE).exists())
@@ -254,7 +254,7 @@ class SignedRuntimeManifestTest {
             nativeCoreSha256 = RuntimeManifest.NATIVE_CORE_SHA256,
             nativeWalletToolSha256 = RuntimeManifest.NATIVE_WALLET_TOOL_SHA256
         ))
-        assertEquals("", RuntimeManifest.RELEASE_PUBLIC_KEY)
+        assertEquals("MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAENoI3lrXq9/VQAT4KtFbqKd+1yaLi0aQ2N1EIuc9syRF0jJ0s/F1hjpQlvzGOL6iFJlOHZR56pkP3V0Q6Z4VUDA==", RuntimeManifest.RELEASE_PUBLIC_KEY)
     }
 
     @Test fun aCorrectlySignedButOlderManifestCannotDowngrade() {

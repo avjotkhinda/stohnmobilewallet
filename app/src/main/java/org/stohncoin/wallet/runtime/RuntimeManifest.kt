@@ -35,7 +35,7 @@ object RuntimeManifest {
     // The public half of the release key that signs a runtime manifest (base64 SPKI, EC P-256).
     // Blank until the project publishes one, which keeps the update path inert: with no key every
     // staged document is refused, exactly like the blank native pins above.
-    const val RELEASE_PUBLIC_KEY = ""
+    const val RELEASE_PUBLIC_KEY = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAENoI3lrXq9/VQAT4KtFbqKd+1yaLi0aQ2N1EIuc9syRF0jJ0s/F1hjpQlvzGOL6iFJlOHZR56pkP3V0Q6Z4VUDA=="
     // Where RuntimeManifestTransport looks for a signed manifest. Blank means no transport happens:
     // no request is made and the pins stay the ones this APK was built with. Set it together with
     // RELEASE_PUBLIC_KEY, and only to a plain HTTPS URL: a document that does not verify against
