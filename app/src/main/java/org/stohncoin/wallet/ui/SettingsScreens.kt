@@ -105,12 +105,17 @@ internal object ZeroPeerHint {
 
     fun shouldShow(running: Boolean, peers: Int, runningForMillis: Long): Boolean =
         running && peers == 0 && runningForMillis >= DELAY_MILLIS
+
+    /** Time left before the hint may appear, given how long Core has already been up. */
+    fun remainingDelay(runningForMillis: Long?): Long =
+        (DELAY_MILLIS - (runningForMillis ?: 0L)).coerceAtLeast(0L)
 }
 
 
 @Composable
 fun NodeStatusPage(
     state: NodeController.State,
+    runningForMillis: Long? = null,
     chainUsage: NodeStorage.Usage?,
     freeBytes: Long?,
     pruneMode: NodeStorage.Mode,
@@ -131,11 +136,13 @@ fun NodeStatusPage(
     var showNoPeerHint by remember { mutableStateOf(false) }
     val running = state.isRunning
     val peers = state.peers
-    LaunchedEffect(running, peers) {
+    LaunchedEffect(running, peers, runningForMillis) {
         showNoPeerHint = false
         if (running && peers == 0) {
-            delay(ZeroPeerHint.DELAY_MILLIS)
-            showNoPeerHint = ZeroPeerHint.shouldShow(true, 0, ZeroPeerHint.DELAY_MILLIS)
+            val elapsed = runningForMillis ?: 0L
+            val remaining = ZeroPeerHint.remainingDelay(runningForMillis)
+            if (remaining > 0L) delay(remaining)
+            showNoPeerHint = ZeroPeerHint.shouldShow(true, 0, elapsed + remaining)
         }
     }
     Column(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

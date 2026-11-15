@@ -57,6 +57,8 @@ class NodeController private constructor(context: Context) : SendGateway {
             ?: RuntimeBackend.Network.MAINNET
     @Volatile private var activeWalletName: String? = prefs.getString(walletNameKey(activeNetwork), null)
     private var startJob: Job? = null
+    // Wall-clock start of the current Core run, kept here so a reopened screen measures the run.
+    @Volatile private var runningSinceMillis: Long? = null
 
     data class State(
         val status: Status = Status.STOPPED,
@@ -84,7 +86,10 @@ class NodeController private constructor(context: Context) : SendGateway {
         userStopped = false
         val intent = Intent(appContext, NodeService::class.java)
         runCatching { ContextCompat.startForegroundService(appContext, intent) }
-            .onFailure { _state.value = State(status = Status.ERROR, message = it.message ?: "Unable to start node service") }
+            .onFailure {
+                runningSinceMillis = null
+                _state.value = State(status = Status.ERROR, message = it.message ?: "Unable to start node service")
+            }
     }
 
     internal fun startCoreFromService() {
@@ -95,6 +100,7 @@ class NodeController private constructor(context: Context) : SendGateway {
                 if (backend != null) return@withLock
                 var started: RuntimeBackend? = null
                 try {
+                    runningSinceMillis = System.currentTimeMillis()
                     _state.value = State(status = Status.STARTING, message = "Installing Full Mode runtime…")
                     RuntimeInstaller.installIfNeeded(appContext)
                     _state.value = State(status = Status.STARTING, message = "Starting Stohn Core…")
@@ -109,12 +115,14 @@ class NodeController private constructor(context: Context) : SendGateway {
                     // A network switch cancels this job on purpose; stop what it started and let
                     // the switch install the new backend instead of reporting an ERROR state.
                     logDiagnostic("startCoreFromService", "cancelled", c)
+                    runningSinceMillis = null
                     withContext(NonCancellable) { runCatching { started?.stop() } }
                     if (backend === started) backend = null
                     throw c
                 } catch (t: Throwable) {
                     Log.e("NodeController", "startCoreFromService failed", t)
                     logDiagnostic("startCoreFromService", "failed", t)
+                    runningSinceMillis = null
                     runCatching { started?.stop() }
                     if (backend === started) backend = null
                     _state.value = State(status = Status.ERROR, message = t.message ?: "Unable to start Core")
@@ -415,6 +423,9 @@ class NodeController private constructor(context: Context) : SendGateway {
     val network: RuntimeBackend.Network get() = activeNetwork
     fun network(): RuntimeBackend.Network = activeNetwork
 
+    /** How long the current Core run has been up, or null while it is not running. */
+    fun runningForMillis(): Long? = runningSinceMillis?.let { (System.currentTimeMillis() - it).coerceAtLeast(0L) }
+
     /** Optional peer Core dials on testnet, because Stohn testnet ships without seeds. */
     fun testnetPeer(): String? = prefs.getString(KEY_TESTNET_PEER, null)
 
@@ -558,6 +569,7 @@ class NodeController private constructor(context: Context) : SendGateway {
     internal fun stopCoreFromService() {
         startJob?.cancel()
         startJob = null
+        runningSinceMillis = null
         val b = backend
         backend = null
         scope.launch { runCatching { b?.stop() } }

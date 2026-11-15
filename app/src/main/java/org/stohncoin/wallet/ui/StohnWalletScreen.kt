@@ -445,6 +445,7 @@ fun StohnWalletScreen(node: NodeController) {
                         })
                         "node" -> NodeStatusPage(
                             state = state,
+                            runningForMillis = node.runningForMillis(),
                             chainUsage = chainUsage,
                             freeBytes = freeSpace,
                             pruneMode = pruneMode,
