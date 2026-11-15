@@ -1,6 +1,7 @@
 package org.stohncoin.wallet.core
 
 import android.content.Context
+import android.util.Log
 import android.content.Intent
 import android.os.StatFs
 import androidx.core.content.ContextCompat
@@ -47,10 +48,10 @@ class NodeController private constructor(context: Context) : SendGateway {
 
     @Volatile private var backend: RuntimeBackend? = null
     @Volatile private var userStopped = false
-    @Volatile private var activeWalletName: String? = prefs.getString(KEY_WALLET_NAME, null)
     @Volatile private var activeNetwork: RuntimeBackend.Network =
         RuntimeBackend.Network.values().firstOrNull { it.name == prefs.getString(KEY_NETWORK, null) }
             ?: RuntimeBackend.Network.MAINNET
+    @Volatile private var activeWalletName: String? = prefs.getString(walletNameKey(activeNetwork), null)
     private var startJob: Job? = null
 
     data class State(
@@ -121,11 +122,22 @@ class NodeController private constructor(context: Context) : SendGateway {
     private suspend fun restoreWallet(b: RuntimeBackend) {
         val node = b
         val loadedWallets = node.rpcArray("listwallets")
-        val savedName = activeWalletName
+        var savedName = activeWalletName
         if (savedName != null) {
             val alreadyLoaded = (0 until loadedWallets.length()).any { loadedWallets.optString(it) == savedName }
-            if (!alreadyLoaded) node.rpcCall("loadwallet", org.json.JSONArray().put(savedName))
-            return
+            if (!alreadyLoaded) {
+                // The saved wallet may belong to another network or may have been removed. Treat a
+                // missing wallet as "no saved wallet" instead of crashing the node start.
+                try {
+                    node.rpcCall("loadwallet", org.json.JSONArray().put(savedName))
+                } catch (t: Throwable) {
+                    runCatching { Log.w("NodeController", "Saved wallet missing: $savedName", t) }
+                    activeWalletName = null
+                    prefs.edit { remove(walletNameKey(activeNetwork)) }
+                    savedName = null
+                }
+            }
+            if (savedName != null) return
         }
 
         if (loadedWallets.length() > 0) {
@@ -149,7 +161,7 @@ class NodeController private constructor(context: Context) : SendGateway {
 
     private fun setActiveWalletName(name: String) {
         activeWalletName = name
-        prefs.edit { putString(KEY_WALLET_NAME, name) }
+        prefs.edit { putString(walletNameKey(activeNetwork), name) }
     }
 
     private suspend fun poll(b: RuntimeBackend) {
@@ -397,6 +409,8 @@ class NodeController private constructor(context: Context) : SendGateway {
         }
         prefs.edit(commit = true) { putString(KEY_NETWORK, network.name) }
         activeNetwork = network
+        // Each network has its own wallet namespace; do not carry a mainnet wallet name onto testnet.
+        activeWalletName = prefs.getString(walletNameKey(activeNetwork), null)
         if (wasRunning) start()
     }
 
@@ -476,13 +490,13 @@ class NodeController private constructor(context: Context) : SendGateway {
     }
 
     companion object {
-        private const val KEY_WALLET_NAME = "active_wallet_name"
         private const val KEY_LAST_BACKUP_AT = "last_backup_at"
         private const val KEY_SENDS_SINCE_BACKUP = "sends_since_backup"
         private const val KEY_CREATED_HEIGHT = "created_height:"
         private const val KEY_PRUNE_MODE = "prune_mode"
         private const val KEY_NETWORK = "network"
         private const val DEFAULT_WALLET_NAME = "stohn-wallet"
+        fun walletNameKey(network: Network): String = "active_wallet_name_${network.name}"
         typealias Network = RuntimeBackend.Network
         @Volatile private var instance: NodeController? = null
         fun get(context: Context): NodeController = instance ?: synchronized(this) {
