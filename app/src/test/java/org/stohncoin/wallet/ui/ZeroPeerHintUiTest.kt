@@ -49,10 +49,10 @@ class ZeroPeerHintUiTest {
         render(peers = { 0 })
 
         compose.mainClock.advanceTimeBy(ZeroPeerHint.DELAY_MILLIS - 1)
-        compose.waitForIdle()
         compose.onNodeWithText("Still at 0 peers", substring = true).assertDoesNotExist()
 
         compose.mainClock.advanceTimeBy(2)
+        compose.mainClock.autoAdvance = true
         compose.waitForIdle()
         compose.onNodeWithText("Still at 0 peers", substring = true).performScrollTo().assertIsDisplayed()
     }
@@ -64,11 +64,11 @@ class ZeroPeerHintUiTest {
         render(peers = { peers })
 
         compose.mainClock.advanceTimeBy(ZeroPeerHint.DELAY_MILLIS + 1)
+        compose.mainClock.autoAdvance = true
         compose.waitForIdle()
         compose.onNodeWithText("Still at 0 peers", substring = true).performScrollTo().assertIsDisplayed()
 
         peers = 1
-        compose.mainClock.autoAdvance = true
         compose.waitForIdle()
 
         compose.onNodeWithText("Still at 0 peers", substring = true).assertDoesNotExist()
