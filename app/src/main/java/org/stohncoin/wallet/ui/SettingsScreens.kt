@@ -169,11 +169,17 @@ fun NodeStatusPage(
                 NodeFact("Connections", "${state.peers} peers")
                 NodeFact("Network", network.label)
                 TextButton(onClick = { showNetworkDialog = true }) { Text("Change network", color = Electric) }
-                NodeFact("Custom peer", (if (network == RuntimeBackend.Network.TESTNET) testnetPeer else mainnetPeer) ?: "None set")
+                val activeCustomPeer = if (network == RuntimeBackend.Network.TESTNET) testnetPeer else mainnetPeer
+                NodeFact("Custom peer", activeCustomPeer ?: "None set")
                 TextButton(onClick = { showPeerDialog = true }) { Text("Set custom peer", color = Electric) }
                 if (showNoPeerHint && peers == 0) {
+                    val zeroPeerHint = if (!activeCustomPeer.isNullOrBlank()) {
+                        "Still at 0 peers. The custom peer may be unreachable; check the address or try another peer."
+                    } else {
+                        "Still at 0 peers. Stohn's bundled seeds may be unreachable; set a Custom peer above."
+                    }
                     Text(
-                        "Still at 0 peers. Stohn's bundled seeds may be unreachable; set a Custom peer above.",
+                        zeroPeerHint,
                         color = Color(0xFFE9B455),
                         fontSize = 11.sp
                     )
