@@ -49,6 +49,7 @@
 ./app/src/main/java/org/stohncoin/wallet/security/PinThrottle.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/CoinsScreen.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/LockScreen.kt
+./app/src/main/java/org/stohncoin/wallet/ui/NodeStatusScreen.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/SendReceiveScreens.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/SettingsScreens.kt
 ./app/src/main/java/org/stohncoin/wallet/ui/StohnWalletScreen.kt
@@ -98,6 +99,7 @@
 ./app/src/test/java/org/stohncoin/wallet/security/PinThrottleTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/CustomPeerDialogTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/LockScreenTest.kt
+./app/src/test/java/org/stohncoin/wallet/ui/NodeStatusPageTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/QrTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/SendPageTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/ZeroPeerHintTest.kt

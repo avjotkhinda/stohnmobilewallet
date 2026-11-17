@@ -6,6 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -181,5 +182,29 @@ class NodeControllerNetworkTest {
             node.restoreWallet(backend)
         }
         assertEquals("stohn-wallet", activeField.get(node))
+    }
+
+    @Test
+    fun aSavedPeerThatNoLongerValidatesIsReportedForTheScreen() {
+        val node = node()
+        kotlinx.coroutines.runBlocking { node.applyNetwork(RuntimeBackend.Network.TESTNET) }
+        // Written by an older build, when an underscore in a host still passed validation.
+        prefs(node).edit().putString("testnet_peer", "node_bad.example:47218").commit()
+
+        assertEquals("node_bad.example:47218", node.skippedPeer())
+    }
+
+    @Test
+    fun aSavedPeerThatStillValidatesIsNotReportedAsSkipped() {
+        val node = node()
+        kotlinx.coroutines.runBlocking { node.applyNetwork(RuntimeBackend.Network.TESTNET) }
+        prefs(node).edit().putString("testnet_peer", "node.example.org").commit()
+
+        assertNull(node.skippedPeer())
+    }
+
+    @Test
+    fun noSavedPeerMeansNothingIsReportedAsSkipped() {
+        assertNull(node().skippedPeer())
     }
 }

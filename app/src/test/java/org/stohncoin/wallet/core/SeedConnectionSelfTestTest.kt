@@ -8,6 +8,9 @@ import org.junit.Test
 import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.runtime.TestnetPeer
 import java.net.UnknownHostException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class SeedConnectionSelfTestTest {
 
@@ -261,5 +264,49 @@ class SeedConnectionSelfTestTest {
         val summary = SeedConnectionSelfTest.summary(result)
         assertTrue(summary.contains("refused the connection"))
         assertTrue(summary.contains("Bundled seeds: $seeds of $seeds responded"))
+    }
+
+    @Test
+    fun probeHasEveryTargetInFlightAtTheSameTime() = runBlocking {
+        val planned = SeedConnectionSelfTest.targets(RuntimeBackend.Network.MAINNET, "203.0.113.7:37218")
+        // Each probe waits for all the others to arrive. Sequential probing never releases the
+        // latch, so the attempts fail and the peak count stays at one.
+        val arrived = CountDownLatch(planned.size)
+        val peak = AtomicInteger(0)
+
+        val result = SeedConnectionSelfTest.probe(
+            network = RuntimeBackend.Network.MAINNET,
+            customPeer = "203.0.113.7:37218",
+            resolver = { host -> Result.success(listOf(host)) },
+            connector = { _, _, _ ->
+                peak.incrementAndGet()
+                arrived.countDown()
+                if (arrived.await(5, TimeUnit.SECONDS)) Result.success(Unit)
+                else Result.failure(IllegalStateException("probes did not overlap"))
+            },
+        )
+
+        assertEquals(planned.size, peak.get())
+        assertTrue(result.targets.all { target -> target.tcpAttempts.all { it.ok } })
+    }
+
+    @Test
+    fun probeKeepsTheDeclaredOrderWhenTheFirstTargetIsSlowest() = runBlocking {
+        val planned = SeedConnectionSelfTest.targets(RuntimeBackend.Network.MAINNET, "203.0.113.7:37218")
+        val slowest = planned.first().host
+
+        val result = SeedConnectionSelfTest.probe(
+            network = RuntimeBackend.Network.MAINNET,
+            customPeer = "203.0.113.7:37218",
+            resolver = { host -> Result.success(listOf(host)) },
+            connector = { host, _, _ ->
+                if (host == slowest) Thread.sleep(300)
+                Result.success(Unit)
+            },
+        )
+
+        assertEquals(planned.map { it.host }, result.targets.map { it.target.host })
+        assertEquals(planned.map { it.label }, result.targets.map { it.target.label })
+        assertTrue(result.targets.first().dnsError == null)
     }
 }

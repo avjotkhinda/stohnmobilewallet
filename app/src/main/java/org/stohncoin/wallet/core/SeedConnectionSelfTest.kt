@@ -6,6 +6,9 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.stohncoin.wallet.runtime.RuntimeBackend
 import org.stohncoin.wallet.runtime.TestnetPeer
@@ -117,14 +120,23 @@ object SeedConnectionSelfTest {
         }
     }
 
-    /** Runs every target once and keeps the individual DNS/TCP outcomes. */
+    /**
+     * Runs every target once and keeps the individual DNS/TCP outcomes.
+     *
+     * Targets are probed at the same time, so a screen stuck at 0 peers waits for about one
+     * [CONNECT_TIMEOUT_MILLIS] round instead of one per bundled seed. Results keep the declared
+     * target order, because the report numbers them and names each seed's DNS/TCP outcome.
+     */
     suspend fun probe(
         network: RuntimeBackend.Network,
         customPeer: String?,
         resolver: Resolver = defaultResolver,
         connector: Connector = defaultConnector,
     ): ProbeResult = withContext(Dispatchers.IO) {
-        val results = targets(network, customPeer).map { target -> probeTarget(target, resolver, connector) }
+        val planned = targets(network, customPeer)
+        val results = coroutineScope {
+            planned.map { target -> async { probeTarget(target, resolver, connector) } }.awaitAll()
+        }
         ProbeResult(network, normalizedPeer(customPeer), results)
     }
 

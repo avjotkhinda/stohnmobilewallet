@@ -449,57 +449,61 @@ fun StohnWalletScreen(node: NodeController) {
                         "node" -> NodeStatusPage(
                             state = state,
                             runningForMillis = node.runningForMillis(),
-                            chainUsage = chainUsage,
-                            freeBytes = freeSpace,
-                            pruneMode = pruneMode,
-                            network = node.network(),
-                            testnetPeer = node.testnetPeer(),
-                            mainnetPeer = node.mainnetPeer(),
-                            onStart = { node.start() },
-                            onStop = { node.stop() },
-                            onPruneMode = { mode ->
-                                scope.launch {
-                                    busy = true
-                                    runCatching { node.applyPruneMode(mode) }
-                                        .onSuccess {
-                                            pruneMode = node.pruneMode()
-                                            runCatching { chainUsage = node.chainUsage() }
-                                            freeSpace = node.freeBytes()
-                                            Toast.makeText(context, "Storage mode set to ${mode.label}", Toast.LENGTH_LONG).show()
-                                        }
-                                        .onFailure { Toast.makeText(context, "Storage mode unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
-                                    busy = false
-                                }
-                            },
-                            onNetwork = { network ->
-                                scope.launch {
-                                    busy = true
-                                    runCatching { node.applyNetwork(network) }
-                                        .onSuccess { Toast.makeText(context, "Network set to ${network.label}", Toast.LENGTH_LONG).show() }
-                                        .onFailure { Toast.makeText(context, "Network unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
-                                    busy = false
-                                }
-                            },
-                            onTestnetPeer = { peer ->
-                                scope.launch {
-                                    busy = true
-                                    runCatching { node.setTestnetPeer(peer) }
-                                        .onSuccess { Toast.makeText(context, if (peer == null) "Testnet peer cleared" else "Testnet peer saved", Toast.LENGTH_LONG).show() }
-                                        .onFailure { Toast.makeText(context, "Peer unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
-                                    busy = false
-                                }
-                            },
-                            onMainnetPeer = { peer ->
-                                scope.launch {
-                                    busy = true
-                                    runCatching { node.setMainnetPeer(peer) }
-                                        .onSuccess { Toast.makeText(context, if (peer == null) "Mainnet peer cleared" else "Mainnet peer saved", Toast.LENGTH_LONG).show() }
-                                        .onFailure { Toast.makeText(context, "Peer unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
-                                    busy = false
-                                }
-                            },
-                            onDiagnostics = { route = "diagnostics" },
-                            loadPeers = { node.peers() }
+                            target = NodeStatusTarget(
+                                network = node.network(),
+                                pruneMode = pruneMode,
+                                testnetPeer = node.testnetPeer(),
+                                mainnetPeer = node.mainnetPeer(),
+                                skippedPeer = node.skippedPeer()
+                            ),
+                            storage = NodeStatusStorage(usage = chainUsage, freeBytes = freeSpace),
+                            actions = NodeStatusActions(
+                                onStart = { node.start() },
+                                onStop = { node.stop() },
+                                onPruneMode = { mode ->
+                                    scope.launch {
+                                        busy = true
+                                        runCatching { node.applyPruneMode(mode) }
+                                            .onSuccess {
+                                                pruneMode = node.pruneMode()
+                                                runCatching { chainUsage = node.chainUsage() }
+                                                freeSpace = node.freeBytes()
+                                                Toast.makeText(context, "Storage mode set to ${mode.label}", Toast.LENGTH_LONG).show()
+                                            }
+                                            .onFailure { Toast.makeText(context, "Storage mode unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
+                                        busy = false
+                                    }
+                                },
+                                onNetwork = { network ->
+                                    scope.launch {
+                                        busy = true
+                                        runCatching { node.applyNetwork(network) }
+                                            .onSuccess { Toast.makeText(context, "Network set to ${network.label}", Toast.LENGTH_LONG).show() }
+                                            .onFailure { Toast.makeText(context, "Network unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
+                                        busy = false
+                                    }
+                                },
+                                onTestnetPeer = { peer ->
+                                    scope.launch {
+                                        busy = true
+                                        runCatching { node.setTestnetPeer(peer) }
+                                            .onSuccess { Toast.makeText(context, if (peer == null) "Testnet peer cleared" else "Testnet peer saved", Toast.LENGTH_LONG).show() }
+                                            .onFailure { Toast.makeText(context, "Peer unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
+                                        busy = false
+                                    }
+                                },
+                                onMainnetPeer = { peer ->
+                                    scope.launch {
+                                        busy = true
+                                        runCatching { node.setMainnetPeer(peer) }
+                                            .onSuccess { Toast.makeText(context, if (peer == null) "Mainnet peer cleared" else "Mainnet peer saved", Toast.LENGTH_LONG).show() }
+                                            .onFailure { Toast.makeText(context, "Peer unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
+                                        busy = false
+                                    }
+                                },
+                                onDiagnostics = { route = "diagnostics" },
+                                loadPeers = { node.peers() }
+                            )
                         )
                         "security" -> SecurityPage(
                             info = walletInfo,

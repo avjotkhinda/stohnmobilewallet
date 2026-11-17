@@ -13,7 +13,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.stohncoin.wallet.core.NodeController
 import org.stohncoin.wallet.core.NodeStorage
-import org.stohncoin.wallet.runtime.RuntimeBackend
 
 @RunWith(RobolectricTestRunner::class)
 class ZeroPeerHintUiTest {
@@ -32,13 +31,9 @@ class ZeroPeerHintUiTest {
             NodeStatusPage(
                 state = state(peers()),
                 runningForMillis = runningForMillis,
-                chainUsage = null,
-                freeBytes = null,
-                pruneMode = NodeStorage.Mode.FULL,
-                network = RuntimeBackend.Network.MAINNET,
-                onStart = {},
-                onStop = {},
-                onPruneMode = {}
+                target = NodeStatusTarget(pruneMode = NodeStorage.Mode.FULL),
+                storage = NodeStatusStorage(),
+                actions = NodeStatusActions(onStart = {}, onStop = {})
             )
         }
     }

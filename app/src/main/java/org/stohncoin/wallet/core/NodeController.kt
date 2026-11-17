@@ -444,6 +444,17 @@ class NodeController private constructor(context: Context) : SendGateway {
     /** The custom peer for the currently selected network, if any. */
     fun peer(): String? = if (activeNetwork == RuntimeBackend.Network.TESTNET) testnetPeer() else mainnetPeer()
 
+    /**
+     * The saved peer Core starts without because it no longer validates, or null when there is no
+     * peer or the saved one is usable. Startup skips such a peer instead of throwing, so the screen
+     * has to name it: otherwise the user just sees 0 peers with no explanation.
+     */
+    fun skippedPeer(): String? {
+        val saved = peer() ?: return null
+        if (RuntimeBackend.peerArgumentWarning(activeNetwork, saved) == null) return null
+        return saved.trim()
+    }
+
     /** Saves a testnet peer in host[:port] form; blank clears it. Restarts a running testnet node. */
     suspend fun setTestnetPeer(raw: String?) = setPeer(KEY_TESTNET_PEER, raw, RuntimeBackend.Network.TESTNET)
 
