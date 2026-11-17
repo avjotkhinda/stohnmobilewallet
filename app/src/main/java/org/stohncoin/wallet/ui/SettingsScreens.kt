@@ -285,7 +285,7 @@ fun NodeStatusPage(
 
 /** Adds a reachable peer when Core's bundled seeds do not connect. */
 @Composable
-private fun CustomPeerDialog(network: RuntimeBackend.Network, current: String?, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
+internal fun CustomPeerDialog(network: RuntimeBackend.Network, current: String?, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
     val defaultPort = SeedConnectionSelfTest.defaultPort(network)
     val scope = rememberCoroutineScope()
     var peer by remember(current) { mutableStateOf(current.orEmpty()) }

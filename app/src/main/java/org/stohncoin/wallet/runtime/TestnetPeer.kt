@@ -54,6 +54,12 @@ object TestnetPeer {
     }
 
     /**
+     * The stored form of [raw] when it validates, or null when it is blank or no longer valid.
+     * Startup paths use this so a value saved under older, looser rules cannot crash the node.
+     */
+    fun normalizedOrNull(raw: String?): String? = runCatching { normalize(raw) }.getOrNull()
+
+    /**
      * Parses and validates a peer for the given network, filling in the port Core would use when
      * the user did not type one. Returns null for a blank value, which means "clear the peer".
      * Throws [IllegalArgumentException] with a user-facing message for anything invalid.

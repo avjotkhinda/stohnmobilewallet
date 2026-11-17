@@ -117,7 +117,18 @@ interface RuntimeBackend {
         /** Network selection plus the optional user-supplied peer. */
         fun networkArguments(network: Network, peer: String? = null): List<String> = buildList {
             network.cliFlag()?.let(::add)
-            TestnetPeer.normalize(peer)?.let { add("-addnode=$it") }
+            TestnetPeer.normalizedOrNull(peer)?.let { add("-addnode=$it") }
+        }
+
+        /**
+         * What a launcher should report when [networkArguments] had to drop a saved peer. An
+         * upgrade can tighten validation, and a stored value that no longer passes must not stop
+         * the node from starting, so it is skipped and named instead of thrown.
+         */
+        fun peerArgumentWarning(network: Network, peer: String?): String? {
+            if (peer == null || peer.isBlank()) return null
+            if (TestnetPeer.normalizedOrNull(peer) != null) return null
+            return "Skipping saved ${network.label} peer that is no longer valid: $peer"
         }
 
         /** Core's configuration: loopback-only RPC, single instance, no daemon fork. */

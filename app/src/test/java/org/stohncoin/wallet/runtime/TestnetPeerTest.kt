@@ -72,6 +72,19 @@ class TestnetPeerTest {
     }
 
     @Test
+    fun networkArgumentsSkipASavedPeerThatNoLongerValidates() {
+        // Both were accepted before the host rules tightened (underscore, leading dash).
+        assertEquals(listOf("-testnet"), RuntimeBackend.networkArguments(RuntimeBackend.Network.TESTNET, "node_bad.example:47218"))
+        assertTrue(RuntimeBackend.networkArguments(RuntimeBackend.Network.MAINNET, "-node.example").isEmpty())
+        assertEquals(
+            "Skipping saved Testnet peer that is no longer valid: node_bad.example:47218",
+            RuntimeBackend.peerArgumentWarning(RuntimeBackend.Network.TESTNET, "node_bad.example:47218")
+        )
+        assertNull(RuntimeBackend.peerArgumentWarning(RuntimeBackend.Network.TESTNET, "node.example.org"))
+        assertNull(RuntimeBackend.peerArgumentWarning(RuntimeBackend.Network.TESTNET, null))
+    }
+
+    @Test
     fun testnetArgumentsAddTheConfiguredPeer() {
         val args = RuntimeBackend.networkArguments(RuntimeBackend.Network.TESTNET, "node.example.org:47218")
         assertEquals(listOf("-testnet", "-addnode=node.example.org:47218"), args)

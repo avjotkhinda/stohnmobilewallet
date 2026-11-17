@@ -104,7 +104,13 @@ class NodeController private constructor(context: Context) : SendGateway {
                     _state.value = State(status = Status.STARTING, message = "Installing Full Mode runtime…")
                     RuntimeInstaller.installIfNeeded(appContext)
                     _state.value = State(status = Status.STARTING, message = "Starting Stohn Core…")
-                    started = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB, activeNetwork, peer())
+                    val storedPeer = peer()
+                    RuntimeBackend.peerArgumentWarning(activeNetwork, storedPeer)?.let { warning ->
+                        // A saved peer from an older, looser rule set is skipped, never fatal.
+                        Log.w("NodeController", warning)
+                        logDiagnostic("startCoreFromService", warning)
+                    }
+                    started = RuntimeBackendFactory.create(appContext, pruneMode().pruneMiB, activeNetwork, storedPeer)
                     started.start()
                     backend = started
                     logDiagnostic("startCoreFromService", "backend created on ${activeNetwork.name}")
