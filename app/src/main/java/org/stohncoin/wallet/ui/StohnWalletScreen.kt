@@ -497,7 +497,9 @@ fun StohnWalletScreen(node: NodeController) {
                                         .onFailure { Toast.makeText(context, "Peer unchanged: ${it.message}", Toast.LENGTH_LONG).show() }
                                     busy = false
                                 }
-                            }
+                            },
+                            onDiagnostics = { route = "diagnostics" },
+                            loadPeers = { node.peers() }
                         )
                         "security" -> SecurityPage(
                             info = walletInfo,

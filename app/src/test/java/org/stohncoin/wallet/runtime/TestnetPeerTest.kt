@@ -34,6 +34,44 @@ class TestnetPeerTest {
     }
 
     @Test
+    fun addressFillsInTheNetworkDefaultPort() {
+        val testnet = TestnetPeer.address("node.example.org", 47218)
+
+        assertEquals(TestnetPeer.Address("node.example.org", 47218, explicitPort = false), testnet)
+        assertEquals("node.example.org:47218", testnet?.formatted)
+        assertEquals("node.example.org", testnet?.normalized)
+        assertNull(TestnetPeer.address("   ", 47218))
+    }
+
+    @Test
+    fun addressKeepsAnExplicitPortAndUnwrapsIpv6() {
+        val ipv6 = TestnetPeer.address("[2001:db8::1]", 47218)
+
+        assertEquals("[2001:db8::1]", ipv6?.host)
+        assertEquals(47218, ipv6?.port ?: -1)
+        assertEquals("[2001:db8::1]:47218", ipv6?.formatted)
+        assertEquals("[2001:db8::1]", ipv6?.normalized)
+        assertEquals("2001:db8::1", ipv6?.bareHost)
+
+        val explicit = TestnetPeer.address("1.2.3.4:37218", 47218)
+        assertEquals("1.2.3.4:37218", explicit?.formatted)
+        assertTrue(explicit?.explicitPort == true)
+    }
+
+    @Test
+    fun malformedHostsAreRejected() {
+        for (bad in listOf("-node.example", "node-.example", "node..example", "1.2.3.256", "12345")) {
+            var failed = false
+            try {
+                TestnetPeer.address(bad, 47218)
+            } catch (_: IllegalArgumentException) {
+                failed = true
+            }
+            assertTrue("expected rejection: $bad", failed)
+        }
+    }
+
+    @Test
     fun testnetArgumentsAddTheConfiguredPeer() {
         val args = RuntimeBackend.networkArguments(RuntimeBackend.Network.TESTNET, "node.example.org:47218")
         assertEquals(listOf("-testnet", "-addnode=node.example.org:47218"), args)

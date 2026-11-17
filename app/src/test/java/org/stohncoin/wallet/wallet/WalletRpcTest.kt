@@ -72,6 +72,51 @@ class WalletRpcTest {
     private val runtime = FakeRuntime()
     private val address = "SaddrRecipient"
 
+    // ---- connected peers ------------------------------------------------------------------
+
+    @Test
+    fun `peerInfo reports address, direction, latency and sync heights`() = runBlocking {
+        runtime.arrayReply = JSONArray()
+            .put(
+                JSONObject()
+                    .put("addr", "1.2.3.4:37218")
+                    .put("inbound", false)
+                    .put("pingtime", 0.0425)
+                    .put("startingheight", 812_000)
+                    .put("synced_headers", 812_340)
+                    .put("synced_blocks", 812_300)
+            )
+            .put(JSONObject().put("addr", "5.6.7.8:37218").put("inbound", true).put("pingtime", 0.0))
+
+        val peers = WalletRpc(runtime).peerInfo()
+
+        assertEquals("getpeerinfo", runtime.method())
+        assertEquals(2, peers.size)
+        assertEquals("1.2.3.4:37218", peers[0].address)
+        assertFalse(peers[0].inbound)
+        assertEquals(42, peers[0].pingMillis ?: -1)
+        assertEquals(812_000L, peers[0].startingHeight ?: -1L)
+        assertEquals(812_340L, peers[0].syncedHeaders ?: -1L)
+        assertEquals(812_300L, peers[0].syncedBlocks ?: -1L)
+        assertTrue(peers[1].inbound)
+        assertNull(peers[1].pingMillis)
+        assertNull(peers[1].startingHeight)
+    }
+
+    @Test
+    fun `peerInfo skips entries without an address`() = runBlocking {
+        runtime.arrayReply = JSONArray().put(JSONObject().put("inbound", true))
+
+        assertTrue(WalletRpc(runtime).peerInfo().isEmpty())
+    }
+
+    @Test
+    fun `peerInfo falls back to the local address when Core omits the remote one`() = runBlocking {
+        runtime.arrayReply = JSONArray().put(JSONObject().put("addrlocal", "127.0.0.1:51234"))
+
+        assertEquals("127.0.0.1:51234", WalletRpc(runtime).peerInfo().single().address)
+    }
+
     // ---- wallet info ---------------------------------------------------------------------
 
     @Test

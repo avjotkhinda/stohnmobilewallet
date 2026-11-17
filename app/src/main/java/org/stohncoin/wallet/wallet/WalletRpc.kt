@@ -176,6 +176,43 @@ class WalletRpc(private val runtime: RuntimeBackend, private val walletName: Str
         }
     }
 
+    /** One connected peer as Core reports it in `getpeerinfo`. */
+    data class PeerInfo(
+        val address: String,
+        val inbound: Boolean,
+        val pingMillis: Int?,
+        val startingHeight: Long?,
+        val syncedHeaders: Long?,
+        val syncedBlocks: Long?
+    )
+
+    /**
+     * The peers Core is connected to right now. This names the connections behind the peer count,
+     * which is what tells a stall of "no peers" apart from peers that are simply behind.
+     */
+    suspend fun peerInfo(): List<PeerInfo> {
+        val result = runtime.rpcArray("getpeerinfo")
+        return buildList {
+            for (i in 0 until result.length()) result.optJSONObject(i)?.let { item ->
+                val address = item.optString("addr").takeIf { it.isNotBlank() }
+                    ?: item.optString("addrlocal").takeIf { it.isNotBlank() }
+                    ?: return@let
+                val pingSeconds = item.optDouble("pingtime", 0.0)
+                add(
+                    PeerInfo(
+                        address = address,
+                        inbound = item.optBoolean("inbound", false),
+                        // Core reports pingtime in seconds and leaves it 0 until it has measured one.
+                        pingMillis = if (pingSeconds.isFinite() && pingSeconds > 0.0) (pingSeconds * 1000.0).toInt() else null,
+                        startingHeight = item.optLong("startingheight", -1L).takeIf { it >= 0L },
+                        syncedHeaders = item.optLong("synced_headers", -1L).takeIf { it >= 0L },
+                        syncedBlocks = item.optLong("synced_blocks", -1L).takeIf { it >= 0L }
+                    )
+                )
+            }
+        }
+    }
+
     suspend fun encrypt(passphrase: CharArray): String {
         require(passphrase.isNotEmpty()) { "Passphrase is required" }
         try {

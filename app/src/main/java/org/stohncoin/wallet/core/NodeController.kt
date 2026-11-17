@@ -275,6 +275,9 @@ class NodeController private constructor(context: Context) : SendGateway {
         retrySend(address, amountSatoshis, passphrase, subtractFeeFromAmount, confTarget, inputs)
 
     suspend fun transactions(): List<WalletRpc.WalletTransaction> = walletMutex.withLock { walletRpc().transactions() }
+
+    /** Peers Core is connected to, for the Node Status peer list. Node-level, so no wallet lock. */
+    suspend fun peers(): List<WalletRpc.PeerInfo> = walletRpc().peerInfo()
     suspend fun unspent(): List<WalletRpc.Utxo> = walletMutex.withLock { walletRpc().unspent() }
     suspend fun lockWallet() = walletMutex.withLock { walletRpc().lock() }
 

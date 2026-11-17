@@ -130,15 +130,31 @@ fun NodeStatusPage(
     onPruneMode: (NodeStorage.Mode) -> Unit,
     onNetwork: (RuntimeBackend.Network) -> Unit = {},
     onTestnetPeer: (String?) -> Unit = {},
-    onMainnetPeer: (String?) -> Unit = {}
+    onMainnetPeer: (String?) -> Unit = {},
+    onDiagnostics: () -> Unit = {},
+    loadPeers: suspend () -> List<WalletRpc.PeerInfo> = { emptyList() }
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showStorageDialog by remember { mutableStateOf(false) }
     var showNetworkDialog by remember { mutableStateOf(false) }
     var showPeerDialog by remember { mutableStateOf(false) }
     // Give Core a chance to connect before calling out that it has no peers.
     var showNoPeerHint by remember { mutableStateOf(false) }
+    val activeCustomPeer = if (network == RuntimeBackend.Network.TESTNET) testnetPeer else mainnetPeer
+    // The result belongs to one network/peer pair, so a new choice clears the old answer.
+    var testingConnection by remember { mutableStateOf(false) }
+    var connectionTest by remember(network, activeCustomPeer) { mutableStateOf<String?>(null) }
     val running = state.isRunning
     val peers = state.peers
+    // Bumped whenever the node stops/starts or the peer count changes: a connection-test result
+    // only describes the zero-peer episode it was run in, so it is dropped when that episode ends.
+    var zeroPeerEpisode by remember { mutableIntStateOf(0) }
+    LaunchedEffect(running, peers) {
+        zeroPeerEpisode++
+        connectionTest = null
+        testingConnection = false
+    }
     LaunchedEffect(running, peers, runningForMillis) {
         showNoPeerHint = false
         if (running && peers == 0) {
@@ -169,7 +185,6 @@ fun NodeStatusPage(
                 NodeFact("Connections", "${state.peers} peers")
                 NodeFact("Network", network.label)
                 TextButton(onClick = { showNetworkDialog = true }) { Text("Change network", color = Electric) }
-                val activeCustomPeer = if (network == RuntimeBackend.Network.TESTNET) testnetPeer else mainnetPeer
                 NodeFact("Custom peer", activeCustomPeer ?: "None set")
                 TextButton(onClick = { showPeerDialog = true }) { Text("Set custom peer", color = Electric) }
                 if (showNoPeerHint && peers == 0) {
@@ -178,11 +193,41 @@ fun NodeStatusPage(
                     } else {
                         "Still at 0 peers. Stohn's bundled seeds may be unreachable; set a Custom peer above."
                     }
-                    Text(
-                        zeroPeerHint,
-                        color = Color(0xFFE9B455),
-                        fontSize = 11.sp
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            zeroPeerHint,
+                            color = Color(0xFFE9B455),
+                            fontSize = 11.sp
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(
+                                onClick = {
+                                    if (testingConnection) return@TextButton
+                                    testingConnection = true
+                                    connectionTest = null
+                                    // Results are dropped if the episode ends while the probe is in flight.
+                                    val episode = zeroPeerEpisode
+                                    scope.launch {
+                                        try {
+                                            val result = SeedConnectionSelfTest.probe(network, activeCustomPeer)
+                                            if (episode == zeroPeerEpisode) connectionTest = SeedConnectionSelfTest.summary(result)
+                                            NodeController.appendDiagnostic(context, "SeedSelfTest", SeedConnectionSelfTest.report(result))
+                                        } catch (t: Throwable) {
+                                            if (episode == zeroPeerEpisode) {
+                                                connectionTest = "Connection test failed: ${t.message ?: "unknown error"}"
+                                            }
+                                            NodeController.appendDiagnostic(context, "SeedSelfTest", "failed", t)
+                                        } finally {
+                                            if (episode == zeroPeerEpisode) testingConnection = false
+                                        }
+                                    }
+                                },
+                                enabled = !testingConnection
+                            ) { Text(if (testingConnection) "Testing connection…" else "Test connection", color = Electric, fontSize = 11.sp) }
+                            TextButton(onClick = onDiagnostics) { Text("Full diagnostics", color = Electric, fontSize = 11.sp) }
+                        }
+                        connectionTest?.let { summary -> Text(summary, color = DarkMuted, fontSize = 11.sp) }
+                    }
                 }
                 NodeFact("Node", "Local Full Node")
                 NodeFact("Sync", nodeSyncLabel(state))
@@ -193,6 +238,7 @@ fun NodeStatusPage(
                 TextButton(onClick = { showStorageDialog = true }) { Text("Change storage mode", color = Electric) }
             }
         }
+        ConnectedPeersSection(running = running, peerCount = peers, loadPeers = loadPeers)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(onClick = onStart, enabled = state.canStart, modifier = Modifier.weight(1f)) { Text("Start node") }
             OutlinedButton(onClick = onStop, enabled = state.isRunning, modifier = Modifier.weight(1f)) { Text("Stop node") }
@@ -240,8 +286,14 @@ fun NodeStatusPage(
 /** Adds a reachable peer when Core's bundled seeds do not connect. */
 @Composable
 private fun CustomPeerDialog(network: RuntimeBackend.Network, current: String?, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
+    val defaultPort = SeedConnectionSelfTest.defaultPort(network)
+    val scope = rememberCoroutineScope()
     var peer by remember(current) { mutableStateOf(current.orEmpty()) }
     var error by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    var checkResult by remember { mutableStateOf<String?>(null) }
+    // Validate while typing so the effective address is always the one Core would dial.
+    val validated = runCatching { TestnetPeer.address(peer, defaultPort) }.getOrNull()
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${network.label} peer") },
@@ -258,7 +310,11 @@ private fun CustomPeerDialog(network: RuntimeBackend.Network, current: String?, 
                 )
                 OutlinedTextField(
                     value = peer,
-                    onValueChange = { peer = it; error = null },
+                    onValueChange = {
+                        peer = it
+                        error = null
+                        checkResult = null
+                    },
                     singleLine = true,
                     label = { Text("host or host:port") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -266,20 +322,162 @@ private fun CustomPeerDialog(network: RuntimeBackend.Network, current: String?, 
                         capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.None
                     )
                 )
+                Text(
+                    when {
+                        peer.isBlank() -> "Effective address: none. Saving an empty field clears this peer."
+                        validated != null && validated.explicitPort -> "Effective address: ${validated.formatted}"
+                        validated != null -> "Effective address: ${validated.formatted} (default ${network.label} port)"
+                        else -> "Effective address: enter a valid host or host:port."
+                    },
+                    color = DarkMuted,
+                    fontSize = 11.sp
+                )
                 error?.let { Text(it, color = Danger, fontSize = 11.sp) }
+                TextButton(
+                    onClick = {
+                        if (checking) return@TextButton
+                        val address = try {
+                            TestnetPeer.address(peer, defaultPort)
+                        } catch (e: IllegalArgumentException) {
+                            error = e.message ?: "Invalid peer"
+                            return@TextButton
+                        }
+                        if (address == null) {
+                            error = "Enter a host to test"
+                            return@TextButton
+                        }
+                        error = null
+                        checkResult = null
+                        checking = true
+                        scope.launch {
+                            try {
+                                val result = SeedConnectionSelfTest.probePeer(address.bareHost, address.port)
+                                checkResult = SeedConnectionSelfTest.reachability(result)
+                            } catch (t: Throwable) {
+                                checkResult = "Reachability check failed: ${t.message ?: "unknown error"}"
+                            } finally {
+                                checking = false
+                            }
+                        }
+                    },
+                    enabled = !checking && peer.isNotBlank()
+                ) { Text(if (checking) "Testing…" else "Test reachability", color = Electric, fontSize = 11.sp) }
+                checkResult?.let { Text(it, color = DarkMuted, fontSize = 11.sp) }
+                Text(
+                    "A successful TCP check only means the address answered; it does not confirm a compatible Stohn node.",
+                    color = DarkMuted,
+                    fontSize = 10.sp
+                )
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                try {
-                    onSave(TestnetPeer.normalize(peer))
+                val address = try {
+                    TestnetPeer.address(peer, defaultPort)
                 } catch (e: IllegalArgumentException) {
                     error = e.message ?: "Invalid peer"
+                    return@TextButton
                 }
+                onSave(address?.normalized)
             }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+
+/** Lists the peers Core reports, so a stalled sync can be traced to a specific connection. */
+@Composable
+private fun ConnectedPeersSection(running: Boolean, peerCount: Int, loadPeers: suspend () -> List<WalletRpc.PeerInfo>) {
+    var peers by remember { mutableStateOf<List<WalletRpc.PeerInfo>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var reloads by remember { mutableIntStateOf(0) }
+    var refreshing by remember { mutableStateOf(false) }
+    // Reloads when a peer connects or drops, and on Refresh; no timer, so an idle screen stays quiet.
+    LaunchedEffect(running, peerCount, reloads) {
+        if (!running) {
+            peers = emptyList()
+            error = null
+            return@LaunchedEffect
+        }
+        refreshing = true
+        try {
+            peers = loadPeers()
+            error = null
+        } catch (t: Throwable) {
+            // Keep the last good list on screen; only a first failure replaces it with an error.
+            if (peers == null) error = t.message ?: "Stohn Core did not return its peers"
+        } finally {
+            refreshing = false
+        }
+    }
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B1B28)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E3549))
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Connected peers", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                TextButton(onClick = { reloads++ }, enabled = running && !refreshing) {
+                    Text(if (refreshing) "Refreshing…" else "Refresh", color = Electric, fontSize = 11.sp)
+                }
+            }
+            when {
+                !running -> Text("Start the node to see its peers.", color = DarkMuted, fontSize = 11.sp)
+                error != null -> Text(error.orEmpty(), color = Danger, fontSize = 11.sp)
+                peers == null -> Text("Reading peers…", color = DarkMuted, fontSize = 11.sp)
+                peers?.isEmpty() == true -> Text(
+                    "No peers connected yet. Stohn Core is still looking for peers; if this lasts, set a custom peer or use the connection test on this screen.",
+                    color = Color(0xFFE9B455),
+                    fontSize = 11.sp
+                )
+                else -> {
+                    peers.orEmpty().forEach { peer -> PeerRow(peer) }
+                    Text("Addresses, direction and sync height as Stohn Core reports them.", color = DarkMuted, fontSize = 10.sp)
+                }
+            }
+        }
+    }
+}
+
+
+/** One connection: who it is, which way it opened, its latency and how far it has synced. */
+@Composable
+private fun PeerRow(peer: WalletRpc.PeerInfo) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF0A1722),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1D2F3E))
+    ) {
+        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    peer.address,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Surface(shape = RoundedCornerShape(6.dp), color = if (peer.inbound) Color(0xFF2E2410) else Color(0xFF0D3833)) {
+                    Text(
+                        if (peer.inbound) "IN" else "OUT",
+                        Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        color = if (peer.inbound) Color(0xFFE9B455) else Success,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            val details = buildList {
+                add(peer.pingMillis?.let { "$it ms" } ?: "ping unknown")
+                peer.syncedHeaders?.let { add("headers $it") }
+                peer.startingHeight?.let { add("started at $it") }
+            }
+            Text(details.joinToString(" · "), color = DarkMuted, fontSize = 10.sp)
+        }
+    }
 }
 
 
