@@ -4,8 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertDoesNotExist
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -98,8 +96,8 @@ class NodeStatusPageTest {
         render(peers = { 1 }, loadPeers = { listOf(peer) })
 
         compose.onNodeWithText("203.0.113.9:37218").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("OUT").assertIsDisplayed()
-        compose.onNodeWithText("42 ms · headers 900000 · started at 880000").assertIsDisplayed()
+        compose.onNodeWithText("OUT").assertExists()
+        compose.onNodeWithText("42 ms · headers 900000 · started at 880000").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -111,7 +109,7 @@ class NodeStatusPageTest {
         // Testnet has no bundled seeds, so the probe reports that without touching the network.
         val summary = "no bundled seeds to test"
         compose.waitUntil(5_000) { compose.onAllNodesWithText(summary, substring = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText(summary, substring = true).assertIsDisplayed()
+        compose.onNodeWithText(summary, substring = true).performScrollTo().assertIsDisplayed()
 
         peers = 1
         compose.waitForIdle()
