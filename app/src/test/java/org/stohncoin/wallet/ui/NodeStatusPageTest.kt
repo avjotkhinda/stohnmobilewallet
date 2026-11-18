@@ -11,6 +11,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -52,7 +54,8 @@ class NodeStatusPageTest {
         skippedPeer: String? = null,
         running: Boolean = true,
         onTestnetPeer: (String?) -> Unit = {},
-        onMainnetPeer: (String?) -> Unit = {}
+        onMainnetPeer: (String?) -> Unit = {},
+        dialogs: NodeStatusDialogs = NodeStatusDialogs()
     ) {
         compose.setContent {
             NodeStatusPage(
@@ -65,6 +68,7 @@ class NodeStatusPageTest {
                     skippedPeer = skippedPeer
                 ),
                 storage = NodeStatusStorage(),
+                dialogs = dialogs,
                 actions = NodeStatusActions(
                     onStart = {},
                     onStop = {},
@@ -147,6 +151,24 @@ class NodeStatusPageTest {
         compose.onNodeWithText("Clear saved peer").performScrollTo().performClick()
 
         assertEquals(listOf<String?>(null), cleared)
+    }
+
+    @Test
+    fun fixingTheSkippedPeerOpensTheDialogHoldingThatValue() {
+        val dialogs = NodeStatusDialogs()
+        render(
+            peers = { 0 },
+            savedPeer = "node_bad.example:47218",
+            skippedPeer = "node_bad.example:47218",
+            dialogs = dialogs
+        )
+        assertFalse("no dialog is mounted before the tap", dialogs.peerOpen)
+
+        compose.onNodeWithText("Fix saved peer").performScrollTo().performClick()
+
+        assertTrue("Fix saved peer must open the custom peer dialog", dialogs.peerOpen)
+        // CustomPeerDialogTest renders the body from this seed, so the field arrives pre-filled.
+        assertEquals("node_bad.example:47218", dialogs.peerSeed)
     }
 
     @Test

@@ -94,6 +94,34 @@ class NodeStatusActions(
 )
 
 
+/**
+ * Which dialog Node Status has open, and what the custom-peer dialog starts from. Hoisted out of the
+ * composable so a test can prove that a button opens the peer dialog already holding the value it
+ * has to fix, without mounting an [AlertDialog] window and reading inside it.
+ */
+class NodeStatusDialogs {
+    var peerOpen by mutableStateOf(false)
+        private set
+
+    /** The text the dialog's field starts with; null means nothing is saved to start from. */
+    var peerSeed by mutableStateOf<String?>(null)
+        private set
+
+    fun openPeer(seed: String?) {
+        peerSeed = seed
+        peerOpen = true
+    }
+
+    fun closePeer() {
+        peerOpen = false
+    }
+}
+
+
+@Composable
+internal fun rememberNodeStatusDialogs(): NodeStatusDialogs = remember { NodeStatusDialogs() }
+
+
 /** Decides when the node screen should suggest a custom peer. */
 internal object ZeroPeerHint {
     const val DELAY_MILLIS = 30_000L
@@ -113,7 +141,8 @@ fun NodeStatusPage(
     target: NodeStatusTarget,
     storage: NodeStatusStorage,
     actions: NodeStatusActions,
-    runningForMillis: Long? = null
+    runningForMillis: Long? = null,
+    dialogs: NodeStatusDialogs = rememberNodeStatusDialogs()
 ) {
     // Destructured so the body still reads as plain names: the surface stays four arguments wide.
     val (network, pruneMode) = target
@@ -122,7 +151,6 @@ fun NodeStatusPage(
     val scope = rememberCoroutineScope()
     var showStorageDialog by remember { mutableStateOf(false) }
     var showNetworkDialog by remember { mutableStateOf(false) }
-    var showPeerDialog by remember { mutableStateOf(false) }
     // Give Core a chance to connect before calling out that it has no peers.
     var showNoPeerHint by remember { mutableStateOf(false) }
     val activeCustomPeer = target.activePeer
@@ -179,7 +207,7 @@ fun NodeStatusPage(
                         else -> activeCustomPeer
                     }
                 )
-                TextButton(onClick = { showPeerDialog = true }) { Text("Set custom peer", color = Electric) }
+                TextButton(onClick = { dialogs.openPeer(activeCustomPeer) }) { Text("Set custom peer", color = Electric) }
                 ignoredPeer?.let { ignored ->
                     // Starting without it is silent otherwise: 0 peers would look like a bug.
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -190,7 +218,7 @@ fun NodeStatusPage(
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             // Opens the custom peer dialog already holding the value that needs fixing.
-                            TextButton(onClick = { showPeerDialog = true }) {
+                            TextButton(onClick = { dialogs.openPeer(activeCustomPeer) }) {
                                 Text("Fix saved peer", color = Electric, fontSize = 11.sp)
                             }
                             TextButton(
@@ -292,13 +320,14 @@ fun NodeStatusPage(
             }
         )
     }
-    if (showPeerDialog) {
+    if (dialogs.peerOpen) {
         CustomPeerDialog(
             network = network,
-            current = target.activePeer,
-            onDismiss = { showPeerDialog = false },
+            // The seed, not target.activePeer: a test can then prove which value the dialog got.
+            current = dialogs.peerSeed,
+            onDismiss = { dialogs.closePeer() },
             onSave = { peer ->
-                showPeerDialog = false
+                dialogs.closePeer()
                 if (target.network == RuntimeBackend.Network.TESTNET) actions.onTestnetPeer(peer) else actions.onMainnetPeer(peer)
             }
         )
