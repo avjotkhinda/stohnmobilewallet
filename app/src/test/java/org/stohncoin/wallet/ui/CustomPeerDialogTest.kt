@@ -1,9 +1,9 @@
 package org.stohncoin.wallet.ui
 
-import androidx.activity.ComponentActivity
-import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.remember
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -16,33 +16,36 @@ import org.robolectric.RobolectricTestRunner
 import org.stohncoin.wallet.runtime.RuntimeBackend
 
 /**
- * The custom-peer dialog as a user drives it: the effective address it promises for the active
- * network, and the refusal of a host the current validation rejects.
+ * The custom-peer dialog's content as a user drives it: the effective address it promises for the
+ * active network, and the refusal of a host the current validation rejects.
  *
- * The effective-address line is the only place the default port is visible before saving, and the
- * refusal path is the one that must never reach [onSave] — neither is observable from a unit test
- * of [org.stohncoin.wallet.runtime.TestnetPeer], which has no dialog state.
+ * [CustomPeerDialogBody] and [CustomPeerDialogSaveButton] are rendered directly instead of through
+ * [CustomPeerDialog], so these assertions never depend on Robolectric discovering an AlertDialog's
+ * separate window.
  */
 @RunWith(RobolectricTestRunner::class)
 class CustomPeerDialogTest {
 
     @get:Rule
-    val compose = createAndroidComposeRule<ComponentActivity>()
+    val compose = createComposeRule()
 
     private var saves = 0
     private var saved: String? = null
 
-    private fun render(current: String?) {
+    private fun render(current: String? = null) {
         compose.setContent {
-            CustomPeerDialog(
-                network = RuntimeBackend.Network.TESTNET,
-                current = current,
-                onDismiss = {},
-                onSave = { peer ->
-                    saves++
-                    saved = peer
-                }
-            )
+            val state = remember { CustomPeerDialogState(current) }
+            Column {
+                CustomPeerDialogBody(network = RuntimeBackend.Network.TESTNET, state = state)
+                CustomPeerDialogSaveButton(
+                    network = RuntimeBackend.Network.TESTNET,
+                    state = state,
+                    onSave = { peer ->
+                        saves++
+                        saved = peer
+                    }
+                )
+            }
         }
     }
 
@@ -50,21 +53,21 @@ class CustomPeerDialogTest {
     fun explicitPortIsShownAsTheEffectiveAddress() {
         render(current = "1.2.3.4:37218")
 
-        compose.onNodeWithText("Effective address: 1.2.3.4:37218").assertIsDisplayed()
+        compose.onNodeWithText("Effective address: 1.2.3.4:37218").assertExists()
     }
 
     @Test
     fun defaultPortIsSpelledOutForTheActiveNetwork() {
         render(current = "node.example.org")
 
-        compose.onNodeWithText("Effective address: node.example.org:47218 (default Testnet port)").assertIsDisplayed()
+        compose.onNodeWithText("Effective address: node.example.org:47218 (default Testnet port)").assertExists()
     }
 
     @Test
     fun blankFieldExplainsThatSavingClearsThePeer() {
         render(current = null)
 
-        compose.onNodeWithText("Effective address: none. Saving an empty field clears this peer.").assertIsDisplayed()
+        compose.onNodeWithText("Effective address: none. Saving an empty field clears this peer.").assertExists()
     }
 
     @Test
@@ -72,11 +75,11 @@ class CustomPeerDialogTest {
         render(current = null)
 
         compose.onNode(hasSetTextAction()).performTextInput("node_bad.example")
-        compose.onNodeWithText("Effective address: enter a valid host or host:port.").assertIsDisplayed()
+        compose.onNodeWithText("Effective address: enter a valid host or host:port.").assertExists()
 
         compose.onNodeWithText("Save").performClick()
 
-        compose.onNodeWithText("Peer host is invalid").assertIsDisplayed()
+        compose.onNodeWithText("Peer host is invalid").assertExists()
         assertEquals(0, saves)
         assertNull(saved)
     }

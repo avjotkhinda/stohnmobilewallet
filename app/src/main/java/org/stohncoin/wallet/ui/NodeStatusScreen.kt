@@ -275,104 +275,127 @@ fun NodeStatusPage(
 }
 
 
+/**
+ * The custom-peer dialog's mutable state, hoisted so the dialog's body and Save action can be
+ * rendered and driven without an AlertDialog window.
+ */
+internal class CustomPeerDialogState(current: String?) {
+    var peer by mutableStateOf(current.orEmpty())
+    var error by mutableStateOf<String?>(null)
+    var checking by mutableStateOf(false)
+    var checkResult by mutableStateOf<String?>(null)
+}
+
+/** Validates what was typed and saves it, or reports why it cannot be saved. */
+internal fun CustomPeerDialogState.save(network: RuntimeBackend.Network, onSave: (String?) -> Unit) {
+    val address = try {
+        TestnetPeer.address(peer, SeedConnectionSelfTest.defaultPort(network))
+    } catch (e: IllegalArgumentException) {
+        error = e.message ?: "Invalid peer"
+        return
+    }
+    onSave(address?.normalized)
+}
+
+/**
+ * Everything inside the custom-peer dialog: the explanation, the field, the effective address and
+ * the reachability check. Kept out of [AlertDialog] so the validation paths can be proven by
+ * rendering it directly, without depending on a dialog window being discoverable.
+ */
+@Composable
+internal fun CustomPeerDialogBody(network: RuntimeBackend.Network, state: CustomPeerDialogState) {
+    val defaultPort = SeedConnectionSelfTest.defaultPort(network)
+    val scope = rememberCoroutineScope()
+    // Validate while typing so the effective address is always the one Core would dial.
+    val validated = runCatching { TestnetPeer.address(state.peer, defaultPort) }.getOrNull()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            if (network == RuntimeBackend.Network.TESTNET) {
+                "Stohn Core's testnet has no DNS or fixed seeds, so it stays at 0 peers unless you supply one. Enter a reachable testnet node as host or host:port. Leave blank to clear it."
+            } else {
+                "Stohn mainnet has no DNS seeds and its bundled fixed seeds may be stale. If the node stays at 0 peers, enter a reachable mainnet node as host or host:port. Leave blank to clear it."
+            },
+            color = DarkMuted,
+            fontSize = 11.sp
+        )
+        OutlinedTextField(
+            value = state.peer,
+            onValueChange = {
+                state.peer = it
+                state.error = null
+                state.checkResult = null
+            },
+            singleLine = true,
+            label = { Text("host or host:port") },
+            keyboardOptions = KeyboardOptions(
+                autoCorrect = false,
+                capitalization = KeyboardCapitalization.None
+            )
+        )
+        Text(
+            when {
+                state.peer.isBlank() -> "Effective address: none. Saving an empty field clears this peer."
+                validated != null && validated.explicitPort -> "Effective address: ${validated.formatted}"
+                validated != null -> "Effective address: ${validated.formatted} (default ${network.label} port)"
+                else -> "Effective address: enter a valid host or host:port."
+            },
+            color = DarkMuted,
+            fontSize = 11.sp
+        )
+        state.error?.let { Text(it, color = Danger, fontSize = 11.sp) }
+        TextButton(
+            onClick = {
+                if (state.checking) return@TextButton
+                val address = try {
+                    TestnetPeer.address(state.peer, defaultPort)
+                } catch (e: IllegalArgumentException) {
+                    state.error = e.message ?: "Invalid peer"
+                    return@TextButton
+                }
+                if (address == null) {
+                    state.error = "Enter a host to test"
+                    return@TextButton
+                }
+                state.error = null
+                state.checkResult = null
+                state.checking = true
+                scope.launch {
+                    try {
+                        val result = SeedConnectionSelfTest.probePeer(address.bareHost, address.port)
+                        state.checkResult = SeedConnectionSelfTest.reachability(result)
+                    } catch (t: Throwable) {
+                        state.checkResult = "Reachability check failed: ${t.message ?: "unknown error"}"
+                    } finally {
+                        state.checking = false
+                    }
+                }
+            },
+            enabled = !state.checking && state.peer.isNotBlank()
+        ) { Text(if (state.checking) "Testing…" else "Test reachability", color = Electric, fontSize = 11.sp) }
+        state.checkResult?.let { Text(it, color = DarkMuted, fontSize = 11.sp) }
+        Text(
+            "A successful TCP check only means the address answered; it does not confirm a compatible Stohn node.",
+            color = DarkMuted,
+            fontSize = 10.sp
+        )
+    }
+}
+
+/** The dialog's Save action, separate from [AlertDialog] for the same reason as the body. */
+@Composable
+internal fun CustomPeerDialogSaveButton(network: RuntimeBackend.Network, state: CustomPeerDialogState, onSave: (String?) -> Unit) {
+    TextButton(onClick = { state.save(network, onSave) }) { Text("Save") }
+}
+
 /** Adds a reachable peer when Core's bundled seeds do not connect. */
 @Composable
 internal fun CustomPeerDialog(network: RuntimeBackend.Network, current: String?, onDismiss: () -> Unit, onSave: (String?) -> Unit) {
-    val defaultPort = SeedConnectionSelfTest.defaultPort(network)
-    val scope = rememberCoroutineScope()
-    var peer by remember(current) { mutableStateOf(current.orEmpty()) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var checking by remember { mutableStateOf(false) }
-    var checkResult by remember { mutableStateOf<String?>(null) }
-    // Validate while typing so the effective address is always the one Core would dial.
-    val validated = runCatching { TestnetPeer.address(peer, defaultPort) }.getOrNull()
+    val state = remember(current) { CustomPeerDialogState(current) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("${network.label} peer") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    if (network == RuntimeBackend.Network.TESTNET) {
-                        "Stohn Core's testnet has no DNS or fixed seeds, so it stays at 0 peers unless you supply one. Enter a reachable testnet node as host or host:port. Leave blank to clear it."
-                    } else {
-                        "Stohn mainnet has no DNS seeds and its bundled fixed seeds may be stale. If the node stays at 0 peers, enter a reachable mainnet node as host or host:port. Leave blank to clear it."
-                    },
-                    color = DarkMuted,
-                    fontSize = 11.sp
-                )
-                OutlinedTextField(
-                    value = peer,
-                    onValueChange = {
-                        peer = it
-                        error = null
-                        checkResult = null
-                    },
-                    singleLine = true,
-                    label = { Text("host or host:port") },
-                    keyboardOptions = KeyboardOptions(
-                        autoCorrect = false,
-                        capitalization = KeyboardCapitalization.None
-                    )
-                )
-                Text(
-                    when {
-                        peer.isBlank() -> "Effective address: none. Saving an empty field clears this peer."
-                        validated != null && validated.explicitPort -> "Effective address: ${validated.formatted}"
-                        validated != null -> "Effective address: ${validated.formatted} (default ${network.label} port)"
-                        else -> "Effective address: enter a valid host or host:port."
-                    },
-                    color = DarkMuted,
-                    fontSize = 11.sp
-                )
-                error?.let { Text(it, color = Danger, fontSize = 11.sp) }
-                TextButton(
-                    onClick = {
-                        if (checking) return@TextButton
-                        val address = try {
-                            TestnetPeer.address(peer, defaultPort)
-                        } catch (e: IllegalArgumentException) {
-                            error = e.message ?: "Invalid peer"
-                            return@TextButton
-                        }
-                        if (address == null) {
-                            error = "Enter a host to test"
-                            return@TextButton
-                        }
-                        error = null
-                        checkResult = null
-                        checking = true
-                        scope.launch {
-                            try {
-                                val result = SeedConnectionSelfTest.probePeer(address.bareHost, address.port)
-                                checkResult = SeedConnectionSelfTest.reachability(result)
-                            } catch (t: Throwable) {
-                                checkResult = "Reachability check failed: ${t.message ?: "unknown error"}"
-                            } finally {
-                                checking = false
-                            }
-                        }
-                    },
-                    enabled = !checking && peer.isNotBlank()
-                ) { Text(if (checking) "Testing…" else "Test reachability", color = Electric, fontSize = 11.sp) }
-                checkResult?.let { Text(it, color = DarkMuted, fontSize = 11.sp) }
-                Text(
-                    "A successful TCP check only means the address answered; it does not confirm a compatible Stohn node.",
-                    color = DarkMuted,
-                    fontSize = 10.sp
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val address = try {
-                    TestnetPeer.address(peer, defaultPort)
-                } catch (e: IllegalArgumentException) {
-                    error = e.message ?: "Invalid peer"
-                    return@TextButton
-                }
-                onSave(address?.normalized)
-            }) { Text("Save") }
-        },
+        text = { CustomPeerDialogBody(network, state) },
+        confirmButton = { CustomPeerDialogSaveButton(network, state, onSave) },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
