@@ -85,6 +85,15 @@ class CustomPeerDialogTest {
     }
 
     @Test
+    fun theFieldStartsFromTheSavedValueSoTheUserCanFixIt() {
+        render(current = "node_bad.example:47218")
+
+        // Opening the dialog from the Node Status warning pre-fills the value that needs repair.
+        compose.onNodeWithText("node_bad.example:47218").assertExists()
+        compose.onNodeWithText("Effective address: enter a valid host or host:port.").assertExists()
+    }
+
+    @Test
     fun validHostIsNormalizedBeforeItIsSaved() {
         render(current = null)
 

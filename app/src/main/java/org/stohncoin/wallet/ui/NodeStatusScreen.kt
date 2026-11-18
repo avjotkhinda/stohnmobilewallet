@@ -173,17 +173,39 @@ fun NodeStatusPage(
                 TextButton(onClick = { showPeerDialog = true }) { Text("Set custom peer", color = Electric) }
                 target.skippedPeer?.let { ignored ->
                     // Starting without it is silent otherwise: 0 peers would look like a bug.
-                    Text(
-                        "Saved peer $ignored is not a valid address, so Stohn Core starts without it. Set a new custom peer above.",
-                        color = Color(0xFFE9B455),
-                        fontSize = 11.sp
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            "Saved peer $ignored is not a valid address, so it is ignored and Stohn Core starts without it.",
+                            color = Color(0xFFE9B455),
+                            fontSize = 11.sp
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // Opens the custom peer dialog already holding the value that needs fixing.
+                            TextButton(onClick = { showPeerDialog = true }) {
+                                Text("Fix saved peer", color = Electric, fontSize = 11.sp)
+                            }
+                            TextButton(
+                                onClick = {
+                                    // Clearing restarts a running node, so Core starts without the unusable value.
+                                    if (target.network == RuntimeBackend.Network.TESTNET) {
+                                        actions.onTestnetPeer(null)
+                                    } else {
+                                        actions.onMainnetPeer(null)
+                                    }
+                                }
+                            ) { Text("Clear saved peer", color = Electric, fontSize = 11.sp) }
+                        }
+                    }
                 }
                 if (showNoPeerHint && peers == 0) {
-                    val zeroPeerHint = if (!activeCustomPeer.isNullOrBlank()) {
-                        "Still at 0 peers. The custom peer may be unreachable; check the address or try another peer."
-                    } else {
-                        "Still at 0 peers. Stohn's bundled seeds may be unreachable; set a Custom peer above."
+                    // A peer Core skipped was never dialled, so it cannot be blamed for 0 peers.
+                    val zeroPeerHint = when {
+                        target.skippedPeer != null ->
+                            "Still at 0 peers. Stohn's bundled seeds may be unreachable; the saved peer above is not in use."
+                        !activeCustomPeer.isNullOrBlank() ->
+                            "Still at 0 peers. The custom peer may be unreachable; check the address or try another peer."
+                        else ->
+                            "Still at 0 peers. Stohn's bundled seeds may be unreachable; set a Custom peer above."
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(

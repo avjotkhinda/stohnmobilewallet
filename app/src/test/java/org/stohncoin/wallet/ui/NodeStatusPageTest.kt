@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,7 +49,8 @@ class NodeStatusPageTest {
         loadPeers: suspend () -> List<WalletRpc.PeerInfo> = { emptyList() },
         network: RuntimeBackend.Network = RuntimeBackend.Network.TESTNET,
         savedPeer: String? = null,
-        skippedPeer: String? = null
+        skippedPeer: String? = null,
+        onTestnetPeer: (String?) -> Unit = {}
     ) {
         compose.setContent {
             NodeStatusPage(
@@ -61,7 +63,12 @@ class NodeStatusPageTest {
                     skippedPeer = skippedPeer
                 ),
                 storage = NodeStatusStorage(),
-                actions = NodeStatusActions(onStart = {}, onStop = {}, loadPeers = loadPeers)
+                actions = NodeStatusActions(
+                    onStart = {},
+                    onStop = {},
+                    onTestnetPeer = onTestnetPeer,
+                    loadPeers = loadPeers
+                )
             )
         }
     }
@@ -81,6 +88,45 @@ class NodeStatusPageTest {
         compose.onNodeWithText("Saved peer node_bad.example:47218 is not a valid address", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
+        compose.onNodeWithText("it is ignored and Stohn Core starts without it", substring = true).assertExists()
+        // Both ways out of the warning: fix the saved value, or drop it.
+        compose.onNodeWithText("Fix saved peer").assertExists()
+        compose.onNodeWithText("Clear saved peer").assertExists()
+    }
+
+    @Test
+    fun theZeroPeerHintDoesNotBlameAPeerCoreSkipped() {
+        render(peers = { 0 }, savedPeer = "node_bad.example:47218", skippedPeer = "node_bad.example:47218")
+
+        compose.onNodeWithText("the saved peer above is not in use", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onAllNodesWithText("The custom peer may be unreachable", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun theZeroPeerHintBlamesACustomPeerCoreActuallyUses() {
+        render(peers = { 0 }, savedPeer = "node.example.org")
+
+        compose.onNodeWithText("The custom peer may be unreachable", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onAllNodesWithText("the saved peer above is not in use", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun theSkippedPeerWarningOffersToClearTheSavedPeer() {
+        val cleared = mutableListOf<String?>()
+        render(
+            peers = { 0 },
+            savedPeer = "node_bad.example:47218",
+            skippedPeer = "node_bad.example:47218",
+            onTestnetPeer = { cleared += it }
+        )
+
+        compose.onNodeWithText("Clear saved peer").performScrollTo().performClick()
+
+        assertEquals(listOf<String?>(null), cleared)
     }
 
     @Test
