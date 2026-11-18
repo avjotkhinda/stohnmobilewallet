@@ -34,8 +34,8 @@ class NodeStatusPageTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private fun state(peers: Int) = NodeController.State(
-        status = NodeController.Status.SYNCING,
+    private fun state(peers: Int, status: NodeController.Status = NodeController.Status.SYNCING) = NodeController.State(
+        status = status,
         peers = peers,
         message = "Synchronizing Stohn blockchain…"
     )
@@ -50,11 +50,13 @@ class NodeStatusPageTest {
         network: RuntimeBackend.Network = RuntimeBackend.Network.TESTNET,
         savedPeer: String? = null,
         skippedPeer: String? = null,
-        onTestnetPeer: (String?) -> Unit = {}
+        running: Boolean = true,
+        onTestnetPeer: (String?) -> Unit = {},
+        onMainnetPeer: (String?) -> Unit = {}
     ) {
         compose.setContent {
             NodeStatusPage(
-                state = state(peers()),
+                state = state(peers(), if (running) NodeController.Status.SYNCING else NodeController.Status.STOPPED),
                 runningForMillis = ZeroPeerHint.DELAY_MILLIS,
                 target = NodeStatusTarget(
                     network = network,
@@ -67,6 +69,7 @@ class NodeStatusPageTest {
                     onStart = {},
                     onStop = {},
                     onTestnetPeer = onTestnetPeer,
+                    onMainnetPeer = onMainnetPeer,
                     loadPeers = loadPeers
                 )
             )
@@ -89,9 +92,26 @@ class NodeStatusPageTest {
             .performScrollTo()
             .assertIsDisplayed()
         compose.onNodeWithText("it is ignored and Stohn Core starts without it", substring = true).assertExists()
+        // The Custom peer line carries the same verdict as the warning below it.
+        compose.onNodeWithText("node_bad.example:47218 (ignored)").assertExists()
         // Both ways out of the warning: fix the saved value, or drop it.
         compose.onNodeWithText("Fix saved peer").assertExists()
         compose.onNodeWithText("Clear saved peer").assertExists()
+    }
+
+    @Test
+    fun aSavedPeerIsOnlyCalledIgnoredOnceCoreRuns() {
+        // A stopped node has skipped nothing yet: the value is shown as saved, with no verdict.
+        render(
+            peers = { 0 },
+            savedPeer = "node_bad.example:47218",
+            skippedPeer = "node_bad.example:47218",
+            running = false
+        )
+
+        compose.onNodeWithText("node_bad.example:47218").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("(ignored)", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("is not a valid address", substring = true).assertDoesNotExist()
     }
 
     @Test
@@ -122,6 +142,22 @@ class NodeStatusPageTest {
             savedPeer = "node_bad.example:47218",
             skippedPeer = "node_bad.example:47218",
             onTestnetPeer = { cleared += it }
+        )
+
+        compose.onNodeWithText("Clear saved peer").performScrollTo().performClick()
+
+        assertEquals(listOf<String?>(null), cleared)
+    }
+
+    @Test
+    fun theSkippedPeerWarningClearsTheSavedMainnetPeer() {
+        val cleared = mutableListOf<String?>()
+        render(
+            peers = { 0 },
+            network = RuntimeBackend.Network.MAINNET,
+            savedPeer = "node_bad.example:47218",
+            skippedPeer = "node_bad.example:47218",
+            onMainnetPeer = { cleared += it }
         )
 
         compose.onNodeWithText("Clear saved peer").performScrollTo().performClick()

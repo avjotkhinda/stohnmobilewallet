@@ -130,6 +130,8 @@ fun NodeStatusPage(
     var testingConnection by remember { mutableStateOf(false) }
     var connectionTest by remember(network, activeCustomPeer) { mutableStateOf<String?>(null) }
     val running = state.isRunning
+    // Config alone is not enough: nothing is skipped until Core is actually up without the peer.
+    val ignoredPeer = target.skippedPeer?.takeIf { running }
     val peers = state.peers
     // Bumped whenever the node stops/starts or the peer count changes: a connection-test result
     // only describes the zero-peer episode it was run in, so it is dropped when that episode ends.
@@ -169,9 +171,16 @@ fun NodeStatusPage(
                 NodeFact("Connections", "${state.peers} peers")
                 NodeFact("Network", network.label)
                 TextButton(onClick = { showNetworkDialog = true }) { Text("Change network", color = Electric) }
-                NodeFact("Custom peer", activeCustomPeer ?: "None set")
+                NodeFact(
+                    "Custom peer",
+                    when {
+                        activeCustomPeer.isNullOrBlank() -> "None set"
+                        ignoredPeer != null -> "$activeCustomPeer (ignored)"
+                        else -> activeCustomPeer
+                    }
+                )
                 TextButton(onClick = { showPeerDialog = true }) { Text("Set custom peer", color = Electric) }
-                target.skippedPeer?.let { ignored ->
+                ignoredPeer?.let { ignored ->
                     // Starting without it is silent otherwise: 0 peers would look like a bug.
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
@@ -200,7 +209,7 @@ fun NodeStatusPage(
                 if (showNoPeerHint && peers == 0) {
                     // A peer Core skipped was never dialled, so it cannot be blamed for 0 peers.
                     val zeroPeerHint = when {
-                        target.skippedPeer != null ->
+                        ignoredPeer != null ->
                             "Still at 0 peers. Stohn's bundled seeds may be unreachable; the saved peer above is not in use."
                         !activeCustomPeer.isNullOrBlank() ->
                             "Still at 0 peers. The custom peer may be unreachable; check the address or try another peer."
