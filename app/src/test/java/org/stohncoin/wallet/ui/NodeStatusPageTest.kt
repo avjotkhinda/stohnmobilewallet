@@ -172,6 +172,20 @@ class NodeStatusPageTest {
     }
 
     @Test
+    fun fixingTheSkippedPeerOpensTheDialogPreFilledWithIt() {
+        render(peers = { 0 }, savedPeer = "node_bad.example:47218", skippedPeer = "node_bad.example:47218")
+        // The warning's own copy does not put the raw address in a text field, so any match after
+        // the tap is the dialog's field.
+        compose.onAllNodesWithText("node_bad.example:47218").assertCountEquals(0)
+
+        compose.onNodeWithText("Fix saved peer").performScrollTo().performClick()
+
+        // The whole route the button promises: mounted dialog, seeded field, same peer being fixed.
+        compose.onNodeWithText("node_bad.example:47218").assertExists()
+        compose.onNodeWithText("Effective address: enter a valid host or host:port.").assertExists()
+    }
+
+    @Test
     fun theSkippedPeerWarningClearsTheSavedMainnetPeer() {
         val cleared = mutableListOf<String?>()
         render(
