@@ -212,7 +212,8 @@ fun NodeStatusPage(
                     // Starting without it is silent otherwise: 0 peers would look like a bug.
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            "Saved peer $ignored is not a valid address, so it is ignored and Stohn Core starts without it.",
+                            "Saved peer $ignored is not a valid address, so it is ignored and Stohn Core starts without it. " +
+                                "Use Test reachability in the peer dialog to check a replacement address before saving it.",
                             color = Color(0xFFE9B455),
                             fontSize = 11.sp
                         )
