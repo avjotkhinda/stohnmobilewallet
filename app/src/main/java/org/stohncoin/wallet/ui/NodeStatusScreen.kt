@@ -207,7 +207,11 @@ fun NodeStatusPage(
                         else -> activeCustomPeer
                     }
                 )
-                TextButton(onClick = { dialogs.openPeer(activeCustomPeer) }) { Text("Set custom peer", color = Electric) }
+                // The one control for setting or replacing the peer; the label says which. A second
+                // button in the warning below would open this same dialog and split the user's choice.
+                TextButton(onClick = { dialogs.openPeer(activeCustomPeer) }) {
+                    Text(if (ignoredPeer != null) "Fix saved peer" else "Set custom peer", color = Electric)
+                }
                 ignoredPeer?.let { ignored ->
                     // Starting without it is silent otherwise: 0 peers would look like a bug.
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -217,22 +221,17 @@ fun NodeStatusPage(
                             color = Color(0xFFE9B455),
                             fontSize = 11.sp
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            // Opens the custom peer dialog already holding the value that needs fixing.
-                            TextButton(onClick = { dialogs.openPeer(activeCustomPeer) }) {
-                                Text("Fix saved peer", color = Electric, fontSize = 11.sp)
-                            }
-                            TextButton(
-                                onClick = {
-                                    // Clearing restarts a running node, so Core starts without the unusable value.
-                                    if (target.network == RuntimeBackend.Network.TESTNET) {
-                                        actions.onTestnetPeer(null)
-                                    } else {
-                                        actions.onMainnetPeer(null)
-                                    }
+                        // Replacing happens on the row above; this is the other way out of the warning.
+                        TextButton(
+                            onClick = {
+                                // Clearing restarts a running node, so Core starts without the unusable value.
+                                if (target.network == RuntimeBackend.Network.TESTNET) {
+                                    actions.onTestnetPeer(null)
+                                } else {
+                                    actions.onMainnetPeer(null)
                                 }
-                            ) { Text("Clear saved peer", color = Electric, fontSize = 11.sp) }
-                        }
+                            }
+                        ) { Text("Clear saved peer", color = Electric, fontSize = 11.sp) }
                     }
                 }
                 if (showNoPeerHint && peers == 0) {

@@ -98,8 +98,10 @@ class NodeStatusPageTest {
         compose.onNodeWithText("it is ignored and Stohn Core starts without it", substring = true).assertExists()
         // The Custom peer line carries the same verdict as the warning below it.
         compose.onNodeWithText("node_bad.example:47218 (ignored)").assertExists()
-        // Both ways out of the warning: fix the saved value, or drop it.
-        compose.onNodeWithText("Fix saved peer").assertExists()
+        // One way to replace the value — the row's own button, renamed while it is skipped — and
+        // one distinct way out, dropping it. No duplicate button in the warning.
+        compose.onAllNodesWithText("Fix saved peer").assertCountEquals(1)
+        compose.onAllNodesWithText("Set custom peer").assertCountEquals(0)
         compose.onNodeWithText("Clear saved peer").assertExists()
     }
 
@@ -132,6 +134,9 @@ class NodeStatusPageTest {
     fun theZeroPeerHintBlamesACustomPeerCoreActuallyUses() {
         render(peers = { 0 }, savedPeer = "node.example.org")
 
+        // Nothing is skipped, so the row keeps its ordinary label.
+        compose.onNodeWithText("Set custom peer").assertExists()
+        compose.onAllNodesWithText("Fix saved peer").assertCountEquals(0)
         compose.onNodeWithText("The custom peer may be unreachable", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
