@@ -105,18 +105,15 @@ class NodeStatusPageTest {
     }
 
     @Test
-    fun aSavedPeerIsOnlyCalledIgnoredOnceCoreRuns() {
-        // A stopped node has skipped nothing yet: the value is shown as saved, with no verdict.
-        render(
-            peers = { 0 },
-            savedPeer = "node_bad.example:47218",
-            skippedPeer = "node_bad.example:47218",
-            running = false
-        )
+    fun aSavedPeerWithNoRunRecordIsNotCalledIgnored() {
+        // A stopped node has run nothing, so the controller recorded no skip: the stored config on
+        // its own must not turn into a verdict about what Core started without.
+        render(peers = { 0 }, savedPeer = "node_bad.example:47218", running = false)
 
         compose.onNodeWithText("node_bad.example:47218").performScrollTo().assertIsDisplayed()
         compose.onAllNodesWithText("(ignored)", substring = true).assertCountEquals(0)
         compose.onNodeWithText("is not a valid address", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Set custom peer").assertExists()
     }
 
     @Test

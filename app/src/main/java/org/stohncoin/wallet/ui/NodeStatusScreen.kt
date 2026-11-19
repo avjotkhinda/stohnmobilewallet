@@ -68,7 +68,10 @@ data class NodeStatusTarget(
     val pruneMode: NodeStorage.Mode,
     val testnetPeer: String? = null,
     val mainnetPeer: String? = null,
-    /** A saved peer Core starts without because it no longer validates, for the screen to name. */
+    /**
+     * The peer the current Core run started without, as NodeController recorded it when Core was
+     * launched. Null before a run has dropped one; this screen never re-derives it from the config.
+     */
     val skippedPeer: String? = null
 ) {
     /** The peer Core would dial on [network]; the other network's saved value never applies. */
@@ -169,8 +172,9 @@ fun NodeStatusPage(
     var testingConnection by remember { mutableStateOf(false) }
     var connectionTest by remember(network, activeCustomPeer) { mutableStateOf<String?>(null) }
     val running = state.isRunning
-    // Config alone is not enough: nothing is skipped until Core is actually up without the peer.
-    val ignoredPeer = target.skippedPeer?.takeIf { running }
+    // The controller's record of the run that is (or was last) up: the stored config is not a
+    // verdict on its own, because it can change under a run that already started without it.
+    val ignoredPeer = target.skippedPeer
     val peers = state.peers
     // Bumped whenever the node stops/starts or the peer count changes: a connection-test result
     // only describes the zero-peer episode it was run in, so it is dropped when that episode ends.

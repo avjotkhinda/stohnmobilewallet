@@ -59,6 +59,11 @@ class NodeController private constructor(context: Context) : SendGateway {
     private var startJob: Job? = null
     // Wall-clock start of the current Core run, kept here so a reopened screen measures the run.
     @Volatile private var runningSinceMillis: Long? = null
+    // The peer the current Core run started without, recorded where Core's arguments are decided.
+    @Volatile private var skippedInRun: SkippedPeer? = null
+
+    /** The peer one Core run was launched without, and the network that run belongs to. */
+    private data class SkippedPeer(val network: Network, val peer: String)
 
     data class State(
         val status: Status = Status.STOPPED,
@@ -105,6 +110,10 @@ class NodeController private constructor(context: Context) : SendGateway {
                     RuntimeInstaller.installIfNeeded(appContext)
                     _state.value = State(status = Status.STARTING, message = "Starting Stohn Core…")
                     val storedPeer = peer()
+                    // Recorded here, next to the arguments Core is launched with: the stored value
+                    // can be replaced while this run keeps going, and the screen must not describe
+                    // a skip this run never made.
+                    recordRunPeer(activeNetwork, storedPeer)
                     RuntimeBackend.peerArgumentWarning(activeNetwork, storedPeer)?.let { warning ->
                         // A saved peer from an older, looser rule set is skipped, never fatal.
                         Log.w("NodeController", warning)
@@ -122,6 +131,8 @@ class NodeController private constructor(context: Context) : SendGateway {
                     // the switch install the new backend instead of reporting an ERROR state.
                     logDiagnostic("startCoreFromService", "cancelled", c)
                     runningSinceMillis = null
+                    // Core never got going, so this run skipped nothing.
+                    skippedInRun = null
                     withContext(NonCancellable) { runCatching { started?.stop() } }
                     if (backend === started) backend = null
                     throw c
@@ -129,6 +140,8 @@ class NodeController private constructor(context: Context) : SendGateway {
                     Log.e("NodeController", "startCoreFromService failed", t)
                     logDiagnostic("startCoreFromService", "failed", t)
                     runningSinceMillis = null
+                    // A run that failed to start skipped nothing the screen should name.
+                    skippedInRun = null
                     runCatching { started?.stop() }
                     if (backend === started) backend = null
                     _state.value = State(status = Status.ERROR, message = t.message ?: "Unable to start Core")
@@ -310,6 +323,8 @@ class NodeController private constructor(context: Context) : SendGateway {
         startJob?.cancel()
         startJob = null
         backend = null
+        // This run is being replaced; the next start records what it does with the saved peer.
+        skippedInRun = null
         _state.value = State(status = Status.STARTING, message = message)
         runCatching { b.stop() }
         delay(1200)
@@ -445,15 +460,21 @@ class NodeController private constructor(context: Context) : SendGateway {
     fun peer(): String? = if (activeNetwork == RuntimeBackend.Network.TESTNET) testnetPeer() else mainnetPeer()
 
     /**
-     * The saved peer Core starts without because it no longer validates, or null when there is no
-     * peer or the saved one is usable. Startup skips such a peer instead of throwing, so the screen
-     * has to name it: otherwise the user just sees 0 peers with no explanation.
+     * Records the peer a run starts without. Called from [startCoreFromService] before Core is
+     * launched, so every call belongs to one run and replaces the last record, including with null
+     * when the saved peer is usable.
      */
-    fun skippedPeer(): String? {
-        val saved = peer() ?: return null
-        if (RuntimeBackend.peerArgumentWarning(activeNetwork, saved) == null) return null
-        return saved.trim()
+    internal fun recordRunPeer(network: Network, savedPeer: String?) {
+        skippedInRun = if (RuntimeBackend.peerArgumentWarning(network, savedPeer) == null) null
+        else SkippedPeer(network, savedPeer.orEmpty().trim())
     }
+
+    /**
+     * The peer the current Core run started without because the launcher dropped it, or null when
+     * this run dials the saved peer. Read from the run's own record rather than re-validating the
+     * stored config: a replacement saved under a running Core belongs to the next run, not this one.
+     */
+    fun skippedPeer(): String? = skippedInRun?.takeIf { it.network == activeNetwork }?.peer
 
     /** Saves a testnet peer in host[:port] form; blank clears it. Restarts a running testnet node. */
     suspend fun setTestnetPeer(raw: String?) = setPeer(KEY_TESTNET_PEER, raw, RuntimeBackend.Network.TESTNET)
@@ -506,6 +527,8 @@ class NodeController private constructor(context: Context) : SendGateway {
     private suspend fun stopCoreInPlace(message: String) {
         val oldBackend = backend
         backend = null
+        // The run is over before the next one starts; a skip belongs to the run that made it.
+        skippedInRun = null
         _state.value = State(status = Status.STOPPING, message = message)
         startJob?.cancelAndJoin()
         startJob = null
@@ -568,6 +591,8 @@ class NodeController private constructor(context: Context) : SendGateway {
     fun stop() {
         if (!_state.value.isRunning) return
         userStopped = true
+        // Core is on its way out, so it is not running without a peer any more.
+        skippedInRun = null
         _state.value = _state.value.copy(status = Status.STOPPING, message = "Stopping the local node…")
         val stopped = runCatching { appContext.stopService(Intent(appContext, NodeService::class.java)) }
             .getOrDefault(false)
@@ -590,6 +615,7 @@ class NodeController private constructor(context: Context) : SendGateway {
         startJob?.cancel()
         startJob = null
         runningSinceMillis = null
+        skippedInRun = null
         val b = backend
         backend = null
         scope.launch { runCatching { b?.stop() } }

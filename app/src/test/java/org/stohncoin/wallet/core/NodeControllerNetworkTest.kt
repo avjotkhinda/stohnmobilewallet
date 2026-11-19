@@ -25,6 +25,8 @@ class NodeControllerNetworkTest {
         kotlinx.coroutines.runBlocking {
             NodeController.get(context).applyNetwork(RuntimeBackend.Network.MAINNET)
         }
+        // The controller is process-wide, so drop any run record a previous test left behind.
+        NodeController.get(context).recordRunPeer(RuntimeBackend.Network.MAINNET, null)
     }
 
     private fun node(): NodeController = NodeController.get(context)
@@ -185,26 +187,77 @@ class NodeControllerNetworkTest {
     }
 
     @Test
-    fun aSavedPeerThatNoLongerValidatesIsReportedForTheScreen() {
+    fun aRunThatDroppedTheSavedPeerIsReportedWithWhatCoreStartedWithout() {
         val node = node()
         kotlinx.coroutines.runBlocking { node.applyNetwork(RuntimeBackend.Network.TESTNET) }
         // Written by an older build, when an underscore in a host still passed validation.
         prefs(node).edit().putString("testnet_peer", "node_bad.example:47218").commit()
 
+        node.recordRunPeer(RuntimeBackend.Network.TESTNET, "node_bad.example:47218")
+
         assertEquals("node_bad.example:47218", node.skippedPeer())
     }
 
     @Test
-    fun aSavedPeerThatStillValidatesIsNotReportedAsSkipped() {
+    fun theStoredPeerChangingUnderARunDoesNotRewriteWhatThatRunSkipped() {
         val node = node()
         kotlinx.coroutines.runBlocking { node.applyNetwork(RuntimeBackend.Network.TESTNET) }
+        node.recordRunPeer(RuntimeBackend.Network.TESTNET, "node_bad.example:47218")
+        // Saving a new value does not restart a stopped node, so the run on screen is still the one
+        // that started without the old value; re-reading the config would claim a skip never made.
         prefs(node).edit().putString("testnet_peer", "node.example.org").commit()
+
+        assertEquals("node_bad.example:47218", node.skippedPeer())
+    }
+
+    @Test
+    fun aRunThatDialedTheSavedPeerSkippedNothing() {
+        val node = node()
+        node.recordRunPeer(RuntimeBackend.Network.MAINNET, "node.example.org")
 
         assertNull(node.skippedPeer())
     }
 
     @Test
-    fun noSavedPeerMeansNothingIsReportedAsSkipped() {
+    fun noSavedPeerMeansTheRunSkippedNothing() {
+        node().recordRunPeer(RuntimeBackend.Network.MAINNET, null)
+
         assertNull(node().skippedPeer())
+    }
+
+    @Test
+    fun stoppingTheNodeForgetsWhatTheRunSkipped() {
+        val node = node()
+        kotlinx.coroutines.runBlocking { node.applyNetwork(RuntimeBackend.Network.TESTNET) }
+        node.recordRunPeer(RuntimeBackend.Network.TESTNET, "node_bad.example:47218")
+        assertEquals("node_bad.example:47218", node.skippedPeer())
+
+        node.stopCoreFromService()
+
+        assertNull(node.skippedPeer())
+    }
+
+    @Test
+    fun replacingThePeerRecordsTheNextRunInsteadOfKeepingTheOldSkip() {
+        val node = node()
+        kotlinx.coroutines.runBlocking { node.applyNetwork(RuntimeBackend.Network.TESTNET) }
+        node.recordRunPeer(RuntimeBackend.Network.TESTNET, "node_bad.example:47218")
+        assertEquals("node_bad.example:47218", node.skippedPeer())
+
+        node.recordRunPeer(RuntimeBackend.Network.TESTNET, "node.example.org")
+        assertNull("a run dialling the new, valid peer skipped nothing", node.skippedPeer())
+
+        node.recordRunPeer(RuntimeBackend.Network.TESTNET, "other_bad.example:47218")
+        assertEquals("other_bad.example:47218", node.skippedPeer())
+    }
+
+    @Test
+    fun aRecordFromAnotherNetworkIsNotReportedAfterASwitch() {
+        val node = node()
+        node.recordRunPeer(RuntimeBackend.Network.TESTNET, "node_bad.example:47218")
+
+        kotlinx.coroutines.runBlocking { node.applyNetwork(RuntimeBackend.Network.MAINNET) }
+
+        assertNull(node.skippedPeer())
     }
 }
