@@ -155,15 +155,20 @@ class NodeStatusPageTest {
     }
 
     @Test
-    fun fixingTheSkippedPeerOpensTheDialogHoldingThatValue() {
+    fun fixingTheSkippedPeerOpensTheDialogHoldingWhatIsSavedNow() {
         val dialogs = NodeStatusDialogs()
+        // The saved value differs from the one this run started without, so the assertions below
+        // can tell which of the two seeded the dialog.
         render(
             peers = { 0 },
             savedPeer = "node_bad.example:47218",
-            skippedPeer = "node_bad.example:47218",
+            skippedPeer = "old_bad.example:47218",
             dialogs = dialogs
         )
-        assertNull("no dialog is mounted before the tap", dialogs.open)
+        assertNull("no dialog is open before the tap", dialogs.open)
+        // One control changes the peer; the warning must not add a second button that opens this
+        // same dialog from the recorded value instead.
+        compose.onAllNodesWithText("Fix saved peer").assertCountEquals(1)
 
         compose.onNodeWithText("Fix saved peer").performScrollTo().performClick()
 
@@ -173,7 +178,11 @@ class NodeStatusPageTest {
             NodeStatusDialogs.Open.PEER,
             dialogs.open
         )
-        assertEquals("node_bad.example:47218", dialogs.peerSeed)
+        assertEquals(
+            "the dialog must start from the stored peer it can fix, not the run's record",
+            "node_bad.example:47218",
+            dialogs.peerSeed
+        )
     }
 
     @Test
@@ -194,20 +203,6 @@ class NodeStatusPageTest {
         compose.onNodeWithText("Change storage mode").performScrollTo().performClick()
 
         assertEquals(NodeStatusDialogs.Open.STORAGE, dialogs.open)
-    }
-
-    @Test
-    fun fixingTheSkippedPeerOpensTheDialogPreFilledWithIt() {
-        render(peers = { 0 }, savedPeer = "node_bad.example:47218", skippedPeer = "node_bad.example:47218")
-        // The warning's own copy does not put the raw address in a text field, so any match after
-        // the tap is the dialog's field.
-        compose.onAllNodesWithText("node_bad.example:47218").assertCountEquals(0)
-
-        compose.onNodeWithText("Fix saved peer").performScrollTo().performClick()
-
-        // The whole route the button promises: mounted dialog, seeded field, same peer being fixed.
-        compose.onNodeWithText("node_bad.example:47218").assertExists()
-        compose.onNodeWithText("Effective address: enter a valid host or host:port.").assertExists()
     }
 
     @Test
