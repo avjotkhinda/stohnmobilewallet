@@ -174,7 +174,9 @@ fun NodeStatusPage(
     val running = state.isRunning
     // The controller's record of the run that is (or was last) up: the stored config is not a
     // verdict on its own, because it can change under a run that already started without it.
-    val ignoredPeer = target.skippedPeer
+    // Only a running Core is being started without it now, so the mark and the warning below wait
+    // for a run to be up; a stopped node says nothing about a peer it is not skipping yet.
+    val ignoredPeer = if (running) target.skippedPeer else null
     val peers = state.peers
     // Bumped whenever the node stops/starts or the peer count changes: a connection-test result
     // only describes the zero-peer episode it was run in, so it is dropped when that episode ends.

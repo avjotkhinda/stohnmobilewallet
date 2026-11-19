@@ -117,6 +117,24 @@ class NodeStatusPageTest {
     }
 
     @Test
+    fun aStoppedNodeDoesNotAccuseThePeerItWillSkip() {
+        // Core is down, so nothing is being started without the peer right now: a record left from
+        // the last run must not keep the warning on a node that is not skipping anything.
+        render(
+            peers = { 0 },
+            savedPeer = "node_bad.example:47218",
+            skippedPeer = "node_bad.example:47218",
+            running = false
+        )
+
+        compose.onNodeWithText("node_bad.example:47218").performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("(ignored)", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("is not a valid address", substring = true).assertDoesNotExist()
+        compose.onAllNodesWithText("Clear saved peer").assertCountEquals(0)
+        compose.onNodeWithText("Set custom peer").assertExists()
+    }
+
+    @Test
     fun theZeroPeerHintDoesNotBlameAPeerCoreSkipped() {
         render(peers = { 0 }, savedPeer = "node_bad.example:47218", skippedPeer = "node_bad.example:47218")
 
