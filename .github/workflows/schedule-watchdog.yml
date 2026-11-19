@@ -95,7 +95,7 @@ jobs:
           {
             echo "## No alert channel configured"
             echo
-            echo "The schedule checks above may be perfectly healthy - this red run is about the missing channel alone."
+            echo "The schedule checks above may be perfectly healthy - the only gap is the missing channel."
             echo
             echo "**Add it here:** ${new_secret_url}"
             echo
