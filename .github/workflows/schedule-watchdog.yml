@@ -13,8 +13,10 @@ name: schedule-watchdog
 # would have said so never starts. Two schedules each checking the other is what keeps one silent
 # schedule from being mistaken for a quiet repository.
 #
-# Like the weekly run, this one refuses to report into nothing: with no alert channel configured it
-# fails rather than passing quietly, so neither half of the pair can look healthy while blind.
+# No alert channel is a warning, not a failure: a stopped schedule already fails this run and opens an
+# issue by itself, so a run that is red every morning for a setting would hide the failure it exists to
+# report behind a red that says nothing new. The gap is still named on every run - annotation, summary,
+# and the weekly check's channel line - and alert-test stays strict, because proving delivery is its job.
 on:
   schedule:
     - cron: '41 5 * * *'
@@ -60,18 +62,18 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: bash scripts/watch-pin-schedule.sh
 
-      # A channel that is not configured cannot warn about anything, and a green watchdog run is the
-      # only sign - which is invisible. This makes the silence itself the failure, the same way the
-      # weekly run does: every workflow here refuses to pass while it has nowhere to report.
+      # A missing channel is a standing configuration gap, not a schedule failure, so it warns instead
+      # of failing. The check above already opens an issue and exits non-zero when a schedule really
+      # stops, and a run that is red every morning for a setting cannot be told apart from that failure -
+      # the red stops meaning "the schedule is broken" and starts meaning "nothing to see here again".
       #
-      # It runs even when a check above already failed, so the missing channel is named on the same red
-      # run rather than being hidden behind the outage that red run was about.
+      # The gap stays visible without borrowing that signal: this annotation, the run summary with the
+      # exact fix, and the weekly pin check's own channel line, on every run. A stopped schedule still
+      # fails the run; only the channel is a warning.
       #
-      # Deliberately still a failure and not a warning: a warning would leave the run green, and a green
-      # watchdog cannot be told apart from a healthy week even on the days it had nowhere to report. The
-      # price of that choice is this red run until the setting exists, so the message carries the whole
-      # remedy: the exact name, the exact page, and how to prove delivery.
-      - name: Fail the run when no alert channel is configured
+      # It runs even when a check above already failed, so the gap is named on the same run rather than
+      # being hidden behind the outage that run was about.
+      - name: Warn when no alert channel is configured
         if: always()
         env:
           GH_REPO: ${{ github.repository }}
@@ -109,7 +111,7 @@ jobs:
             echo 'Optional second route: `PIN_ALERT_WEBHOOK_URL_FALLBACK` - any webhook that accepts `{"text": ...}`.'
             echo
             echo 'To prove delivery first: Actions -> **alert-test** -> **Run workflow** posts one labelled test message and goes red if nothing arrives.'
-            echo 'This run turns green, logging `alert channel: configured`, once either name exists.'
+            echo 'Once either name exists this step logs `alert channel: configured`; until then the schedule checks above are still reported normally.'
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error title=No alert channel configured::Set the repository secret PIN_ALERT_WEBHOOK_URL at ${new_secret_url} (Settings -> Secrets and variables -> Actions -> Secrets -> New repository secret), or the optional PIN_ALERT_WEBHOOK_URL_FALLBACK. Run the alert-test workflow to prove delivery. This run stays red until either name exists."
-          exit 1
+          echo "::warning title=No alert channel configured::Set the repository secret PIN_ALERT_WEBHOOK_URL at ${new_secret_url} (Settings -> Secrets and variables -> Actions -> Secrets -> New repository secret), or the optional PIN_ALERT_WEBHOOK_URL_FALLBACK. Run the alert-test workflow to prove delivery. A stopped schedule still fails this run; only the missing channel is a warning."
+          exit 0

@@ -160,29 +160,34 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # A channel that is not configured cannot warn about anything, and the run that would have used it
-      # is already red for its own reason - so on a healthy week the silence was the only sign, and it
-      # was invisible. This makes the silence itself the failure: every real run fails while no alert
-      # route exists, which is what stops a missing channel drifting through a run of green weeks.
+      # A missing channel is a standing configuration gap, not a pin or schedule failure, so it warns
+      # instead of failing. The check step above already fails this run when a pin is dead or a schedule
+      # has stopped; a weekly red for a setting would make that failure look like the standing noise and
+      # teach people to stop reading this workflow's red at all.
+      #
+      # The gap stays visible without borrowing that signal: this annotation, the channel line already
+      # written to the summary above, and the same warning from the daily schedule-watchdog run.
       #
       # A dry run is exempt: it exists to answer "will the schedule fire", it never reports anything,
-      # and failing it for a channel it was never going to use would only muddy that answer.
-      - name: Fail the run when no alert channel is configured
+      # and warning it for a channel it was never going to use would only muddy that answer.
+      - name: Warn when no alert channel is configured
         if: always() && inputs.dry_run != true
         env:
+          GH_REPO: ${{ github.repository }}
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
-          # A variable is a supported route too, so it has to count here: failing the run for a channel
-          # that would in fact deliver would teach people to ignore this gate.
+          # A variable is a supported route too, so it has to count here: warning about a channel that
+          # would in fact deliver would teach people to ignore this gate.
           PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
         run: |
-          if [[ -z "$PIN_ALERT_WEBHOOK_URL" && -z "$PIN_ALERT_WEBHOOK_URL_FALLBACK" && \
-                -z "$PIN_ALERT_WEBHOOK_URL_VAR" && -z "$PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR" ]]; then
-            echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set, as a secret or as a repository variable, so a dead pin could not reach anyone. Add one under Settings - Secrets and variables - Actions."
-            exit 1
+          if [[ -n "$PIN_ALERT_WEBHOOK_URL" || -n "$PIN_ALERT_WEBHOOK_URL_FALLBACK" || \
+                -n "$PIN_ALERT_WEBHOOK_URL_VAR" || -n "$PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR" ]]; then
+            echo "alert channel: configured"
+            exit 0
           fi
-          echo "alert channel: configured"
+          echo "::warning title=No alert channel configured::Set the repository secret PIN_ALERT_WEBHOOK_URL at https://github.com/${GH_REPO}/settings/secrets/actions/new (Settings -> Secrets and variables -> Actions -> Secrets -> New repository secret), or the optional PIN_ALERT_WEBHOOK_URL_FALLBACK. Run the alert-test workflow to prove delivery. A dead pin still fails this run; only the missing channel is a warning."
+          exit 0
 
       # The watchdog guards this schedule, so this run guards the watchdog's: a daily watchdog whose
       # own schedule stopped would otherwise be silent in exactly the way it exists to prevent. Any
