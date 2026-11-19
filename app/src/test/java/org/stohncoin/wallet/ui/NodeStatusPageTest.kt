@@ -11,8 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -167,13 +166,37 @@ class NodeStatusPageTest {
             skippedPeer = "node_bad.example:47218",
             dialogs = dialogs
         )
-        assertFalse("no dialog is mounted before the tap", dialogs.peerOpen)
+        assertNull("no dialog is mounted before the tap", dialogs.open)
 
         compose.onNodeWithText("Fix saved peer").performScrollTo().performClick()
 
-        assertTrue("Fix saved peer must open the custom peer dialog", dialogs.peerOpen)
         // CustomPeerDialogTest renders the body from this seed, so the field arrives pre-filled.
+        assertEquals(
+            "Fix saved peer must open the custom peer dialog",
+            NodeStatusDialogs.Open.PEER,
+            dialogs.open
+        )
         assertEquals("node_bad.example:47218", dialogs.peerSeed)
+    }
+
+    @Test
+    fun changingTheNetworkOpensTheNetworkDialog() {
+        val dialogs = NodeStatusDialogs()
+        render(peers = { 1 }, dialogs = dialogs)
+
+        compose.onNodeWithText("Change network").performScrollTo().performClick()
+
+        assertEquals(NodeStatusDialogs.Open.NETWORK, dialogs.open)
+    }
+
+    @Test
+    fun changingTheStorageModeOpensTheStorageDialog() {
+        val dialogs = NodeStatusDialogs()
+        render(peers = { 1 }, dialogs = dialogs)
+
+        compose.onNodeWithText("Change storage mode").performScrollTo().performClick()
+
+        assertEquals(NodeStatusDialogs.Open.STORAGE, dialogs.open)
     }
 
     @Test

@@ -96,24 +96,37 @@ class NodeStatusActions(
 
 /**
  * Which dialog Node Status has open, and what the custom-peer dialog starts from. Hoisted out of the
- * composable so a test can prove that a button opens the peer dialog already holding the value it
- * has to fix, without mounting an [AlertDialog] window and reading inside it.
+ * composable so a test can prove which button opens what, without mounting an [AlertDialog] window
+ * and reading inside it.
+ *
+ * One field rather than a flag per dialog: at most one can be open, and the screen's three open/close
+ * decisions are then asserted the same way.
  */
 class NodeStatusDialogs {
-    var peerOpen by mutableStateOf(false)
+    enum class Open { STORAGE, NETWORK, PEER }
+
+    var open by mutableStateOf<Open?>(null)
         private set
 
-    /** The text the dialog's field starts with; null means nothing is saved to start from. */
+    /** The text the peer dialog's field starts with; null means nothing is saved to start from. */
     var peerSeed by mutableStateOf<String?>(null)
         private set
 
-    fun openPeer(seed: String?) {
-        peerSeed = seed
-        peerOpen = true
+    fun openStorage() {
+        open = Open.STORAGE
     }
 
-    fun closePeer() {
-        peerOpen = false
+    fun openNetwork() {
+        open = Open.NETWORK
+    }
+
+    fun openPeer(seed: String?) {
+        peerSeed = seed
+        open = Open.PEER
+    }
+
+    fun close() {
+        open = null
     }
 }
 
@@ -149,8 +162,6 @@ fun NodeStatusPage(
     val (chainUsage, freeBytes) = storage
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var showStorageDialog by remember { mutableStateOf(false) }
-    var showNetworkDialog by remember { mutableStateOf(false) }
     // Give Core a chance to connect before calling out that it has no peers.
     var showNoPeerHint by remember { mutableStateOf(false) }
     val activeCustomPeer = target.activePeer
@@ -198,7 +209,7 @@ fun NodeStatusPage(
                 NodeFact("Headers", state.headers.toString())
                 NodeFact("Connections", "${state.peers} peers")
                 NodeFact("Network", network.label)
-                TextButton(onClick = { showNetworkDialog = true }) { Text("Change network", color = Electric) }
+                TextButton(onClick = { dialogs.openNetwork() }) { Text("Change network", color = Electric) }
                 NodeFact(
                     "Custom peer",
                     when {
@@ -286,7 +297,7 @@ fun NodeStatusPage(
                 NodeFact("Chain data", chainUsage?.let { NodeStorage.format(it.bytes) } ?: "Measuring…")
                 NodeFact("Free space", freeBytes?.let { NodeStorage.format(it) } ?: "Unknown")
                 NodeFact("Storage mode", pruneMode.label)
-                TextButton(onClick = { showStorageDialog = true }) { Text("Change storage mode", color = Electric) }
+                TextButton(onClick = { dialogs.openStorage() }) { Text("Change storage mode", color = Electric) }
             }
         }
         ConnectedPeersSection(running = running, peerCount = peers, loadPeers = actions.loadPeers)
@@ -300,37 +311,34 @@ fun NodeStatusPage(
             fontSize = 11.sp
         )
     }
-    if (showStorageDialog) {
-        StorageModeDialog(
+    when (dialogs.open) {
+        NodeStatusDialogs.Open.STORAGE -> StorageModeDialog(
             current = pruneMode,
-            onDismiss = { showStorageDialog = false },
+            onDismiss = { dialogs.close() },
             onSelect = { mode ->
-                showStorageDialog = false
+                dialogs.close()
                 if (mode != pruneMode) actions.onPruneMode(mode)
             }
         )
-    }
-    if (showNetworkDialog) {
-        NetworkModeDialog(
+        NodeStatusDialogs.Open.NETWORK -> NetworkModeDialog(
             current = network,
-            onDismiss = { showNetworkDialog = false },
+            onDismiss = { dialogs.close() },
             onSelect = { mode ->
-                showNetworkDialog = false
+                dialogs.close()
                 if (mode != network) actions.onNetwork(mode)
             }
         )
-    }
-    if (dialogs.peerOpen) {
-        CustomPeerDialog(
+        NodeStatusDialogs.Open.PEER -> CustomPeerDialog(
             network = network,
             // The seed, not target.activePeer: a test can then prove which value the dialog got.
             current = dialogs.peerSeed,
-            onDismiss = { dialogs.closePeer() },
+            onDismiss = { dialogs.close() },
             onSave = { peer ->
-                dialogs.closePeer()
+                dialogs.close()
                 if (target.network == RuntimeBackend.Network.TESTNET) actions.onTestnetPeer(peer) else actions.onMainnetPeer(peer)
             }
         )
+        null -> Unit
     }
 }
 
