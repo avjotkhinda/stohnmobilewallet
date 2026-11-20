@@ -23,6 +23,10 @@ jobs:
         run: bash tools/verify-fullmode-repair.sh
       - name: Run source security audit
         run: bash tools/security-audit.sh
+      # The alert-channel guidance lives both in the scheduled workflows and in docs/ALERTS.md;
+      # this is what stops the two from describing different cadences or outcomes.
+      - name: Check alert-channel guidance matches docs/ALERTS.md
+        run: bash tools/verify-alert-guidance.sh
       - name: Cross-check the restore path against the wallet-migration script
         run: bash scripts/verify-restore-path.sh
       - name: Verify APK sidecars (artifacts/ is untracked, so this passes with none present)
