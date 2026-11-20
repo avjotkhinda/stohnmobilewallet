@@ -3,7 +3,9 @@ package org.stohncoin.wallet.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,7 +29,7 @@ class SettingsNodeStatusWarningTest {
         message = "Synchronizing Stohn blockchain…"
     )
 
-    private fun render(skippedPeer: String?) {
+    private fun render(skippedPeer: String?, onNode: () -> Unit = {}) {
         compose.setContent {
             SettingsPage(
                 state = state(),
@@ -35,7 +37,7 @@ class SettingsNodeStatusWarningTest {
                 onSecurity = {},
                 onImport = {},
                 onLock = {},
-                onNode = {},
+                onNode = onNode,
                 onWallets = {},
                 onAddressBook = {},
                 skippedPeer = skippedPeer
@@ -50,6 +52,21 @@ class SettingsNodeStatusWarningTest {
         compose.onNodeWithText("Saved peer node_bad.example:47218 is not a valid address, so Core started without it.")
             .performScrollTo()
             .assertIsDisplayed()
+    }
+
+    @Test
+    fun theWarnedSettingsEntryStillOpensNodeStatus() {
+        // The warning is added text inside the same card, not a second target: it must not swallow the
+        // tap or split the row into two destinations.
+        var opened = 0
+        render(skippedPeer = "node_bad.example:47218", onNode = { opened++ })
+
+        compose.onNodeWithText("Saved peer node_bad.example:47218 is not a valid address", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        compose.onNodeWithText("Node Status", substring = true).performScrollTo().performClick()
+
+        assertEquals("the warned row must still be the way into Node Status", 1, opened)
     }
 
     @Test
