@@ -5,11 +5,13 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -63,7 +65,10 @@ class NodeStatusPageTest {
                 target = NodeStatusTarget(
                     network = network,
                     pruneMode = NodeStorage.Mode.FULL,
-                    testnetPeer = savedPeer,
+                    // The stored peer belongs to the network on screen, as it would in the wallet: on
+                    // mainnet a testnet value would leave the dialog with nothing to fix.
+                    testnetPeer = if (network == RuntimeBackend.Network.TESTNET) savedPeer else null,
+                    mainnetPeer = if (network == RuntimeBackend.Network.MAINNET) savedPeer else null,
                     skippedPeer = skippedPeer
                 ),
                 storage = NodeStatusStorage(),
@@ -99,7 +104,7 @@ class NodeStatusPageTest {
         compose.onNodeWithText("node_bad.example:47218 (ignored)").assertExists()
         // One way to replace the value — the row's own button, renamed while it is skipped — and
         // one distinct way out, dropping it. No duplicate button in the warning.
-        compose.onAllNodesWithText("Fix saved peer").assertCountEquals(1)
+        compose.onAllNodesWithText("Fix custom peer").assertCountEquals(1)
         compose.onAllNodesWithText("Set custom peer").assertCountEquals(0)
         compose.onNodeWithText("Clear saved peer").assertExists()
     }
@@ -150,7 +155,7 @@ class NodeStatusPageTest {
 
         // Nothing is skipped, so the row keeps its ordinary label.
         compose.onNodeWithText("Set custom peer").assertExists()
-        compose.onAllNodesWithText("Fix saved peer").assertCountEquals(0)
+        compose.onAllNodesWithText("Fix custom peer").assertCountEquals(0)
         compose.onNodeWithText("The custom peer may be unreachable", substring = true)
             .performScrollTo()
             .assertIsDisplayed()
@@ -186,13 +191,13 @@ class NodeStatusPageTest {
         assertNull("no dialog is open before the tap", dialogs.open)
         // One control changes the peer; the warning must not add a second button that opens this
         // same dialog from the recorded value instead.
-        compose.onAllNodesWithText("Fix saved peer").assertCountEquals(1)
+        compose.onAllNodesWithText("Fix custom peer").assertCountEquals(1)
 
-        compose.onNodeWithText("Fix saved peer").performScrollTo().performClick()
+        compose.onNodeWithText("Fix custom peer").performScrollTo().performClick()
 
         // CustomPeerDialogTest renders the body from this seed, so the field arrives pre-filled.
         assertEquals(
-            "Fix saved peer must open the custom peer dialog",
+            "Fix custom peer must open the custom peer dialog",
             NodeStatusDialogs.Open.PEER,
             dialogs.open
         )
@@ -201,6 +206,98 @@ class NodeStatusPageTest {
             "node_bad.example:47218",
             dialogs.peerSeed
         )
+    }
+
+    @Test
+    fun theSkippedPeerFixOpensTheDialogHoldingThePeerCoreSkipped() {
+        // The ordinary case, and the one the button is named for: what is stored and what the run
+        // skipped are the same value. The test above uses differing values to prove which of the
+        // two seeds the field; this one pins the value a user actually meets, next to the notice.
+        val dialogs = NodeStatusDialogs()
+        render(
+            peers = { 0 },
+            savedPeer = "node_bad.example:47218",
+            skippedPeer = "node_bad.example:47218",
+            dialogs = dialogs
+        )
+
+        // The notice is up, so the tap below happens in the state the button exists for.
+        compose.onNodeWithText("is not a valid address", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onAllNodesWithText("Fix custom peer").assertCountEquals(1)
+
+        // Certified through the dialogs holder rather than a rendered dialog window: the field's
+        // pre-fill comes from this seed (see CustomPeerDialogTest), not from anything the window does.
+        compose.onNodeWithText("Fix custom peer").performScrollTo().performClick()
+
+        assertEquals(
+            "Fix custom peer must open the custom peer dialog",
+            NodeStatusDialogs.Open.PEER,
+            dialogs.open
+        )
+        assertEquals(
+            "the dialog must hold the peer Core is skipping, ready to be fixed",
+            "node_bad.example:47218",
+            dialogs.peerSeed
+        )
+    }
+
+    @Test
+    fun savingTheRepairedPeerFromTheFixDialogWritesItBackToTheTestnetPeer() {
+        val testnet = mutableListOf<String?>()
+        val mainnet = mutableListOf<String?>()
+        val dialogs = NodeStatusDialogs()
+        render(
+            peers = { 0 },
+            network = RuntimeBackend.Network.TESTNET,
+            savedPeer = "node_bad.example:47218",
+            skippedPeer = "node_bad.example:47218",
+            onTestnetPeer = { testnet += it },
+            onMainnetPeer = { mainnet += it },
+            dialogs = dialogs
+        )
+
+        // The whole repair a user performs: open the dialog from the warning's button, replace the
+        // unusable address, save.
+        compose.onNodeWithText("Fix custom peer").performScrollTo().performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement(" node.example.org:47218 ")
+        compose.onNodeWithText("Save").performClick()
+
+        assertEquals(
+            "the repaired address must be saved as the testnet peer, trimmed as the dialog normalizes it",
+            listOf<String?>("node.example.org:47218"),
+            testnet
+        )
+        assertEquals("a testnet save must not touch the mainnet peer", emptyList<String?>(), mainnet)
+        assertNull("saving closes the dialog it was opened from", dialogs.open)
+    }
+
+    @Test
+    fun savingTheRepairedPeerFromTheFixDialogWritesItBackToTheMainnetPeer() {
+        val testnet = mutableListOf<String?>()
+        val mainnet = mutableListOf<String?>()
+        val dialogs = NodeStatusDialogs()
+        render(
+            peers = { 0 },
+            network = RuntimeBackend.Network.MAINNET,
+            savedPeer = "node_bad.example:37218",
+            skippedPeer = "node_bad.example:37218",
+            onTestnetPeer = { testnet += it },
+            onMainnetPeer = { mainnet += it },
+            dialogs = dialogs
+        )
+
+        compose.onNodeWithText("Fix custom peer").performScrollTo().performClick()
+        // No port: the mainnet default applies, and what is stored is the bare host.
+        compose.onNode(hasSetTextAction()).performTextReplacement("node.example.org")
+        compose.onNodeWithText("Save").performClick()
+
+        assertEquals(
+            "the repaired address must be saved as the mainnet peer, without the default port spelled out",
+            listOf<String?>("node.example.org"),
+            mainnet
+        )
+        assertEquals("a mainnet save must not touch the testnet peer", emptyList<String?>(), testnet)
+        assertNull("saving closes the dialog it was opened from", dialogs.open)
     }
 
     @Test

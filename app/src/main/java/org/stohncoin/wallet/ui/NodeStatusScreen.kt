@@ -227,7 +227,7 @@ fun NodeStatusPage(
                 // The one control for setting or replacing the peer; the label says which. A second
                 // button in the warning below would open this same dialog and split the user's choice.
                 TextButton(onClick = { dialogs.openPeer(activeCustomPeer) }) {
-                    Text(if (ignoredPeer != null) "Fix saved peer" else "Set custom peer", color = Electric)
+                    Text(if (ignoredPeer != null) "Fix custom peer" else "Set custom peer", color = Electric)
                 }
                 ignoredPeer?.let { ignored ->
                     // Starting without it is silent otherwise: 0 peers would look like a bug.
