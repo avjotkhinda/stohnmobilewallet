@@ -90,14 +90,16 @@ fun SettingsPage(
     onWallets: () -> Unit,
     onAddressBook: () -> Unit,
     onCoins: () -> Unit = {},
-    onDiagnostics: () -> Unit = {}
+    onDiagnostics: () -> Unit = {},
+    // The peer Core started without, so the row that opens Node Status says so too.
+    skippedPeer: String? = null
 ) {
     val context = LocalContext.current
     LazyColumn(Modifier.fillMaxSize().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
         item { Text("Settings", fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("Wallet and node preferences", color = DarkMuted, fontSize = 12.sp) }
         item { Text("PREFERENCES", color = Electric, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp, modifier = Modifier.padding(top = 8.dp)) }
         item { SettingCard("Security", "PIN, passkey and wallet protection", Icons.Default.Lock, onSecurity) }
-        item { SettingCard("Node Status", "${state.status} · ${state.peers} peers", Icons.Default.Dns, onNode) }
+        item { SettingCard("Node Status", "${state.status} · ${state.peers} peers", Icons.Default.Dns, onNode, warning = skippedPeer) }
         item { SettingCard("Wallet", if (info?.encrypted == true) "Encrypted wallet · Manage keys" else "Manage wallet and keys", Icons.Default.AccountBalanceWallet, onWallets) }
         item { SettingCard("Address Book", "Saved names for people you pay", Icons.Default.Person, onAddressBook) }
         item { SettingCard("Coins", "View unspent outputs (coin control)", Icons.Default.Payments, onCoins) }

@@ -301,6 +301,66 @@ class NodeStatusPageTest {
     }
 
     @Test
+    fun clearingTheFieldInTheFixDialogClearsTheTestnetPeer() {
+        val testnet = mutableListOf<String?>()
+        val mainnet = mutableListOf<String?>()
+        val dialogs = NodeStatusDialogs()
+        render(
+            peers = { 0 },
+            network = RuntimeBackend.Network.TESTNET,
+            savedPeer = "node_bad.example:47218",
+            skippedPeer = "node_bad.example:47218",
+            onTestnetPeer = { testnet += it },
+            onMainnetPeer = { mainnet += it },
+            dialogs = dialogs
+        )
+
+        // Replacing the value and emptying it are the same confirmation: a blank field saves none.
+        compose.onNodeWithText("Fix custom peer").performScrollTo().performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("")
+        compose.onNodeWithText("Effective address: none", substring = true).assertExists()
+        compose.onNodeWithText("Save").performClick()
+
+        assertEquals(
+            "an empty field must save no testnet peer, clearing the stored one",
+            listOf<String?>(null),
+            testnet
+        )
+        assertEquals("a testnet clear must not touch the mainnet peer", emptyList<String?>(), mainnet)
+        assertNull("saving closes the dialog it was opened from", dialogs.open)
+    }
+
+    @Test
+    fun clearingTheFieldInTheFixDialogClearsTheMainnetPeer() {
+        val testnet = mutableListOf<String?>()
+        val mainnet = mutableListOf<String?>()
+        val dialogs = NodeStatusDialogs()
+        render(
+            peers = { 0 },
+            network = RuntimeBackend.Network.MAINNET,
+            savedPeer = "node_bad.example:37218",
+            skippedPeer = "node_bad.example:37218",
+            onTestnetPeer = { testnet += it },
+            onMainnetPeer = { mainnet += it },
+            dialogs = dialogs
+        )
+
+        // Whitespace only is still an empty field: the dialog normalizes before it decides.
+        compose.onNodeWithText("Fix custom peer").performScrollTo().performClick()
+        compose.onNode(hasSetTextAction()).performTextReplacement("   ")
+        compose.onNodeWithText("Effective address: none", substring = true).assertExists()
+        compose.onNodeWithText("Save").performClick()
+
+        assertEquals(
+            "an empty field must save no mainnet peer, clearing the stored one",
+            listOf<String?>(null),
+            mainnet
+        )
+        assertEquals("a mainnet clear must not touch the testnet peer", emptyList<String?>(), testnet)
+        assertNull("saving closes the dialog it was opened from", dialogs.open)
+    }
+
+    @Test
     fun changingTheNetworkOpensTheNetworkDialog() {
         val dialogs = NodeStatusDialogs()
         render(peers = { 1 }, dialogs = dialogs)

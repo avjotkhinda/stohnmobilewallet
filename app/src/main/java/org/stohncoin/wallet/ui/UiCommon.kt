@@ -131,8 +131,32 @@ fun StatusCard(title: String, value: String, modifier: Modifier) {
 }
 
 
+/**
+ * Names the saved custom peer Core started without. Every entry point into Node Status shows it, so
+ * an ignored peer is visible before the user opens the screen that explains it.
+ */
 @Composable
-fun SettingCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+fun IgnoredPeerWarning(peer: String, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Default.Warning, null, Modifier.size(13.dp), tint = Color(0xFFE9B455))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            "Saved peer $peer is not a valid address, so Core started without it.",
+            color = Color(0xFFE9B455),
+            fontSize = 10.sp
+        )
+    }
+}
+
+
+@Composable
+fun SettingCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    warning: String? = null
+) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -143,7 +167,14 @@ fun SettingCard(title: String, subtitle: String, icon: androidx.compose.ui.graph
         Row(Modifier.padding(horizontal = 15.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, Modifier.size(22.dp), tint = Electric)
             Spacer(Modifier.width(13.dp))
-            Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp); Text(subtitle, color = DarkMuted, fontSize = 10.sp) }
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(subtitle, color = DarkMuted, fontSize = 10.sp)
+                if (warning != null) {
+                    Spacer(Modifier.height(3.dp))
+                    IgnoredPeerWarning(warning)
+                }
+            }
             Icon(Icons.Default.ChevronRight, null, tint = DarkMuted, modifier = Modifier.size(19.dp))
         }
     }

@@ -182,7 +182,7 @@ if [[ ${#ROUTE_NAMES[@]} -eq 0 ]]; then
   HINT="$(alert_name_hint)"
   summarize "- Alert channel: **not configured** (\`PIN_ALERT_WEBHOOK_URL\` and \`PIN_ALERT_WEBHOOK_URL_FALLBACK\` are empty as both a secret and a repository variable), so the ${KIND} could not be sent. ${HINT}."
   if [[ "$STRICT" == "1" ]]; then
-    echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set, as a secret or a repository variable, so no alert could be delivered. ${HINT}. Add either under Settings - Secrets and variables - Actions."
+    echo "::error title=No alert channel configured::Neither PIN_ALERT_WEBHOOK_URL nor PIN_ALERT_WEBHOOK_URL_FALLBACK is set, as a secret or a repository variable, so no alert could be delivered. ${HINT}. Add either under Settings - Secrets and variables - Actions. Setup and troubleshooting: docs/ALERTS.md."
     exit 1
   fi
   echo "::notice title=No alert channel configured::Set PIN_ALERT_WEBHOOK_URL - as a secret, or as a repository variable if that is easier - and optionally PIN_ALERT_WEBHOOK_URL_FALLBACK as a second route, to be told here instead of only in the Actions tab. ${HINT}."
@@ -342,7 +342,7 @@ fi
 
 summarize "- Alert channel: **delivery failed** (${attempts:-no route answered}); the ${KIND} was rejected by every configured webhook."
 if [[ "$STRICT" == "1" ]]; then
-  echo "::error title=Alert not delivered::No configured webhook accepted the message (${attempts:-no response}), so the channel did not receive it."
+  echo "::error title=Alert not delivered::No configured webhook accepted the message (${attempts:-no response}), so the channel did not receive it. Setup and troubleshooting: docs/ALERTS.md."
   exit 1
 fi
 echo "::warning title=Alert not delivered::No configured webhook accepted the message (${attempts:-no response}). This only means the chat message did not arrive; the run's result is decided by the check itself."

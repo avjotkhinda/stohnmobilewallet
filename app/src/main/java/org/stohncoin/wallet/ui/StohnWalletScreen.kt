@@ -391,7 +391,8 @@ fun StohnWalletScreen(node: NodeController) {
                             },
                             onActivity = { route = "activity" },
                             onNode = { route = "node" },
-                            onBackup = { backupFrom = "home"; route = "backup" }
+                            onBackup = { backupFrom = "home"; route = "backup" },
+                            skippedPeer = node.skippedPeer()
                         )
                         "wallets" -> WalletManagerPage(balance, walletInfo, onImport = { importLauncher.launch(arrayOf("application/octet-stream", "*/*")) }, onSecurity = { route = "security" })
                         "activity" -> ActivityPage(
@@ -410,7 +411,8 @@ fun StohnWalletScreen(node: NodeController) {
                             onWallets = { route = "wallets" },
                             onAddressBook = { addressBookFrom = "settings"; route = "addressbook" },
                             onCoins = { route = "coins" },
-                            onDiagnostics = { route = "diagnostics" }
+                            onDiagnostics = { route = "diagnostics" },
+                            skippedPeer = node.skippedPeer()
                         )
                         "diagnostics" -> DiagnosticsPage(
                             network = node.network(),
@@ -601,7 +603,9 @@ private fun WalletHome(
     onReceive: () -> Unit,
     onActivity: () -> Unit,
     onNode: () -> Unit,
-    onBackup: () -> Unit
+    onBackup: () -> Unit,
+    // The peer Core started without; shown on the Node Status card so 0 peers is explained here.
+    skippedPeer: String? = null
 ) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(bottom = 22.dp)) {
         item {
@@ -690,6 +694,7 @@ private fun WalletHome(
                         Column { Text("Peers", fontSize = 10.sp, color = DarkMuted); Text("${state.peers}", fontSize = 12.sp) }
                         Column { Text("Connection", fontSize = 10.sp, color = DarkMuted); Text("Local Node", fontSize = 12.sp) }
                     }
+                    skippedPeer?.let { peer -> IgnoredPeerWarning(peer) }
                     if (state.canStart) {
                         OutlinedButton(onClick = { node.start() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Start node") }
                     }

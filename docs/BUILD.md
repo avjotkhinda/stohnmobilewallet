@@ -45,6 +45,8 @@ The `android-build` GitHub Actions workflow has two jobs:
    - `scripts/verify-apk-artifact.sh` (native hash checks against `RuntimeManifest`)
    - Upload release APK
 
+The scheduled `pin-liveness` and `schedule-watchdog` workflows report into a chat channel that is configured outside the repository, in a repository secret or variable. [ALERTS.md](ALERTS.md) covers adding it, what a red run or a "no alert channel" warning means, and how to prove delivery with `alert-test`.
+
 ## Adding a new runtime artifact pin
 
 When a new PRoot version (or any of the four pinned `.so` packages) must be updated:

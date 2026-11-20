@@ -100,8 +100,10 @@
 ./app/src/test/java/org/stohncoin/wallet/ui/CustomPeerDialogTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/LockScreenTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/NodeStatusPageTest.kt
+./app/src/test/java/org/stohncoin/wallet/ui/NodeStatusTargetTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/QrTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/SendPageTest.kt
+./app/src/test/java/org/stohncoin/wallet/ui/SettingsNodeStatusWarningTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/ZeroPeerHintTest.kt
 ./app/src/test/java/org/stohncoin/wallet/ui/ZeroPeerHintUiTest.kt
 ./app/src/test/java/org/stohncoin/wallet/wallet/AddressBookEncryptionTest.kt
@@ -128,6 +130,7 @@
 ./app/src/test/resources/robolectric.properties
 ./build.gradle.kts
 ./config/detekt/detekt.yml
+./docs/ALERTS.md
 ./docs/ARCHITECTURE.md
 ./docs/BUILD.md
 ./docs/RECOVERY.md

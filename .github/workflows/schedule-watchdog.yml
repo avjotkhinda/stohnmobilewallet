@@ -111,6 +111,7 @@ jobs:
             echo 'Optional second route: `PIN_ALERT_WEBHOOK_URL_FALLBACK` - any webhook that accepts `{"text": ...}`.'
             echo
             echo 'To prove delivery first: Actions -> **alert-test** -> **Run workflow** posts one labelled test message and goes red if nothing arrives.'
+            echo "Full setup and troubleshooting: [docs/ALERTS.md](${GITHUB_SERVER_URL:-https://github.com}/${GH_REPO}/blob/main/docs/ALERTS.md)"
             echo 'Once either name exists this step logs `alert channel: configured`; until then the schedule checks above are still reported normally.'
           } >> "$GITHUB_STEP_SUMMARY"
           echo "::warning title=No alert channel configured::Set the repository secret PIN_ALERT_WEBHOOK_URL at ${new_secret_url} (Settings -> Secrets and variables -> Actions -> Secrets -> New repository secret), or the optional PIN_ALERT_WEBHOOK_URL_FALLBACK. Run the alert-test workflow to prove delivery. A stopped schedule still fails this run; only the missing channel is a warning."
