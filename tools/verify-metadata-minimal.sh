@@ -97,14 +97,38 @@ def components(path):
         found.add((component.get("group"), component.get("name"), component.get("version")))
     return found
 
-def checksums(path):
+def accepted_checksums(path):
+    # A pin may trust more than one legitimate byte-for-byte copy of the same published artifact:
+    # for example a marker POM that the plugin portal regenerates differently from Maven Central.
+    # The committed file records every accepted checksum; regeneration records the one it resolved.
+    root = ET.parse(path).getroot()
+    found = {}
+    for component in root.iter(NS + "component"):
+        key = (component.get("group"), component.get("name"), component.get("version"))
+        for artifact in component.iter(NS + "artifact"):
+            values = set()
+            for digest in artifact.iter(NS + "sha256"):
+                value = digest.get("value")
+                if value:
+                    values.add(value)
+                for alt in digest.iter(NS + "also-trust"):
+                    alt_value = alt.get("value")
+                    if alt_value:
+                        values.add(alt_value)
+            if values:
+                found[(key, artifact.get("name"))] = values
+    return found
+
+def resolved_checksums(path):
     root = ET.parse(path).getroot()
     found = {}
     for component in root.iter(NS + "component"):
         key = (component.get("group"), component.get("name"), component.get("version"))
         for artifact in component.iter(NS + "artifact"):
             for digest in artifact.iter(NS + "sha256"):
-                found[(key, artifact.get("name"))] = digest.get("value")
+                value = digest.get("value")
+                if value:
+                    found[(key, artifact.get("name"))] = value
     return found
 
 committed, regenerated = components(sys.argv[1]), components(sys.argv[2])
@@ -112,11 +136,12 @@ stale = sorted(committed - regenerated)
 missing = sorted(regenerated - committed)
 
 # Matching coordinates are not enough: an entry can name the right version and the wrong bytes.
-committed_hashes, regenerated_hashes = checksums(sys.argv[1]), checksums(sys.argv[2])
+# A resolved checksum is fine when the committed pin explicitly trusts it as an alternate.
+committed_hashes, regenerated_hashes = accepted_checksums(sys.argv[1]), resolved_checksums(sys.argv[2])
 tampered = sorted(
     (key, name)
-    for (key, name), value in committed_hashes.items()
-    if (key, name) in regenerated_hashes and regenerated_hashes[(key, name)] != value
+    for (key, name), accepted in committed_hashes.items()
+    if (key, name) in regenerated_hashes and regenerated_hashes[(key, name)] not in accepted
 )
 
 print(f"committed: {len(committed)} components | regeneration resolved: {len(regenerated)}")
