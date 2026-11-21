@@ -23,15 +23,39 @@ The quickest route is
 2. **Secret**: the webhook URL, for example a Slack incoming webhook.
 3. **Add secret**, then re-run `alert-test` to prove delivery.
 
+If you would rather not store it as a secret, the same name as a **repository
+variable** works too - see below. Either tab fixes the "No alert channel
+configured" warning on the scheduled runs.
+
 **It must be a repository secret, not an environment secret.** The jobs that
 read it declare no `environment:`, so an environment secret is invisible to
 them and the run behaves as if nothing were configured.
 
+### Which steps read it
+
+Every step that can send a message passes the name through as
+`PIN_ALERT_WEBHOOK_URL` (or `PIN_ALERT_WEBHOOK_URL_FALLBACK`) to
+`scripts/notify-pin-liveness.sh`; no workflow file holds a URL.
+
+- `pin-liveness`:
+  - **Alert the chat channel when a pin is dead**
+  - **Tell the chat channel the pins are healthy again**
+  - **Record the alert channel in the job summary**
+  - **Warn when no alert channel is configured**
+  - **Check the schedule watchdog is still running**
+- `schedule-watchdog`:
+  - **Check the watchdog's own schedule still fires**
+  - **Check the weekly schedule still fires**
+  - **Warn when no alert channel is configured**
+- `alert-test`:
+  - **Post a test message to the alert channel**
+
 ### Variable instead of secret
 
 A repository **variable** (`Settings → Secrets and variables → Actions →
-Variables`) with the same name is also delivered, because saving the name in
-the wrong tab should not cost a silent week. The difference is privacy: anyone
+Variables`, or `https://github.com/<owner>/<repo>/settings/variables/actions/new`)
+with the same name is also delivered, because saving the name in the wrong tab
+should not cost a silent week. The difference is privacy: anyone
 who can read the repository's Actions settings can read a variable. When both
 exist the secret is used, and the run summary says which route carried the
 message so a variable in the wrong tab is visible rather than merely tolerated.
@@ -52,6 +76,15 @@ refusal is reported in the summary rather than swallowed. The body is always
 Discord, Teams or Google Chat. URLs must be HTTPS; the script refuses anything
 else (`refusing to send a runtime pin alert to a non-HTTPS ... webhook`), except
 loopback for local testing.
+
+## Prove delivery with `alert-test`
+
+**Actions → alert-test → Run workflow.** It is hand-run only (no schedule, no
+issue), posts one labelled test message through the same script and the same
+secret, and is strict: green means one of the routes answered 2xx and the
+summary names which, red means nothing was delivered and the log gives the HTTP
+code each route answered. Run it once when setting the channel up, and again
+after rotating or changing a webhook.
 
 ## Reading a red run
 

@@ -186,6 +186,32 @@ jobs:
             echo "alert channel: configured"
             exit 0
           fi
+
+          new_secret_url="https://github.com/${GH_REPO}/settings/secrets/actions/new"
+          # The summary is what the run page shows without opening a log; the annotation is what
+          # surfaces in the checks list, so the short version has to stand on its own too.
+          {
+            echo "## No alert channel configured"
+            echo
+            echo "The missing channel is its own failure - this step runs even when a check above already failed, so it cannot tell you whether they passed: read those steps for their result, and fix this gap on its own."
+            echo
+            echo "**Add it here:** ${new_secret_url}"
+            echo
+            echo "Settings -> Secrets and variables -> Actions -> **Secrets** -> **New repository secret**"
+            echo
+            echo '1. Name: `PIN_ALERT_WEBHOOK_URL` - exactly this, a near-miss name is not read'
+            echo '2. Secret: the Slack incoming webhook URL'
+            echo '3. **Add secret**, then re-run this workflow'
+            echo
+            echo 'It has to be a *repository* secret: this workflow declares no `environment:`, so an environment secret is invisible to it.'
+            echo 'A repository *variable* of the same name also delivers, but anyone with read access can read it, so the secret is the better home.'
+            echo
+            echo 'Optional second route: `PIN_ALERT_WEBHOOK_URL_FALLBACK` - any webhook that accepts `{"text": ...}`.'
+            echo
+            echo 'To prove delivery first: Actions -> **alert-test** -> **Run workflow** posts one labelled test message and goes red if nothing arrives.'
+            echo "Full setup and troubleshooting: [docs/ALERTS.md](${GITHUB_SERVER_URL:-https://github.com}/${GH_REPO}/blob/main/docs/ALERTS.md)"
+            echo 'Once either name exists this step logs `alert channel: configured`; until then the checks above are still reported normally.'
+          } >> "$GITHUB_STEP_SUMMARY"
           echo "::warning title=No alert channel configured::Set the repository secret PIN_ALERT_WEBHOOK_URL at https://github.com/${GH_REPO}/settings/secrets/actions/new (Settings -> Secrets and variables -> Actions -> Secrets -> New repository secret), or the optional PIN_ALERT_WEBHOOK_URL_FALLBACK. Run the alert-test workflow to prove delivery. A dead pin still fails this run; only the missing channel is a warning."
           exit 0
 
