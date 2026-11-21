@@ -100,6 +100,9 @@ class NodeStatusPageTest {
             .performScrollTo()
             .assertIsDisplayed()
         compose.onNodeWithText("it is ignored and Stohn Core starts without it", substring = true).assertExists()
+        // The note is also the only place that points at the dialog's reachability check; a copy
+        // edit dropping that pointer would leave the user nothing to test a replacement with.
+        compose.onNodeWithText("Test reachability", substring = true).assertExists()
         // The Custom peer line carries the same verdict as the warning below it.
         compose.onNodeWithText("node_bad.example:47218 (ignored)").assertExists()
         // One way to replace the value — the row's own button, renamed while it is skipped — and
@@ -298,6 +301,56 @@ class NodeStatusPageTest {
         )
         assertEquals("a mainnet save must not touch the testnet peer", emptyList<String?>(), testnet)
         assertNull("saving closes the dialog it was opened from", dialogs.open)
+    }
+
+    @Test
+    fun onlyOneControlOpensTheCustomPeerDialogWhenAPeerIsSkipped() {
+        // Guard, not a description: the warning is the tempting place to add a second button that
+        // opens the peer dialog, which would split the user's choice and could seed it differently.
+        // Exactly one label-any-state opens it, and the neighbouring clear action is not a second way in.
+        val dialogs = NodeStatusDialogs()
+        val cleared = mutableListOf<String?>()
+        render(
+            peers = { 0 },
+            savedPeer = "node_bad.example:47218",
+            skippedPeer = "node_bad.example:47218",
+            onTestnetPeer = { cleared += it },
+            dialogs = dialogs
+        )
+
+        val setters = compose.onAllNodesWithText("Set custom peer", substring = false)
+            .fetchSemanticsNodes().size
+        val fixers = compose.onAllNodesWithText("Fix custom peer", substring = false)
+            .fetchSemanticsNodes().size
+        assertEquals("exactly one control may open the custom peer dialog", 1, setters + fixers)
+
+        // The one other peer control clears the value; if it ever started opening the dialog, this
+        // would see an open dialog and the count above would no longer be the whole story.
+        compose.onNodeWithText("Clear saved peer").performScrollTo().performClick()
+        assertNull("only the one control may open the custom peer dialog", dialogs.open)
+        assertEquals("clearing must still just clear", listOf<String?>(null), cleared)
+    }
+
+    @Test
+    fun settingAHealthyPeerOpensTheDialogHoldingThatValue() {
+        // The same button under its ordinary label: nothing is skipped, so this is an edit, not a
+        // repair, but the dialog must still start from what is stored instead of an empty field.
+        val dialogs = NodeStatusDialogs()
+        render(peers = { 1 }, savedPeer = "node.example.org:47218", dialogs = dialogs)
+
+        compose.onAllNodesWithText("Fix custom peer").assertCountEquals(0)
+        compose.onNodeWithText("Set custom peer").performScrollTo().performClick()
+
+        assertEquals(
+            "Set custom peer must open the custom peer dialog",
+            NodeStatusDialogs.Open.PEER,
+            dialogs.open
+        )
+        assertEquals(
+            "the dialog must hold the peer Core is using, ready to be edited",
+            "node.example.org:47218",
+            dialogs.peerSeed
+        )
     }
 
     @Test

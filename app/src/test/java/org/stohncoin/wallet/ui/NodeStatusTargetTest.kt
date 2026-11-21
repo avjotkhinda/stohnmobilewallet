@@ -39,6 +39,20 @@ class NodeStatusTargetTest {
     }
 
     @Test
+    fun withoutANetworkTheDefaultIsMainnetAndItPicksTheMainnetPeer() {
+        // The screen is opened without a network, so the default and the peer it selects arrive
+        // together: asserting either alone would leave the other free to drift.
+        val target = NodeStatusTarget(
+            pruneMode = NodeStorage.Mode.FULL,
+            testnetPeer = "node.testnet.example:47218",
+            mainnetPeer = "node.mainnet.example"
+        )
+
+        assertEquals(RuntimeBackend.Network.MAINNET, target.network)
+        assertEquals("node.mainnet.example", target.activePeer)
+    }
+
+    @Test
     fun testnetNeverUsesTheMainnetPeer() {
         val target = target(RuntimeBackend.Network.TESTNET, mainnetPeer = "node.mainnet.example")
 

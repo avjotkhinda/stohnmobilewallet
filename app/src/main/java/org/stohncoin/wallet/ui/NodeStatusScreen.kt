@@ -131,6 +131,15 @@ class NodeStatusDialogs {
     fun close() {
         open = null
     }
+
+    /**
+     * A storage or network choice: close the dialog, then report [chosen] only when it differs from
+     * [current]. Closing first means a tap always ends the dialog, whether or not it changes anything.
+     */
+    fun <T> choose(current: T, chosen: T, apply: (T) -> Unit) {
+        close()
+        if (chosen != current) apply(chosen)
+    }
 }
 
 
@@ -320,19 +329,13 @@ fun NodeStatusPage(
     when (dialogs.open) {
         NodeStatusDialogs.Open.STORAGE -> StorageModeDialog(
             current = pruneMode,
-            onDismiss = { dialogs.close() },
-            onSelect = { mode ->
-                dialogs.close()
-                if (mode != pruneMode) actions.onPruneMode(mode)
-            }
+            dialogs = dialogs,
+            onSelect = actions.onPruneMode
         )
         NodeStatusDialogs.Open.NETWORK -> NetworkModeDialog(
             current = network,
-            onDismiss = { dialogs.close() },
-            onSelect = { mode ->
-                dialogs.close()
-                if (mode != network) actions.onNetwork(mode)
-            }
+            dialogs = dialogs,
+            onSelect = actions.onNetwork
         )
         NodeStatusDialogs.Open.PEER -> CustomPeerDialog(
             network = network,
@@ -572,67 +575,87 @@ private fun PeerRow(peer: WalletRpc.PeerInfo) {
 
 /** Lets the user pick which chain the node runs. */
 @Composable
-private fun NetworkModeDialog(current: RuntimeBackend.Network, onDismiss: () -> Unit, onSelect: (RuntimeBackend.Network) -> Unit) {
+private fun NetworkModeDialog(current: RuntimeBackend.Network, dialogs: NodeStatusDialogs, onSelect: (RuntimeBackend.Network) -> Unit) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { dialogs.close() },
         title = { Text("Network") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Switching networks stops the node and uses that chain's own data. Wallets are network-specific.", color = DarkMuted, fontSize = 11.sp)
-                RuntimeBackend.Network.values().forEach { mode ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(mode) },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = current == mode, onClick = { onSelect(mode) })
-                        Text(mode.label, fontSize = 14.sp)
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        text = { NetworkModeChoices(current, dialogs, onSelect) },
+        confirmButton = { DialogCancelButton(dialogs) }
     )
+}
+
+
+/**
+ * The network dialog's options, with the close-then-apply decision in [NodeStatusDialogs.choose].
+ * Split from the [AlertDialog] so a test can drive a tap without Robolectric finding its window.
+ */
+@Composable
+internal fun NetworkModeChoices(current: RuntimeBackend.Network, dialogs: NodeStatusDialogs, onSelect: (RuntimeBackend.Network) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Switching networks stops the node and uses that chain's own data. Wallets are network-specific.", color = DarkMuted, fontSize = 11.sp)
+        RuntimeBackend.Network.values().forEach { mode ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { dialogs.choose(current, mode, onSelect) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(selected = current == mode, onClick = { dialogs.choose(current, mode, onSelect) })
+                Text(mode.label, fontSize = 14.sp)
+            }
+        }
+    }
+}
+
+
+/** The dialog's only other way out, wired to the same holder the options close. */
+@Composable
+internal fun DialogCancelButton(dialogs: NodeStatusDialogs) {
+    TextButton(onClick = { dialogs.close() }) { Text("Cancel") }
 }
 
 
 /** Explains the one thing a prune change costs before it happens: the downloaded chain. */
 @Composable
-private fun StorageModeDialog(current: NodeStorage.Mode, onDismiss: () -> Unit, onSelect: (NodeStorage.Mode) -> Unit) {
+private fun StorageModeDialog(current: NodeStorage.Mode, dialogs: NodeStatusDialogs, onSelect: (NodeStorage.Mode) -> Unit) {
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { dialogs.close() },
         title = { Text("Chain storage") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "A pruned node keeps only recent blocks, so it needs far less space, but it cannot serve old blocks to other wallets.",
-                    color = DarkMuted,
-                    fontSize = 11.sp
-                )
-                Text(
-                    "Stohn Core only accepts a different mode on a fresh chain database, so switching deletes the downloaded chain and the node re-syncs from the beginning. Your wallet, keys and backups are not touched.",
-                    color = Color(0xFFE9B455),
-                    fontSize = 11.sp
-                )
-                NodeStorage.Mode.values().forEach { mode ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelect(mode) },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = current == mode, onClick = { onSelect(mode) })
-                        Column {
-                            Text(mode.label, fontSize = 14.sp)
-                            Text(mode.detail, color = DarkMuted, fontSize = 10.sp)
-                        }
-                    }
+        text = { StorageModeChoices(current, dialogs, onSelect) },
+        confirmButton = { DialogCancelButton(dialogs) }
+    )
+}
+
+
+/** The storage dialog's options, split from its window for the same reason as the network ones. */
+@Composable
+internal fun StorageModeChoices(current: NodeStorage.Mode, dialogs: NodeStatusDialogs, onSelect: (NodeStorage.Mode) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            "A pruned node keeps only recent blocks, so it needs far less space, but it cannot serve old blocks to other wallets.",
+            color = DarkMuted,
+            fontSize = 11.sp
+        )
+        Text(
+            "Stohn Core only accepts a different mode on a fresh chain database, so switching deletes the downloaded chain and the node re-syncs from the beginning. Your wallet, keys and backups are not touched.",
+            color = Color(0xFFE9B455),
+            fontSize = 11.sp
+        )
+        NodeStorage.Mode.values().forEach { mode ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { dialogs.choose(current, mode, onSelect) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(selected = current == mode, onClick = { dialogs.choose(current, mode, onSelect) })
+                Column {
+                    Text(mode.label, fontSize = 14.sp)
+                    Text(mode.detail, color = DarkMuted, fontSize = 10.sp)
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+        }
+    }
 }
 
 

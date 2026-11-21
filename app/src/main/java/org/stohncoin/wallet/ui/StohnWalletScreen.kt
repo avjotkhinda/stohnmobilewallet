@@ -417,6 +417,7 @@ fun StohnWalletScreen(node: NodeController) {
                         "diagnostics" -> DiagnosticsPage(
                             network = node.network(),
                             customPeer = node.peer(),
+                            skippedPeer = node.skippedPeer()
                         )
                         "addressbook" -> AddressBookPage(
                             onSend = { addr -> pendingSendAddress = addr; pendingSendInputs = emptyList(); pendingSendAmount = ""; pendingSendSubtractFee = false; route = "send" }
