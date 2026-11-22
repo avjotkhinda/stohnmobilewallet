@@ -5,7 +5,7 @@ Three workflows can send a message to a chat channel, all through
 
 | Workflow | Schedule | What it sends | Missing channel |
 | --- | --- | --- | --- |
-| `pin-liveness` | weekly | a dead-pin failure, and the all-clear that closes it | **fails the run** |
+| `pin-liveness` | weekly | a dead-pin failure, and the all-clear that closes it | **fails the run** when there is a message to send; otherwise a warning |
 | `schedule-watchdog` | daily | a stopped-schedule warning, and its all-clear | warning only |
 | `alert-test` | hand-run | one labelled test message | **fails the run** |
 
@@ -97,16 +97,103 @@ the run page alone.
   `**delivery failed**`; the log names the HTTP code each route answered. This
   run is deliberately strict: a test that goes green without sending anything
   would hide the exact problem it exists to find.
-- **`schedule-watchdog` red** — a schedule really has stopped. The failure is
-  not about the channel; the watchdog opens one issue and exits 1 until the
-  schedule fires again.
+- **`schedule-watchdog` red** — a schedule really has stopped, or the schedule
+  is no longer wired up. The failure is not about the channel; the watchdog
+  opens one issue and exits 1 until the schedule fires again. See the next
+  section for which of its two checks went red and what threshold it crossed.
 - **`schedule-watchdog` run with a warning named "No alert channel
-  configured"** — expected when no channel is set. It is a warning rather than a
-  failure on purpose: a run that is red every morning for a setting would hide
-  the schedule outage that run exists to report behind a red that says nothing
-  new. The same run still fails if the schedule itself has stopped.
+  configured"** — expected when no channel is set, and about the channel only:
+  the same run still fails if the schedule itself has stopped. Why it warns
+  rather than fails is below.
 - **`pin-liveness` red** — either a pinned runtime URL failed its digest check,
   or delivery was refused; the summary separates the two.
+- **`pin-liveness` green with a "No alert channel configured" warning** — the
+  pins and the schedule are fine; only the chat message is missing. Its sending
+  steps are strict, so the same gap turns red only on a run that had something
+  to send.
+
+## Red or warning: what the schedule checks actually decide
+
+`schedule-watchdog` runs the *same* age check twice, aimed at two different
+schedules. Either one failing is enough to make the run red, so a red daily run
+is always a statement about a schedule, never about the channel.
+
+| Step | Watches | Cron | Limit | Red when |
+| --- | --- | --- | --- | --- |
+| **Check the watchdog's own schedule still fires** (`WATCH_TARGET=watchdog`) | `schedule-watchdog.yml` | daily, `41 5 * * *` | `PIN_WATCHDOG_MAX_AGE_DAYS`, default **3 days** | no scheduled run for more than 3 days |
+| **Check the weekly schedule still fires** (the default target) | `pin-liveness.yml` | weekly, `23 6 * * 1` | `PIN_SCHEDULE_MAX_AGE_DAYS`, default **9 days** | no scheduled run for more than 9 days |
+
+Both steps run `scripts/watch-pin-schedule.sh`, and each asks two questions. A
+"no" to either exits 1 and fails the step, and with it the run:
+
+1. **Is the schedule still wired up?** `scripts/verify-pin-schedule.sh` reads the
+   workflow file for a `cron:` line and asks GitHub for the workflow's `state`.
+   `disabled_inactivity` (GitHub disables a schedule after 60 days without
+   repository activity), `disabled_manually`, or any unexpected state fails.
+2. **Has it actually fired?** The newest run with `event=schedule` is looked up
+   and its `created_at` compared with the limit. A hand dispatch is ignored: it
+   proves the file parses, not that the cron fires. Ages are whole days and the
+   comparison is strictly greater than the limit, so the daily watchdog's 3 days
+   allow two missed mornings and the weekly check's 9 days allow one slow Monday,
+   while a last run 3 days and 23 hours old still counts as 3 days. A workflow
+   that has never fired on schedule is only late once the workflow itself is
+   older than the limit, so a check added yesterday is not red on day one.
+
+The log says which question failed and by how much: either the wiring line
+(`GitHub disabled this workflow after 60 days…`, `this workflow is disabled
+manually`, `declares no schedule cron`) or the age line (`no scheduled run for
+N days (limit M); the last was …`).
+
+What a red run does, besides being red: it opens exactly one issue whose title
+starts with `[pin-schedule]` (the weekly check) or `[watchdog-schedule]` (its own
+schedule), and sends the channel one message the first time. While that issue
+stays open, later runs are still red but send nothing new, so a long outage
+does not cost one message per morning. When the schedule fires again the issue
+is closed, an all-clear is sent, and the run goes green.
+
+The weekly `pin-liveness` run performs the watchdog check too
+(`WATCH_TARGET=watchdog`), so a daily watchdog whose own cron stopped is still
+named within a week. The two schedules only fall quiet together through
+repository-wide inactivity, which no schedule inside the repository can report
+on.
+
+### Why a missing channel is a warning, not a failure
+
+A missing alert channel is a *setting*, and the run that would tell you about it
+is the same run that reports the outage. Making it red too would put a red on
+the run page every single morning - or every week for `pin-liveness`, whose red
+is about a dead pin - and a red that repeats without news is how the real outage
+gets ignored. So the channel gap lives in its own step in both scheduled
+workflows, **Warn when no alert channel is configured**. It runs with
+`if: always()` (and, in `pin-liveness`, only outside a dry run), so it is named
+on the same run that just went red rather than hiding behind the outage that run
+was about. It then prints one annotation titled `No alert channel configured`
+and a run summary holding the exact fix, and exits 0, so the gap is visible on
+every run without borrowing the schedule's signal. One script prints all of it,
+`scripts/report-missing-alert-channel.sh`, so the two workflows cannot disagree;
+each passes only its own sentence naming what still fails the run. The summary
+and the annotation both give:
+
+- the exact name `PIN_ALERT_WEBHOOK_URL`, with the settings URL for the secret
+  tab and the one for the variable tab, so the fix is one click away;
+- the repository-versus-environment caveat: neither job declares `environment:`,
+  so an environment-scoped name is invisible to it and behaves exactly like no
+  setting at all;
+- the `alert-test` workflow, to prove delivery before relying on the channel;
+- the link back to this page.
+
+Hence the two outcomes in the table: the weekly check sends only from **Alert
+the chat channel when a pin is dead** and **Tell the chat channel the pins are
+healthy again**, which run only when a pin failed or just recovered. A missing
+channel therefore fails that run exactly when there was something to send, and
+a routine green week carries the watchdog's warning instead.
+
+`alert-test` stays strict on purpose (`PIN_ALERT_STRICT=1`): proving delivery is
+its whole job, so a missing or refused channel is a red there. Delivery failures
+inside a schedule check are warnings as well — `scripts/notify-pin-liveness.sh`
+warns and exits 0 unless strict — so a refused message never turns a schedule
+run red on its own. A red `schedule-watchdog` run is only ever the checks'
+verdict about a schedule.
 
 ## Troubleshooting
 
@@ -128,7 +215,8 @@ the run page alone.
   tracks the weekly schedule as `[pin-schedule]` and its own as
   `[watchdog-schedule]`; pin failures use `[pin-liveness]`.
 
-To inspect the watchdog without touching GitHub, an issue or the channel:
+To see the verdict the watchdog would report — both questions, without touching
+GitHub, an issue or the channel:
 
 ```bash
 WATCH_DRY_RUN=1 bash scripts/watch-pin-schedule.sh

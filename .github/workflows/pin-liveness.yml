@@ -135,6 +135,7 @@ jobs:
       - name: Record the alert channel in the job summary
         if: always()
         env:
+          GH_REPO: ${{ github.repository }}
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
           PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
@@ -158,15 +159,17 @@ jobs:
             else
               echo '- `PIN_ALERT_WEBHOOK_URL_FALLBACK`: not configured - a refused primary alert has no second route'
             fi
+            # The channel line is on every run, so it is also the place the setup page is reachable
+            # from when nothing needed sending.
+            echo "- Full setup and troubleshooting: [docs/ALERTS.md](${GITHUB_SERVER_URL:-https://github.com}/${GH_REPO}/blob/main/docs/ALERTS.md)"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # A missing channel is a standing configuration gap, not a pin or schedule failure, so it warns
-      # instead of failing. The check step above already fails this run when a pin is dead or a schedule
-      # has stopped; a weekly red for a setting would make that failure look like the standing noise and
-      # teach people to stop reading this workflow's red at all.
-      #
-      # The gap stays visible without borrowing that signal: this annotation, the channel line already
-      # written to the summary above, and the same warning from the daily schedule-watchdog run.
+      # instead of failing: a weekly red for a setting would make a dead pin look like the standing
+      # noise and teach people to stop reading this workflow's red at all. The gap stays visible
+      # through this annotation, the channel line in the summary below, the same warning from the
+      # daily schedule-watchdog run, and scripts/report-missing-alert-channel.sh, the one copy of the
+      # fix both workflows print so their instructions cannot drift apart again.
       #
       # A dry run is exempt: it exists to answer "will the schedule fire", it never reports anything,
       # and warning it for a channel it was never going to use would only muddy that answer.
@@ -176,43 +179,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
           PIN_ALERT_WEBHOOK_URL: ${{ secrets.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK: ${{ secrets.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
-          # A variable is a supported route too, so it has to count here: warning about a channel that
-          # would in fact deliver would teach people to ignore this gate.
+          # A variable is a supported route too, so it has to count here: warning about a channel
+          # that would in fact deliver would teach people to ignore this gate.
           PIN_ALERT_WEBHOOK_URL_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL }}
           PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR: ${{ vars.PIN_ALERT_WEBHOOK_URL_FALLBACK }}
-        run: |
-          if [[ -n "$PIN_ALERT_WEBHOOK_URL" || -n "$PIN_ALERT_WEBHOOK_URL_FALLBACK" || \
-                -n "$PIN_ALERT_WEBHOOK_URL_VAR" || -n "$PIN_ALERT_WEBHOOK_URL_FALLBACK_VAR" ]]; then
-            echo "alert channel: configured"
-            exit 0
-          fi
-
-          new_secret_url="https://github.com/${GH_REPO}/settings/secrets/actions/new"
-          new_variable_url="https://github.com/${GH_REPO}/settings/variables/actions/new"
-          # The summary is what the run page shows without opening a log; the annotation is what
-          # surfaces in the checks list, so the short version has to stand on its own too.
-          {
-            echo "## No alert channel configured"
-            echo
-            echo "The missing channel is its own failure - this step runs even when a check above already failed, so it cannot tell you whether they passed: read those steps for their result, and fix this gap on its own."
-            echo
-            echo 'Set **one** of these two, then re-run this workflow. Both are repository-level, and the name has to match exactly - a near-miss is not read:'
-            echo
-            echo "1. **Repository secret** \`PIN_ALERT_WEBHOOK_URL\` - ${new_secret_url}"
-            echo '   Settings -> Secrets and variables -> Actions -> **Secrets** -> **New repository secret**, name `PIN_ALERT_WEBHOOK_URL`, value = the Slack incoming webhook URL.'
-            echo "2. **Repository variable** \`PIN_ALERT_WEBHOOK_URL\` - ${new_variable_url}"
-            echo '   Settings -> Secrets and variables -> Actions -> **Variables** -> **New repository variable**, same name and value. A variable delivers too, but anyone with read access to this repository can read it, so the secret is the better home.'
-            echo
-            echo 'It must not be an *environment* secret or variable: this workflow declares no `environment:`, so one scoped to an environment is invisible to it.'
-            echo
-            echo 'Optional second route: `PIN_ALERT_WEBHOOK_URL_FALLBACK` - any webhook that accepts `{"text": ...}`, in either tab.'
-            echo
-            echo 'To prove delivery first: Actions -> **alert-test** -> **Run workflow** posts one labelled test message and goes red if nothing arrives.'
-            echo "Full setup and troubleshooting: [docs/ALERTS.md](${GITHUB_SERVER_URL:-https://github.com}/${GH_REPO}/blob/main/docs/ALERTS.md)"
-            echo 'Once either name exists this step logs `alert channel: configured`; until then the checks above are still reported normally.'
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "::warning title=No alert channel configured::Set the repository secret PIN_ALERT_WEBHOOK_URL (${new_secret_url}) or a repository variable of the same name (${new_variable_url}); optional second route PIN_ALERT_WEBHOOK_URL_FALLBACK, in either tab. Run the alert-test workflow to prove delivery; setup and troubleshooting: docs/ALERTS.md. A dead pin still fails this run; only the missing channel is a warning."
-          exit 0
+        run: bash scripts/report-missing-alert-channel.sh "A dead pin still fails this run"
 
       # The watchdog guards this schedule, so this run guards the watchdog's: a daily watchdog whose
       # own schedule stopped would otherwise be silent in exactly the way it exists to prevent. Any
