@@ -11,7 +11,13 @@
 # What has to agree, for every workflow that runs on a schedule and mentions an alert channel:
 #   * the guidance it shows links docs/ALERTS.md, so the short text on the run page reaches the
 #     full one - either in the workflow itself (the watchdog builds its summary inline) or in a
-#     script it invokes (the strict annotations come from scripts/notify-pin-liveness.sh);
+#     script it invokes (the strict annotations come from scripts/notify-pin-liveness.sh).
+#     Which of the two is accepted depends on where the workflow's guidance is written: a
+#     workflow that writes it inline - a step summary or a warning/error annotation - has to
+#     carry the link in its own text, because that is the text the reader sees. Otherwise a
+#     summary that silently loses its link still passes on the link in a helper script the user
+#     never opened. A workflow that writes no such text delegates the whole message to the
+#     script, so the link there is the one that reaches the run page;
 #   * every alert variable it names is documented (the *_VAR plumbing is skipped: those are the
 #     copies the script reads from repository variables, not names a user sets);
 #   * docs/ALERTS.md has a table row for it, and the cadence in that row matches its crons;
@@ -83,9 +89,28 @@ for name, (path, text) in workflows.items():
         fail(f"{path} mentions {', '.join(sorted(names))} but {docs_path} has no table row for it")
         continue
 
+    # Comments do not reach the reader, so they cannot satisfy the link requirement either.
+    def without_comments(source):
+        return "\n".join(
+            line for line in source.splitlines() if not line.lstrip().startswith("#")
+        )
+
+    own_text = without_comments(text)
+    writes_inline = "$GITHUB_STEP_SUMMARY" in own_text or bool(
+        re.search(r"::(?:warning|error|notice)\b", own_text)
+    )
     invoked = re.findall(r"\b(?:scripts|tools)/[A-Za-z0-9_./-]+\.sh\b", text)
     surfaces = [path] + list(dict.fromkeys(script for script in invoked if os.path.isfile(script)))
-    if not any("docs/ALERTS.md" in open(surface, encoding="utf-8").read() for surface in surfaces):
+    if writes_inline:
+        # The workflow writes the guidance itself, so the link has to be in that same text: a link
+        # in a script it calls is invisible to whoever is reading the summary or the annotation.
+        if docs_path not in own_text:
+            fail(
+                f"{path} writes its alert guidance inline without linking {docs_path} "
+                f"in the workflow's own text; a link in the script it runs does not reach the "
+                f"reader (checked: {', '.join(surfaces[1:]) or 'no scripts'})"
+            )
+    elif not any(docs_path in open(surface, encoding="utf-8").read() for surface in surfaces):
         fail(
             f"{path} gives alert guidance without linking {docs_path}, "
             f"in the workflow or in the scripts it runs ({', '.join(surfaces[1:]) or 'none'})"
