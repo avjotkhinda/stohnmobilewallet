@@ -304,6 +304,38 @@ class NodeStatusPageTest {
     }
 
     @Test
+    fun savingFromTheSetCustomPeerDialogWritesOnlyTheMainnetPeer() {
+        // The same save the two tests above prove for the repair path, on the ordinary one: nothing
+        // is skipped, so the row reads "Set custom peer" and the network decides where the address
+        // goes. Without this, mainnet was only covered from a skipped peer.
+        val testnet = mutableListOf<String?>()
+        val mainnet = mutableListOf<String?>()
+        val dialogs = NodeStatusDialogs()
+        render(
+            peers = { 1 },
+            network = RuntimeBackend.Network.MAINNET,
+            savedPeer = "node.example.org",
+            onTestnetPeer = { testnet += it },
+            onMainnetPeer = { mainnet += it },
+            dialogs = dialogs
+        )
+
+        compose.onAllNodesWithText("Fix custom peer").assertCountEquals(0)
+        compose.onNodeWithText("Set custom peer").performScrollTo().performClick()
+        // A different host from the stored one, so the save cannot be mistaken for the seed.
+        compose.onNode(hasSetTextAction()).performTextReplacement(" node2.example.org ")
+        compose.onNodeWithText("Save").performClick()
+
+        assertEquals(
+            "the address typed on the plain path must be saved as the mainnet peer, trimmed as the dialog normalizes it",
+            listOf<String?>("node2.example.org"),
+            mainnet
+        )
+        assertEquals("a mainnet save must not touch the testnet peer", emptyList<String?>(), testnet)
+        assertNull("saving closes the dialog it was opened from", dialogs.open)
+    }
+
+    @Test
     fun onlyOneControlOpensTheCustomPeerDialogWhenAPeerIsSkipped() {
         // Guard, not a description: the warning is the tempting place to add a second button that
         // opens the peer dialog, which would split the user's choice and could seed it differently.
