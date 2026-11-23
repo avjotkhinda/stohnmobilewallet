@@ -23,7 +23,9 @@
 #   * docs/ALERTS.md has a table row for it, and the cadence in that row matches its crons;
 #   * the row's "Missing channel" outcome matches whether the workflow runs the notifier strictly.
 # The reverse is checked too: a documented workflow must still exist and mention the channel, so
-# the table cannot keep a row for a workflow that was renamed or lost its delivery step.
+# the table cannot keep a row for a workflow that was renamed or lost its delivery step. The step
+# names listed under "Which steps read it" are checked the same way against the workflow that runs
+# them, because a step rename is otherwise invisible to this page.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -154,6 +156,53 @@ for name, row in rows.items():
     path, text = entry
     if "PIN_ALERT_" not in text:
         fail(f"{docs_path} documents {name} as an alert sender, but {path} never mentions one")
+
+# The doc also names the steps that read the channel, by their display name. Renaming a step in a
+# workflow leaves that list pointing at names nothing runs, and no other check reads it: the run
+# page shows a step the reference page does not describe, and a reader looking for the exact step
+# name finds nothing. So each listed name has to still be the name of a step in that workflow.
+section = re.search(r"^### Which steps read it[^\n]*\n(.*?)(?=^#{1,3} |\Z)", docs, re.M | re.S)
+if section is None:
+    fail(f"{docs_path} has no 'Which steps read it' section, so the step list cannot be checked")
+else:
+    listed = {}
+    current = None
+    for line in section.group(1).splitlines():
+        head = re.match(r"^-\s*`([^`]+)`\s*:?\s*$", line)
+        if head:
+            current = head.group(1).strip()
+            listed.setdefault(current, [])
+            continue
+        step = re.match(r"^\s+-\s*\*\*(.+?)\*\*\s*$", line)
+        if step and current is not None:
+            listed[current].append(step.group(1).strip())
+            continue
+        # An entry this parser cannot read is a step the check would silently stop covering, so it
+        # is a failure rather than a line to skip.
+        if re.match(r"^\s+-\s+\S", line):
+            fail(
+                f"{docs_path} lists {line.strip()!r} under 'Which steps read it' in a form this "
+                f"check cannot read; write it as '- **Step name**'"
+            )
+
+    for name, steps in listed.items():
+        entry = workflows.get(name)
+        if entry is None:
+            fail(f"{docs_path} lists alert steps for {name}, which is not a workflow file")
+            continue
+        path, text = entry
+        # Step names only: job names sit on ``name:`` without the list dash, so they cannot be
+        # mistaken for a step, and comments are not renamed by a reader.
+        known = {
+            match.group(1).strip()
+            for match in re.finditer(r"^\s*-\s+name:\s*(.+?)\s*$", text, re.M)
+        }
+        for step in steps:
+            if step not in known:
+                fail(
+                    f"{docs_path} lists the step {step!r} in {name}, but {path} has no step with "
+                    f"that name; a rename has to update the list"
+                )
 
 if failures:
     print(f"ALERT GUIDANCE: FAIL: {len(failures)} disagreement(s) with {docs_path}:", file=sys.stderr)
