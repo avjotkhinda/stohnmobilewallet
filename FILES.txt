@@ -175,6 +175,7 @@
 ./settings.gradle.kts
 ./tools/check-release-history.py
 ./tools/resolve-all-configurations.init.gradle
+./tools/resolve-every-configuration.sh
 ./tools/security-audit.sh
 ./tools/sign-runtime-manifest.sh
 ./tools/verify-alert-guidance.sh

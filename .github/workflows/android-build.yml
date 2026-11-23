@@ -93,51 +93,12 @@ jobs:
           yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0"
       - name: Resolve every configuration under strict verification
-        # The other direction from the gate below: this one fails when a configuration needs an
-        # artifact the committed file does not pin, or pins with the wrong checksum. Gradle's own
-        # verification does the work while resolving, so a failure names the artifact.
-        # --refresh-dependencies sends every request to the network, and there is no setup-gradle
-        # cache here on purpose, so a flaky Maven Central or Plugin Portal fetch fails a job whose
-        # commit builds fine - which is how this step went red twice in three runs (a missing jar,
-        # then the Kotlin Compose plugin marker). Two layers keep those out of main, and neither
-        # loosens the pin check:
-        #   * Gradle retries a failed repository access three times from a 1s backoff and then
-        #     disables that repository for the rest of the build, which is what turns a transient
-        #     error into "artifact not found". The two properties below widen that to eight attempts
-        #     from a 2s doubling backoff; they are Gradle's own (internal) knobs, still read in 9.6.
-        #   * The resolution runs at most three times, and a retry only happens when the log shows a
-        #     network failure. A verification or pin failure is reported on the first attempt.
-        run: |
-          set -uo pipefail
-          log="$RUNNER_TEMP/resolve-every-configuration.log"
-          transient='Could not (GET|HEAD)|Read timed out|connect timed out|Connection (reset|refused)|Remote host terminated|SSLException|unexpected end of stream|is disabled due to earlier error|Received status code 5[0-9][0-9]|Temporary failure in name resolution|Network is unreachable'
-          for attempt in 1 2 3; do
-            echo "::group::resolveEveryConfiguration (attempt $attempt of 3)"
-            set +e
-            ./gradlew --no-daemon --refresh-dependencies --console=plain \
-              -Dorg.gradle.internal.repository.max.tentatives=8 \
-              -Dorg.gradle.internal.repository.initial.backoff=2000 \
-              -I tools/resolve-all-configurations.init.gradle resolveEveryConfiguration 2>&1 | tee "$log"
-            status=${PIPESTATUS[0]}
-            set -e
-            echo "::endgroup::"
-            if [[ $status -eq 0 ]]; then
-              exit 0
-            fi
-            # A pin or checksum failure is the answer this step exists to produce: retrying it would
-            # only turn a real drift into a slower red, so report it on the first attempt.
-            if grep -qE 'Dependency verification failed|checksum|verification-metadata' "$log"; then
-              echo "::error title=Dependency verification failed::An artifact this build needs is unpinned or pinned to a different checksum. Retries do not apply; see the log above."
-              exit "$status"
-            fi
-            if [[ $attempt -lt 3 ]] && grep -qE "$transient" "$log"; then
-              backoff=$((attempt * 20))
-              echo "::warning title=Transient repository failure::Attempt $attempt of 3 failed on a network fetch; retrying in ${backoff}s."
-              sleep "$backoff"
-              continue
-            fi
-            exit "$status"
-          done
+        # Fails when a configuration needs an artifact the committed file does not pin, or pins with
+        # the wrong checksum; Gradle's own verification names the artifact. There is no setup-gradle
+        # cache here on purpose, so this fetches everything over the network - the retry wrapper that
+        # keeps a flaky fetch from failing the job (and never retries a pin failure) lives in the
+        # script, with the reasoning for both layers.
+        run: bash tools/resolve-every-configuration.sh
       - name: Regenerate the pins and compare with the committed file
         run: bash tools/verify-metadata-minimal.sh
 

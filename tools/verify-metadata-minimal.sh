@@ -13,6 +13,11 @@
 #     artifacts reached only on a genuine re-resolution (BOM POMs, plugin-classpath parents) are
 #     never recorded - which makes live pins look dead;
 #   * --no-daemon, so no warm daemon can answer from an earlier resolution either.
+# A third detail is not about correctness but about not failing on the weather: this resolution is a
+# full network re-fetch from an empty CI cache, exactly like resolve-every-configuration.sh, so it
+# gets the same two layers - Gradle's repository retries widened from its 3-attempt default, and up to
+# three resolution attempts that only repeat a network failure. A missing or wrong pin is answered on
+# the first attempt; the comparison below is untouched by any of it.
 # The committed file is restored on every exit path, including a failed or interrupted run.
 set -euo pipefail
 
@@ -51,10 +56,6 @@ if [[ -z ${STOHN_RELEASE_STORE_FILE:-} ]]; then
   export STOHN_RELEASE_KEY_PASSWORD="$password"
 fi
 
-# Deleting is the point: a writer run against an existing file merges into it, so anything stale
-# would survive and be reported as live.
-rm "$metadata"
-
 # The task set CI resolves; override only to exercise this script cheaply while editing it.
 tasks=(help assembleDebug assembleRelease test :app:jacocoDebugUnitTestCoverage detekt
   :app:lintDebug :app:lintRelease :app:bundleRelease
@@ -63,11 +64,41 @@ if [[ -n ${METADATA_MINIMAL_TASKS:-} ]]; then
   read -r -a tasks <<< "$METADATA_MINIMAL_TASKS"
 fi
 
-set +e
-./gradlew --no-daemon --refresh-dependencies --console=plain \
-  --write-verification-metadata sha256 "${tasks[@]}"
-status=$?
-set -e
+# Gradle retries a failed repository access three times from a 1s backoff and then disables that
+# repository for the rest of the build, which is what turns a transient error into "artifact not
+# found". These are Gradle's own (internal) knobs, still read in 9.6; the values match
+# resolve-every-configuration.sh so both resolutions survive the same flaky window.
+gradle_retry_args=(-Dorg.gradle.internal.repository.max.tentatives=8
+  -Dorg.gradle.internal.repository.initial.backoff=2000)
+# Cause lines only: a genuine 404 also prints "Could not GET '...'", so matching the request would
+# retry an artifact that does not exist. Identical to the copy in resolve-every-configuration.sh.
+transient='Read timed out|connect timed out|Connection (reset|refused)|Remote host terminated|SSLException|unexpected end of stream|is disabled due to earlier error|Received status code 5[0-9][0-9]|Temporary failure in name resolution|Network is unreachable'
+resolution_log="$work/resolution.log"
+
+status=1
+for attempt in 1 2 3; do
+  # Deleting is the point: a writer run against an existing file merges into it, so anything stale
+  # would survive and be reported as live. That applies to a partial file a failed attempt left
+  # behind, so every attempt starts from nothing.
+  rm -f "$metadata"
+  echo "resolving (attempt $attempt of 3)"
+  set +e
+  ./gradlew --no-daemon --refresh-dependencies --console=plain \
+    "${gradle_retry_args[@]}" --write-verification-metadata sha256 "${tasks[@]}" 2>&1 \
+    | tee "$resolution_log"
+  status=${PIPESTATUS[0]}
+  set -e
+  [[ $status -eq 0 ]] && break
+  # Only a network failure earns another attempt. A missing artifact, an unpinned one, or a task
+  # that fails to run is the answer this gate exists to give, and repeating it changes nothing.
+  if [[ $attempt -lt 3 ]] && grep -qE "$transient" "$resolution_log"; then
+    backoff=$((attempt * 20))
+    echo "attempt $attempt of 3 failed on a network fetch; retrying in ${backoff}s" >&2
+    sleep "$backoff"
+    continue
+  fi
+  break
+done
 
 if [[ $status -ne 0 || ! -f $metadata ]]; then
   echo "METADATA MINIMALITY: FAIL: regeneration did not finish (gradle exit $status)" >&2
