@@ -133,6 +133,11 @@ fun DiagnosticsPage(
     // The peer Core started without, so a 0-peer node is explained here too: this page is the one
     // reached from the logs themselves, without passing through Node Status.
     skippedPeer: String? = null,
+    // The same gate Node Status puts on its ignored-peer warning: the controller's record belongs
+    // to the run that is (or was last) up, so only a Core being started without the peer right now
+    // may name it. A stopped node is not skipping anything yet, and a record left over from the
+    // previous run would otherwise read as news about a node that is down.
+    running: Boolean,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -144,7 +149,7 @@ fun DiagnosticsPage(
         item {
             Text("Node diagnostics", fontSize = 25.sp, fontWeight = FontWeight.Bold)
             Text("Most recent 64 KiB of node, crash and Core output logs, including rotated files", color = DarkMuted, fontSize = 12.sp)
-            if (skippedPeer != null) IgnoredPeerWarning(skippedPeer, Modifier.padding(top = 6.dp))
+            if (running && skippedPeer != null) IgnoredPeerWarning(skippedPeer, Modifier.padding(top = 6.dp))
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
