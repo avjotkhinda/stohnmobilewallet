@@ -55,5 +55,17 @@ new_variable_url="https://github.com/${GH_REPO}/settings/variables/actions/new"
   echo 'Once either name exists this step logs `alert channel: configured`; until then the checks above are still reported normally.'
 } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
-echo "::warning title=No alert channel configured::Set the repository secret PIN_ALERT_WEBHOOK_URL (${new_secret_url}) or a repository variable of the same name (${new_variable_url}); optional second route PIN_ALERT_WEBHOOK_URL_FALLBACK, in either tab. Run the alert-test workflow to prove delivery; setup and troubleshooting: docs/ALERTS.md. ${still_fails}; only the missing channel is a warning."
+# A warning with no file or line is attached to the workflow file at no particular line, which is
+# not where the fix is written. The annotation names this script and the line below that writes it,
+# so the checks list opens on the sentence to change. The path is the repository-relative one,
+# because that is what GitHub resolves; the line is looked up rather than written down, so it
+# cannot go stale when this file grows above the warning.
+annotation_file=scripts/report-missing-alert-channel.sh
+annotation_line=$(awk '/^echo "::warning title=No alert channel configured,/ { print NR; exit }' "${BASH_SOURCE[0]}")
+if [[ -z $annotation_line ]]; then
+  echo "report-missing-alert-channel: cannot locate its own warning line in $annotation_file" >&2
+  exit 1
+fi
+
+echo "::warning title=No alert channel configured,file=${annotation_file},line=${annotation_line}::Set the repository secret PIN_ALERT_WEBHOOK_URL (${new_secret_url}) or a repository variable of the same name (${new_variable_url}); optional second route PIN_ALERT_WEBHOOK_URL_FALLBACK, in either tab. Run the alert-test workflow to prove delivery; setup and troubleshooting: docs/ALERTS.md. ${still_fails}; only the missing channel is a warning."
 exit 0
