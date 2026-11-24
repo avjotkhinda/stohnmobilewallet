@@ -37,7 +37,7 @@ new_variable_url="https://github.com/${GH_REPO}/settings/variables/actions/new"
 {
   echo "## No alert channel configured"
   echo
-  echo "The missing channel is its own failure - this step runs even when a check above already failed, so it cannot tell you whether they passed: read those steps for their result, and fix this gap on its own."
+  echo "The missing channel is a gap, not a failure - this step runs even when a check above already failed, so its green says nothing about those checks: read them for their result, and fix this gap on its own."
   echo
   echo 'Set **one** of these two, then re-run this workflow. Both are repository-level, and the name has to match exactly - a near-miss is not read:'
   echo
