@@ -14,10 +14,12 @@
 #     script it invokes (the strict annotations come from scripts/notify-pin-liveness.sh).
 #     Which of the two is accepted depends on where the workflow's guidance is written: a
 #     workflow that writes it inline - a step summary or a warning/error annotation - has to
-#     carry the link in its own text, because that is the text the reader sees. Otherwise a
-#     summary that silently loses its link still passes on the link in a helper script the user
-#     never opened. A workflow that writes no such text delegates the whole message to the
-#     script, so the link there is the one that reaches the run page;
+#     carry the link inside that same summary or annotation block, because that block is the
+#     text the reader sees. A link in another step, or in a different annotation of the same
+#     step, does not reach that reader; a summary that silently lost its link would otherwise
+#     still pass on a link the workflow happens to print elsewhere. A workflow that writes no
+#     such text delegates the whole message to the script, so the link there is the one that
+#     reaches the run page;
 #   * every alert variable it names is documented (the *_VAR plumbing is skipped: those are the
 #     copies the script reads from repository variables, not names a user sets);
 #   * docs/ALERTS.md has a table row for it, and the cadence in that row matches its crons;
@@ -63,6 +65,137 @@ for line in docs.splitlines():
 if not rows:
     fail(f"{docs_path} has no workflow table; the guidance checker cannot verify anything")
 
+STEP_START = re.compile(r"^\s*-\s+\S")
+RUN_BLOCK = re.compile(r"^(\s*)run:\s*([|>][-+]?)?\s*$")
+ANNOTATION = re.compile(r"::(?:warning|error|notice)\b")
+
+
+def without_comments(source):
+    """Comments do not reach the reader, so they cannot satisfy the link requirement either."""
+    return "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith("#")
+    )
+
+
+def alert_steps(text):
+    """(label, lines) for each workflow step that names an alert variable.
+
+    The step is the scope the blocks are read from: its env decides whether the summary or
+    annotation it writes is about the channel at all, and a step is far cheaper to delimit
+    reliably than the shell around a redirection.
+    """
+    steps = []
+    lines = text.splitlines()
+    starts = [index for index, line in enumerate(lines) if STEP_START.match(line)]
+    for position, start in enumerate(starts):
+        end = starts[position + 1] if position + 1 < len(starts) else len(lines)
+        body = lines[start:end]
+        joined = "\n".join(body)
+        if not re.search(r"\bPIN_ALERT_[A-Z0-9_]+\b", joined):
+            continue
+        name = re.search(r"^\s*-\s+name:\s*(.+?)\s*$", joined, re.M)
+        steps.append((name.group(1) if name else f"the step at line {start + 1}", body))
+    return steps
+
+
+def run_scripts(body):
+    """[[lines]] for each run: scalar in one step."""
+    scripts = []
+    index = 0
+    while index < len(body):
+        match = RUN_BLOCK.match(body[index])
+        if match and match.group(2):
+            indent = len(match.group(1))
+            script = []
+            index += 1
+            while index < len(body):
+                line = body[index]
+                if line.strip() and len(line) - len(line.lstrip()) <= indent:
+                    break
+                script.append(line)
+                index += 1
+            scripts.append(script)
+            continue
+        single = re.match(r"^\s*run:\s*(\S.*)$", body[index])
+        if single:
+            scripts.append([single.group(1)])
+        index += 1
+    return scripts
+
+
+def grouping_characters(line):
+    """(index, character) for the braces that group commands, skipping ${...} and $(...)."""
+    index = 0
+    while index < len(line):
+        opener = line[index:index + 2]
+        if opener in ("${", "$("):
+            depth = 1
+            closer = "}" if opener == "${" else ")"
+            index += 2
+            while index < len(line) and depth:
+                if line[index] == opener[1]:
+                    depth += 1
+                elif line[index] == closer:
+                    depth -= 1
+                index += 1
+            continue
+        yield index, line[index]
+        index += 1
+
+
+def enclosing_group(lines, index):
+    """(start, end) of the { ... } group that the redirection on lines[index] closes."""
+    depth = 0
+    start = None
+    for current in range(index, -1, -1):
+        for _, character in reversed(list(grouping_characters(lines[current]))):
+            if character == "}":
+                depth += 1
+            elif character == "{":
+                depth -= 1
+                if depth == 0:
+                    start = current
+                    break
+        if start is not None:
+            break
+    if start is None:
+        return index, index
+    depth = 1
+    for current in range(start + 1, len(lines)):
+        for _, character in grouping_characters(lines[current]):
+            if character == "{":
+                depth += 1
+            elif character == "}":
+                depth -= 1
+                if depth == 0:
+                    return start, current
+    return start, len(lines) - 1
+
+
+def guidance_blocks(label, scripts):
+    """(where, text) for the summary and annotation blocks in one step.
+
+    The text is the block itself, not the step: the group redirected into $GITHUB_STEP_SUMMARY,
+    or the single annotation statement. That block is the text the run page shows, so that is
+    what has to carry the link.
+    """
+    blocks = []
+    for script in scripts:
+        lines = without_comments("\n".join(script)).splitlines()
+        for index, line in enumerate(lines):
+            if re.search(r"\$\{?GITHUB_STEP_SUMMARY\b", line):
+                start, end = enclosing_group(lines, index)
+                blocks.append(
+                    (
+                        f"the job-summary block of step {label!r}",
+                        "\n".join(lines[start:end + 1]),
+                    )
+                )
+            if ANNOTATION.search(line):
+                blocks.append((f"the annotation in step {label!r}", line))
+    return blocks
+
+
 workflows = {}
 for path in sorted(glob.glob(".github/workflows/*.yml")):
     name = os.path.basename(path)[:-len(".yml")]
@@ -91,27 +224,24 @@ for name, (path, text) in workflows.items():
         fail(f"{path} mentions {', '.join(sorted(names))} but {docs_path} has no table row for it")
         continue
 
-    # Comments do not reach the reader, so they cannot satisfy the link requirement either.
-    def without_comments(source):
-        return "\n".join(
-            line for line in source.splitlines() if not line.lstrip().startswith("#")
-        )
-
-    own_text = without_comments(text)
-    writes_inline = "$GITHUB_STEP_SUMMARY" in own_text or bool(
-        re.search(r"::(?:warning|error|notice)\b", own_text)
-    )
     invoked = re.findall(r"\b(?:scripts|tools)/[A-Za-z0-9_./-]+\.sh\b", text)
     surfaces = [path] + list(dict.fromkeys(script for script in invoked if os.path.isfile(script)))
-    if writes_inline:
-        # The workflow writes the guidance itself, so the link has to be in that same text: a link
-        # in a script it calls is invisible to whoever is reading the summary or the annotation.
-        if docs_path not in own_text:
-            fail(
-                f"{path} writes its alert guidance inline without linking {docs_path} "
-                f"in the workflow's own text; a link in the script it runs does not reach the "
-                f"reader (checked: {', '.join(surfaces[1:]) or 'no scripts'})"
-            )
+    inline_blocks = [
+        block
+        for label, step in alert_steps(text)
+        for block in guidance_blocks(label, run_scripts(step))
+    ]
+    if inline_blocks:
+        # The workflow writes the guidance itself, so the link has to be inside the very block
+        # that carries it. A link printed by another step - or by another annotation in the same
+        # step - never appears next to this summary or annotation, so it cannot stand in for it.
+        for where, block in inline_blocks:
+            if docs_path not in block:
+                fail(
+                    f"{path} writes alert guidance in {where} without linking {docs_path} "
+                    f"inside that same block; a link elsewhere in the workflow does not reach "
+                    f"the reader of this summary or annotation"
+                )
     elif not any(docs_path in open(surface, encoding="utf-8").read() for surface in surfaces):
         fail(
             f"{path} gives alert guidance without linking {docs_path}, "
