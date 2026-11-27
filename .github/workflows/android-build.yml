@@ -18,7 +18,7 @@ jobs:
           java-version: '17'
       # Gradle version comes from the committed wrapper (gradle/wrapper/gradle-wrapper.properties),
       # pinned to 9.6.0 - the minimum AGP 9.4.0 accepts.
-      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
       - name: Verify full-mode runtime manifest
         run: bash tools/verify-fullmode-repair.sh
       - name: Run source security audit
@@ -67,7 +67,7 @@ jobs:
       # the runner: the release artifact below needs a keystore, which is why the only build a
       # tester could get was one built by hand. Publishing it here is what makes "build it and
       # try it" repeatable.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: stohn-wallet-debug-apk
           path: app/build/outputs/apk/debug/*.apk
@@ -115,7 +115,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
 
       # A key generated here and thrown away with the runner. It is not a release key and cannot be
       # mistaken for one: the APK it signs only exists for the length of this job.
@@ -168,7 +168,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
 
       # The APK is only valid with the runtime payload: assembleRelease fails the
       # verify step below unless these four libraries are packaged into lib/arm64-v8a.
@@ -264,7 +264,7 @@ jobs:
         run: |
           openssl pkeyutl -verify -pubin -inkey stohn-release-signing-key.pem -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig
           sha256sum -c SHA256SUMS
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         if: steps.signing.outputs.configured == 'true'
         with:
           name: stohn-wallet-release-apk
@@ -301,7 +301,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
       - name: Install PRoot bundle tooling
         run: |
           sudo apt-get update -qq
@@ -333,7 +333,7 @@ jobs:
         run: |
           echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
           bash scripts/generate-sbom.sh app/build/outputs/apk/release/app-release.apk
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: reproducibility-rebuild
           path: |
@@ -347,11 +347,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: stohn-wallet-release-apk
           path: published
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: reproducibility-rebuild
           path: rebuild

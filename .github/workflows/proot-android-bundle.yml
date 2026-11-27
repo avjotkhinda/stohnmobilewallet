@@ -18,7 +18,7 @@ jobs:
         run: bash scripts/build-proot-android-bundle.sh .proot-build proot-bundle
       - name: Verify PRoot bundle artifacts
         run: bash scripts/verify-proot-bundle.sh proot-bundle
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: proot-android-bundle
           path: proot-bundle/
