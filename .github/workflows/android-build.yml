@@ -18,7 +18,7 @@ jobs:
           java-version: '17'
       # Gradle version comes from the committed wrapper (gradle/wrapper/gradle-wrapper.properties),
       # pinned to 9.6.0 - the minimum AGP 9.4.0 accepts.
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
       - name: Verify full-mode runtime manifest
         run: bash tools/verify-fullmode-repair.sh
       - name: Run source security audit
@@ -115,7 +115,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
 
       # A key generated here and thrown away with the runner. It is not a release key and cannot be
       # mistaken for one: the APK it signs only exists for the length of this job.
@@ -168,7 +168,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
 
       # The APK is only valid with the runtime payload: assembleRelease fails the
       # verify step below unless these four libraries are packaged into lib/arm64-v8a.
@@ -301,7 +301,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
+      - uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1 # v4.4.4
       - name: Install PRoot bundle tooling
         run: |
           sudo apt-get update -qq
