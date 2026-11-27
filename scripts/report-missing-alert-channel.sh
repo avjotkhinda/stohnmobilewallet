@@ -31,6 +31,11 @@ fi
 origin=${GITHUB_SERVER_URL:-https://github.com}
 new_secret_url="https://github.com/${GH_REPO}/settings/secrets/actions/new"
 new_variable_url="https://github.com/${GH_REPO}/settings/variables/actions/new"
+# The page explains the setup, but the question a reader of a scheduled run is actually asking is
+# why this run is amber and what makes one red instead - that is one section of the page. Linking
+# the file leaves them to find it; the fragment is the heading's GitHub anchor, so a renamed
+# heading breaks the link rather than silently landing them somewhere else on the page.
+alerts_section_url="${origin}/${GH_REPO}/blob/main/docs/ALERTS.md#red-or-warning-what-the-schedule-checks-actually-decide"
 
 # The summary is the run page without opening a log; the annotation is what surfaces in the checks
 # list. Both must stand alone, so each names the setting and where to set it.
@@ -51,7 +56,7 @@ new_variable_url="https://github.com/${GH_REPO}/settings/variables/actions/new"
   echo 'Optional second route: `PIN_ALERT_WEBHOOK_URL_FALLBACK` - any webhook that accepts `{"text": ...}`, in either tab.'
   echo
   echo 'To prove delivery first: Actions -> **alert-test** -> **Run workflow** posts one labelled test message and goes red if nothing arrives.'
-  echo "Full setup and troubleshooting: [docs/ALERTS.md](${origin}/${GH_REPO}/blob/main/docs/ALERTS.md)"
+  echo "Full setup and troubleshooting, starting at the red-versus-warning section: [docs/ALERTS.md - Red or warning](${alerts_section_url})"
   echo 'Once either name exists this step logs `alert channel: configured`; until then the checks above are still reported normally.'
 } >> "${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 
@@ -67,5 +72,5 @@ if [[ -z $annotation_line ]]; then
   exit 1
 fi
 
-echo "::warning title=No alert channel configured,file=${annotation_file},line=${annotation_line}::Set the repository secret PIN_ALERT_WEBHOOK_URL (${new_secret_url}) or a repository variable of the same name (${new_variable_url}); optional second route PIN_ALERT_WEBHOOK_URL_FALLBACK, in either tab. Run the alert-test workflow to prove delivery; setup and troubleshooting: docs/ALERTS.md. ${still_fails}; only the missing channel is a warning."
+echo "::warning title=No alert channel configured,file=${annotation_file},line=${annotation_line}::Set the repository secret PIN_ALERT_WEBHOOK_URL (${new_secret_url}) or a repository variable of the same name (${new_variable_url}); optional second route PIN_ALERT_WEBHOOK_URL_FALLBACK, in either tab. Run the alert-test workflow to prove delivery; setup and troubleshooting, starting at the red-versus-warning section: ${alerts_section_url}. ${still_fails}; only the missing channel is a warning."
 exit 0
